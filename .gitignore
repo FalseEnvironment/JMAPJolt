@@ -1,0 +1,47 @@
+# AI tools
+.ai/
+CLAUDE.md
+.code-review-graph/
+
+# Gradle
+.gradle/
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Android Studio / IntelliJ
+*.iml
+.idea/
+out/
+
+# Local SDK / signing config (machine-specific, never commit)
+local.properties
+keystore.properties
+*.jks
+*.keystore
+
+# Build artifacts
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+
+# Kotlin
+.kotlin/
+
+# Eclipse / NetBeans / VS Code leftovers
+.classpath
+.project
+.settings/
+.vscode/
+bin/
+/nbproject/private/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Claude Code local settings (machine-specific)
+.claude/

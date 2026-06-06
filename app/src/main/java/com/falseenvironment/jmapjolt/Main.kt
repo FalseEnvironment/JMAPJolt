@@ -1,0 +1,3893 @@
+package com.falseenvironment.jmapjolt
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.PackageManager
+import android.content.res.ColorStateList
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.LinearGradient
+import android.graphics.Paint
+import android.graphics.Shader
+import android.graphics.Typeface
+import android.view.MotionEvent
+import android.os.Build
+import android.os.Bundle
+import android.text.Editable
+import android.text.Html
+import android.text.Layout
+import android.text.Spannable
+import android.text.TextWatcher
+import android.text.format.DateUtils
+import android.text.style.AlignmentSpan
+import android.text.style.BulletSpan
+import android.text.style.RelativeSizeSpan
+import android.text.style.StrikethroughSpan
+import android.text.style.StyleSpan
+import android.text.style.UnderlineSpan
+import android.util.Log
+import android.util.Patterns
+import android.graphics.drawable.GradientDrawable
+import android.net.Uri
+import android.provider.OpenableColumns
+import android.view.Gravity
+import android.view.Menu
+import android.widget.HorizontalScrollView
+import android.widget.PopupMenu
+import android.view.MenuItem
+import android.view.View
+import android.view.ViewGroup
+import android.view.inputmethod.InputMethodManager
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
+import android.widget.Button
+import android.widget.CompoundButton
+import android.widget.EditText
+import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.Spinner
+import android.widget.Switch
+import androidx.appcompat.widget.SwitchCompat
+import android.widget.TextView
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.OnBackPressedCallback
+import androidx.appcompat.app.ActionBarDrawerToggle
+import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.Toolbar
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.toColorInt
+import androidx.core.view.GravityCompat
+import androidx.core.widget.CompoundButtonCompat
+import androidx.drawerlayout.widget.DrawerLayout
+import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.ItemTouchHelper
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import androidx.viewpager2.widget.ViewPager2
+import coil.load
+import com.google.android.material.navigation.NavigationView
+import com.google.android.material.snackbar.Snackbar
+import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.UUID
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
+import org.unifiedpush.android.connector.INSTANCE_DEFAULT
+import org.unifiedpush.android.connector.UnifiedPush
+
+class MainActivity : AppCompatActivity() {
+
+    private enum class SwipeAction {
+        DELETE,
+        ARCHIVE,
+        MARK_READ,
+        MARK_SPAM
+    }
+    internal enum class SettingsSection {
+        ROOT,
+        GENERAL,
+        SWIPE,
+        UNIFIED_PUSH,
+        THEME
+    }
+
+    private data class TestNotificationResult(val success: Boolean, val httpCode: Int?)
+
+    internal lateinit var drawerLayout: DrawerLayout
+    internal lateinit var navigationView: NavigationView
+    internal lateinit var toolbar: Toolbar
+    internal lateinit var drawerToggle: ActionBarDrawerToggle
+    internal lateinit var onboardingContainer: LinearLayout
+    internal lateinit var onboardingPager: androidx.viewpager2.widget.ViewPager2
+    internal lateinit var onboardingNextFab: com.google.android.material.floatingactionbutton.FloatingActionButton
+    internal lateinit var onboardingDots: LinearLayout
+    internal var loginFromOnboarding = false
+    internal var onboardingPermRefresh: (() -> Unit)? = null
+    private var pendingMailboxShow = false
+    internal lateinit var loginContainer: LinearLayout
+    internal lateinit var loginBackBtn: ImageView
+    private lateinit var loadingOverlay: FrameLayout
+    internal lateinit var settingsContainer: ScrollView
+    private lateinit var settingsMenuContainer: LinearLayout
+    private lateinit var settingsGeneralContainer: LinearLayout
+    private lateinit var settingsGeneralHeader: LinearLayout
+    private lateinit var settingsGeneralContent: LinearLayout
+    internal lateinit var settingsGeneralChevron: ImageView
+    private lateinit var settingsSwipeContainer: LinearLayout
+    private lateinit var settingsUnifiedPushContainer: LinearLayout
+    private lateinit var settingsUnifiedPushHeader: LinearLayout
+    private lateinit var settingsUnifiedPushContent: LinearLayout
+    internal lateinit var settingsUnifiedPushChevron: ImageView
+
+    private lateinit var settingsAccountsContainer: LinearLayout
+    private lateinit var settingsAccountsHeader: LinearLayout
+    private lateinit var settingsAccountsContent: LinearLayout
+    private lateinit var settingsAccountsChevron: ImageView
+    private lateinit var settingsThemeContainer: LinearLayout
+    private lateinit var settingsThemeHeader: LinearLayout
+    private lateinit var settingsThemeContent: LinearLayout
+    internal lateinit var settingsThemeChevron: ImageView
+    private lateinit var settingsInfoRow: LinearLayout
+    internal lateinit var settingsInfoIcon: ImageView
+    internal lateinit var settingsInfoArrow: ImageView
+    internal lateinit var loadImagesSwitch: SwitchCompat
+    internal lateinit var loadFaviconsSwitch: SwitchCompat
+    internal var themeIdx: Int = 0
+    internal lateinit var themeDropdown: LinearLayout
+    private lateinit var themeDropdownText: TextView
+    internal lateinit var emailInput: EditText
+    internal lateinit var passwordInput: EditText
+    internal lateinit var serverUrlInput: EditText
+    internal lateinit var loginButton: Button
+    internal lateinit var mailboxContainer: FrameLayout
+    internal lateinit var emailsRecyclerView: RecyclerView
+    internal lateinit var emailDetailContainer: FrameLayout
+    internal lateinit var detailFrom: TextView
+    internal lateinit var detailHeaderRow: LinearLayout
+    internal lateinit var detailBody: LinearLayout
+    private var detailBarHidden = false
+    private var detailBarHeight = 0
+    private lateinit var detailWebView: android.webkit.WebView
+    private lateinit var mailSwipeRefresh: SwipeRefreshLayout
+    internal lateinit var unifiedPushSwitch: SwitchCompat
+    internal lateinit var sseSwitch: SwitchCompat
+    internal lateinit var emptyStateView: TextView
+    internal lateinit var status: TextView
+    internal lateinit var customTopBar: LinearLayout
+    internal lateinit var topBarAccentArea: LinearLayout
+    internal lateinit var folderLabel: TextView
+    internal lateinit var searchBarMenuIcon: ImageView
+    internal lateinit var searchBarTitle: TextView
+    internal lateinit var searchBarContainer: LinearLayout
+    private var swipeRightActionIdx: Int = 0
+    private var swipeLeftActionIdx: Int = 0
+    internal lateinit var swipeRightDropdown: LinearLayout
+    internal lateinit var swipeLeftDropdown: LinearLayout
+    private lateinit var swipeRightDropdownText: TextView
+    private lateinit var swipeLeftDropdownText: TextView
+    internal lateinit var topBarSendButton: ImageView
+    internal lateinit var detailReplyButton: ImageView
+    internal lateinit var detailForwardButton: ImageView
+    internal lateinit var detailArchiveButton: ImageView
+    internal lateinit var detailTrashButton: ImageView
+    internal lateinit var detailMoveButton: ImageView
+    internal lateinit var detailStarButton: ImageView
+    internal var currentDetailEmail: DisplayEmail? = null
+    internal lateinit var quoteIndicatorRow: LinearLayout
+    internal lateinit var quoteIndicatorLabel: TextView
+    internal lateinit var quoteIndicatorRemove: ImageView
+    internal lateinit var quoteIndicatorDivider: View
+    // Faithful HTML of the original message, appended verbatim at send time (reply/forward).
+    internal var pendingQuoteHtml: String? = null
+    internal lateinit var fabCompose: com.google.android.material.floatingactionbutton.FloatingActionButton
+    internal lateinit var composeContainer: LinearLayout
+    internal lateinit var composeSendButton: ImageView
+    internal lateinit var composeFromLabel: LinearLayout
+    internal lateinit var composeFromText: TextView
+    internal lateinit var composeToChipsGroup: com.google.android.material.chip.ChipGroup
+    internal val recipientEmails = mutableListOf<String>()
+    internal var selectedFromEmail = ""
+    internal lateinit var composeToInput: EditText
+    internal lateinit var composeSubjectInput: EditText
+    internal lateinit var composeBodyInput: EditText
+    internal lateinit var formatToolbar: LinearLayout
+    internal lateinit var formatToolbarRow: LinearLayout
+    internal lateinit var composeAttachButton: ImageView
+    internal lateinit var attachmentChipScroll: HorizontalScrollView
+    internal lateinit var attachmentChipContainer: LinearLayout
+    internal lateinit var attachmentChipDivider: View
+    internal val activeFormats = mutableSetOf<String>()
+    internal val formatButtons = mutableMapOf<String, View>()
+    // List mode for the compose editor: 0 = none, 1 = bullet, 2 = numbered.
+    internal var composeListMode = 0
+    internal var composeListNextNumber = 1
+    // Guards the body TextWatcher against re-entrancy during programmatic list edits.
+    internal var composeSelfEdit = false
+
+    data class AttachmentData(val uri: Uri, val name: String, val mimeType: String, val size: Long)
+    internal val pendingAttachments = mutableListOf<AttachmentData>()
+
+    internal val pickMediaLauncher = registerForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri -> uri?.let { addAttachment(it) } }
+
+    internal val pickFileLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> uri?.let { addAttachment(it) } }
+
+    internal val requestStoragePermLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { /* permissions resolved; user can try picking again */ }
+    private lateinit var drawerAccountName: TextView
+    private lateinit var drawerAccountRow: LinearLayout
+    private lateinit var drawerAccountArrow: ImageView
+    private lateinit var drawerAccountsList: LinearLayout
+    internal lateinit var accentColorPreview: View
+    private lateinit var accentColorRow: LinearLayout
+    internal var currentAccentColor: String = "#1976D2"
+
+    private val categoryOrder =
+            mutableListOf(
+                    R.id.nav_inbox,
+                    R.id.nav_favourite,
+                    R.id.nav_archive,
+                    R.id.nav_sent,
+                    R.id.nav_drafts,
+                    R.id.nav_spam,
+                    R.id.nav_trash
+            )
+    private val categoryNames = mutableMapOf<Int, String>()
+    internal val emails = mutableListOf<DisplayEmail>()
+    internal lateinit var emailAdapter: EmailAdapter
+    internal lateinit var jmapClient: JMapClient
+    private lateinit var emailCache: EmailCache
+    internal var connectedAccount: JMapClient.ConnectedAccount? = null
+    internal val savedAccounts = mutableListOf<AccountEntry>()
+    internal var currentAccountEmail: String? = null
+    internal var selectedFolder: Int = R.id.nav_inbox
+    private var prevUpdateFolder: Int = -1
+    internal val folderCache = mutableMapOf<Int, List<DisplayEmail>>()
+    private var syncJob: Job? = null
+    internal var currentSettingsSection: SettingsSection = SettingsSection.ROOT
+    internal var currentTheme: String = "gray"
+    internal val selectedEmails = mutableSetOf<String>()
+    internal val baseEmails = mutableListOf<DisplayEmail>() // unfiltered list for search
+    private var isSearchActive = false
+    private lateinit var selectionBarContainer: LinearLayout
+    internal lateinit var selectionCountText: TextView
+    internal lateinit var selectionCloseBtn: ImageView
+    internal lateinit var selectionArchiveBtn: ImageView
+    internal lateinit var selectionDeleteBtn: ImageView
+    internal lateinit var selectionReadBtn: ImageView
+    internal lateinit var selectionMoreBtn: ImageView
+    private lateinit var searchInput: EditText
+    private lateinit var searchClearBtn: ImageView
+    private val pushMessageReceiver =
+            object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    if (intent?.action == UnifiedPushService.ACTION_PUSH_MESSAGE_RECEIVED &&
+                                    connectedAccount != null
+                    ) {
+                        refreshInboxNow()
+                    }
+                }
+            }
+
+    internal val requestPermissionLauncher =
+            registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+                    isGranted: Boolean ->
+                if (isGranted) {
+                    Log.d(TAG, "Notification permission granted")
+                } else {
+                    Log.w(TAG, "Notification permission denied")
+                }
+                onboardingPermRefresh?.invoke()
+            }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+        FaviconRepository.init(cacheDir)
+
+        drawerLayout = findViewById(R.id.drawerLayout)
+        navigationView = findViewById(R.id.navigationView)
+        toolbar = findViewById(R.id.toolbar)
+        onboardingContainer = findViewById(R.id.onboardingContainer)
+        onboardingPager = findViewById(R.id.onboardingPager)
+        onboardingNextFab = findViewById(R.id.onboardingNextFab)
+        onboardingDots = findViewById(R.id.onboardingDots)
+        loginContainer = findViewById(R.id.loginContainer)
+        loginBackBtn = findViewById(R.id.loginBackBtn)
+        loadingOverlay = findViewById(R.id.loadingOverlay)
+        settingsContainer = findViewById(R.id.settingsContainer)
+        settingsMenuContainer = findViewById(R.id.settingsMenuContainer)
+        settingsGeneralContainer = findViewById(R.id.settingsGeneralContainer)
+        settingsGeneralHeader = findViewById(R.id.settingsGeneralHeader)
+        settingsGeneralContent = findViewById(R.id.settingsGeneralContent)
+        settingsGeneralChevron = findViewById(R.id.settingsGeneralChevron)
+        settingsSwipeContainer = findViewById(R.id.settingsSwipeContainer)
+        settingsUnifiedPushContainer = findViewById(R.id.settingsUnifiedPushContainer)
+        settingsUnifiedPushHeader = findViewById(R.id.settingsUnifiedPushHeader)
+        settingsUnifiedPushContent = findViewById(R.id.settingsUnifiedPushContent)
+        settingsUnifiedPushChevron = findViewById(R.id.settingsUnifiedPushChevron)
+
+        settingsAccountsContainer = findViewById(R.id.settingsAccountsContainer)
+        settingsAccountsHeader = findViewById(R.id.settingsAccountsHeader)
+        settingsAccountsContent = findViewById(R.id.settingsAccountsContent)
+        settingsAccountsChevron = findViewById(R.id.settingsAccountsChevron)
+        settingsThemeContainer = findViewById(R.id.settingsThemeContainer)
+        settingsThemeHeader = findViewById(R.id.settingsThemeHeader)
+        settingsThemeContent = findViewById(R.id.settingsThemeContent)
+        settingsThemeChevron = findViewById(R.id.settingsThemeChevron)
+        settingsInfoRow = findViewById(R.id.settingsInfoRow)
+        settingsInfoIcon = findViewById(R.id.settingsInfoIcon)
+        settingsInfoArrow = findViewById(R.id.settingsInfoArrow)
+        loadImagesSwitch = findViewById(R.id.loadImagesSwitch)
+        loadFaviconsSwitch = findViewById(R.id.loadFaviconsSwitch)
+        themeDropdown = findViewById(R.id.themeDropdown)
+        themeDropdownText = findViewById(R.id.themeDropdownText)
+        emailInput = findViewById(R.id.emailInput)
+        passwordInput = findViewById(R.id.passwordInput)
+        serverUrlInput = findViewById(R.id.serverUrlInput)
+        loginButton = findViewById(R.id.loginButton)
+        mailboxContainer = findViewById(R.id.mailboxContainer)
+        emailsRecyclerView = findViewById(R.id.emailsRecyclerView)
+        mailSwipeRefresh = findViewById(R.id.mailSwipeRefresh)
+        fabCompose = findViewById(R.id.fabCompose)
+        composeContainer = findViewById(R.id.composeContainer)
+        composeSendButton = findViewById(R.id.composeSendButton)
+        composeFromLabel = findViewById(R.id.composeFromLabel)
+        composeFromText = findViewById(R.id.composeFromText)
+        composeToChipsGroup = findViewById(R.id.composeToChipsGroup)
+        composeToInput = findViewById(R.id.composeToInput)
+        composeSubjectInput = findViewById(R.id.composeSubjectInput)
+        composeBodyInput = findViewById(R.id.composeBodyInput)
+        formatToolbar = findViewById(R.id.formatToolbar)
+        formatToolbarRow = findViewById(R.id.formatToolbarRow)
+        composeAttachButton = findViewById(R.id.composeAttachButton)
+        attachmentChipScroll = findViewById(R.id.attachmentChipScroll)
+        attachmentChipContainer = findViewById(R.id.attachmentChipContainer)
+        attachmentChipDivider = findViewById(R.id.attachmentChipDivider)
+        unifiedPushSwitch = findViewById(R.id.unifiedPushSwitch)
+        sseSwitch = findViewById(R.id.sseSwitch)
+        val frameLayout =
+                FrameLayout(this).apply {
+                    layoutParams =
+                            ViewGroup.LayoutParams(
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    ViewGroup.LayoutParams.MATCH_PARENT
+                            )
+                }
+        mailSwipeRefresh.removeView(emailsRecyclerView)
+        frameLayout.addView(emailsRecyclerView)
+
+        emptyStateView =
+                TextView(this).apply {
+                    text = "Nothing here ¯\\_(ツ)_/¯"
+                    textSize = 18f
+                    setTextColor(Color.GRAY)
+                    gravity = Gravity.CENTER
+                    visibility = View.GONE
+                    layoutParams =
+                            FrameLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                                    Gravity.CENTER
+                            )
+                }
+        frameLayout.addView(emptyStateView)
+        mailSwipeRefresh.addView(frameLayout)
+
+        status =
+                findViewById<TextView>(R.id.status).apply {
+                    text = getString(R.string.status_initial)
+                }
+        customTopBar = findViewById(R.id.customTopBar)
+        topBarAccentArea = findViewById(R.id.topBarAccentArea)
+        folderLabel = findViewById(R.id.folderLabel)
+        searchBarMenuIcon = findViewById(R.id.searchBarMenuIcon)
+        searchBarTitle = findViewById(R.id.searchBarTitle)
+        searchBarContainer = findViewById(R.id.searchBarContainer)
+        selectionBarContainer = findViewById(R.id.selectionBarContainer)
+        selectionCountText = findViewById(R.id.selectionCountText)
+        selectionCloseBtn = findViewById(R.id.selectionCloseBtn)
+        selectionArchiveBtn = findViewById(R.id.selectionArchiveBtn)
+        selectionDeleteBtn = findViewById(R.id.selectionDeleteBtn)
+        selectionReadBtn = findViewById(R.id.selectionReadBtn)
+        selectionMoreBtn = findViewById(R.id.selectionMoreBtn)
+        searchInput = findViewById(R.id.searchInput)
+        searchClearBtn = findViewById(R.id.searchClearBtn)
+        swipeRightDropdown = findViewById(R.id.swipeRightDropdown)
+        swipeLeftDropdown = findViewById(R.id.swipeLeftDropdown)
+        swipeRightDropdownText = findViewById(R.id.swipeRightDropdownText)
+        swipeLeftDropdownText = findViewById(R.id.swipeLeftDropdownText)
+        topBarSendButton = findViewById(R.id.topBarSendButton)
+        quoteIndicatorRow = findViewById(R.id.quoteIndicatorRow)
+        quoteIndicatorLabel = findViewById(R.id.quoteIndicatorLabel)
+        quoteIndicatorRemove = findViewById(R.id.quoteIndicatorRemove)
+        quoteIndicatorDivider = findViewById(R.id.quoteIndicatorDivider)
+        quoteIndicatorRemove.setOnClickListener { clearPendingQuote() }
+        val drawerHeader = navigationView.getHeaderView(0)
+        drawerAccountName = drawerHeader.findViewById(R.id.drawerAccountName)
+        drawerAccountRow = drawerHeader.findViewById(R.id.drawerAccountRow)
+        drawerAccountArrow = drawerHeader.findViewById(R.id.drawerAccountArrow)
+        drawerAccountsList = drawerHeader.findViewById(R.id.drawerAccountsList)
+        val drawerVersionText = findViewById<TextView>(R.id.drawerVersionText)
+        drawerVersionText.text = "JMAPJolt v${BuildConfig.VERSION_NAME}"
+        accentColorPreview = findViewById(R.id.accentColorPreview)
+        accentColorRow = findViewById(R.id.accentColorRow)
+
+        jmapClient = JMapClient(this)
+        emailCache = EmailCache(filesDir)
+
+        setSupportActionBar(toolbar)
+        drawerToggle =
+                ActionBarDrawerToggle(
+                        this,
+                        drawerLayout,
+                        toolbar,
+                        R.string.drawer_open,
+                        R.string.drawer_close
+                )
+        drawerLayout.addDrawerListener(drawerToggle)
+        drawerToggle.setToolbarNavigationClickListener { handleNavigationClick() }
+        searchBarMenuIcon.setOnClickListener {
+            if (drawerToggle.isDrawerIndicatorEnabled) drawerLayout.openDrawer(GravityCompat.START)
+            else handleNavigationClick()
+        }
+
+        setupEmailDetailView()
+        setupComposeView()
+        loadCategoryPreferences()
+        setupAdapters()
+        setupSwipeSpinners()
+        setupThemeSpinner()
+        loadThemePreference()
+        loadUnifiedPushPreferences()
+        loadGeneralPreferences()
+        rebuildDrawerMenu()
+        bindSettingsActions()
+        bindDrawerNavigation()
+        bindSettingsMenuNavigation()
+        bindPullToRefresh()
+        loadAccounts()
+        applyTheme()
+
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                when {
+                    composeContainer.visibility == View.VISIBLE -> attemptLeaveCompose()
+                    drawerLayout.isDrawerOpen(GravityCompat.START) ->
+                        drawerLayout.closeDrawer(GravityCompat.START)
+                    selectedEmails.isNotEmpty() -> clearSelection()
+                    isSearchActive -> deactivateSearch()
+                    isShowingEmailDetail -> closeEmailDetail()
+                    settingsContainer.visibility == View.VISIBLE -> {
+                        if (currentSettingsSection != SettingsSection.ROOT) attemptLeaveSettingsSubmenu()
+                        else showMailboxScreen()
+                    }
+                    loginContainer.visibility == View.VISIBLE -> showOnboarding()
+                    onboardingContainer.visibility == View.VISIBLE && onboardingPager.currentItem > 0 ->
+                        onboardingPager.setCurrentItem(onboardingPager.currentItem - 1, true)
+                    else -> {
+                        isEnabled = false
+                        onBackPressedDispatcher.onBackPressed()
+                        isEnabled = true
+                    }
+                }
+            }
+        })
+
+        setupOnboardingPager()
+        drawerAccountRow.setOnClickListener {
+            val open = drawerAccountsList.visibility != View.VISIBLE
+            drawerAccountsList.visibility = if (open) View.VISIBLE else View.GONE
+            drawerAccountArrow.animate().rotation(if (open) 180f else 0f).setDuration(180).start()
+        }
+        drawerLayout.addDrawerListener(object : androidx.drawerlayout.widget.DrawerLayout.SimpleDrawerListener() {
+            override fun onDrawerClosed(drawerView: View) {
+                drawerAccountsList.visibility = View.GONE
+                drawerAccountArrow.rotation = 0f
+            }
+        })
+
+        if (!restoreLastAccountSession()) {
+            if (getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getBoolean(KEY_WELCOME_SHOWN, false)) {
+                showLoginScreen()
+            } else {
+                showOnboarding()
+            }
+        } else if (unifiedPushSwitch.isChecked) {
+            // Restored a saved session: ensure the periodic fallback worker is
+            // active (it may have been cancelled by a past push registration).
+            EmailSyncWorker.schedule(this)
+        }
+        emailInput.addTextChangedListener(simpleWatcher)
+        passwordInput.addTextChangedListener(simpleWatcher)
+        serverUrlInput.addTextChangedListener(simpleWatcher)
+        loginButton.setOnClickListener { connectAndOpenMailbox() }
+        androidx.core.content.ContextCompat.registerReceiver(
+                this,
+                pushMessageReceiver,
+                IntentFilter(UnifiedPushService.ACTION_PUSH_MESSAGE_RECEIVED),
+                androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+        updateFormState()
+        // Notification permission is only requested from the onboarding permission screen,
+        // never automatically on launch.
+    }
+
+    private val simpleWatcher =
+            object : TextWatcher {
+                override fun beforeTextChanged(
+                        s: CharSequence?,
+                        start: Int,
+                        count: Int,
+                        after: Int
+                ) = Unit
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) =
+                        updateFormState()
+                override fun afterTextChanged(s: Editable?) = Unit
+            }
+
+    internal fun completeOnboardingToLogin() {
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                .edit()
+                .putBoolean(KEY_WELCOME_SHOWN, true)
+                .apply()
+        loginFromOnboarding = true
+        showLoginScreen()
+    }
+
+    private fun showLoginScreen() {
+        onboardingContainer.visibility = View.GONE
+        loginContainer.visibility = View.VISIBLE
+        loginBackBtn.visibility = View.VISIBLE
+        loginBackBtn.bringToFront()
+        loginBackBtn.setOnClickListener { showOnboarding() }
+        mailboxContainer.visibility = View.GONE
+        settingsContainer.visibility = View.GONE
+        emailDetailContainer.visibility = View.GONE
+        fabCompose.visibility = View.GONE
+        customTopBar.visibility = View.GONE
+        drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED)
+        emailInput.text?.clear()
+        passwordInput.text?.clear()
+        serverUrlInput.text?.clear()
+        updateFormState()
+    }
+
+    private fun updateFormState() {
+        val email = emailInput.text.toString().trim()
+        val isEmailValid = Patterns.EMAIL_ADDRESS.matcher(email).matches() && email.contains("@")
+
+        val hasPassword = passwordInput.text.toString().isNotBlank()
+        val hasServerUrl = serverUrlInput.text.toString().isNotBlank()
+        loginButton.isEnabled = isEmailValid && hasPassword && hasServerUrl
+        loginButton.alpha = if (loginButton.isEnabled) 1f else 0.5f
+
+        status.text = when {
+            email.isBlank() -> getString(R.string.status_idle)
+            isEmailValid -> getString(R.string.status_initial)
+            else -> getString(R.string.status_invalid_email)
+        }
+    }
+
+    private fun connectAndOpenMailbox() {
+        val email = emailInput.text.toString().trim()
+        val password = passwordInput.text.toString()
+        val server = serverUrlInput.text.toString().trim()
+        hideKeyboard()
+
+        loginButton.isEnabled = false
+        loginButton.alpha = 0.5f
+        status.text = getString(R.string.status_connecting)
+        loadingOverlay.visibility = View.VISIBLE
+
+        lifecycleScope.launch {
+            val result =
+                    JMapClient(this@MainActivity)
+                            .connect(email = email, password = password, serverInput = server)
+
+            if (result.success && result.connectedAccount != null) {
+                connectedAccount = result.connectedAccount
+                currentAccountEmail = email
+                persistConnectedAccount(result.connectedAccount, server)
+                renderAccountHeader()
+                drawerAccountName.text = email
+                status.text =
+                        getString(
+                                R.string.status_connected_with_endpoint,
+                                result.resolvedSessionUrl ?: "-"
+                        )
+                pendingMailboxShow = true
+                refreshInboxNow {
+                    fetchAllFoldersBackground()
+                }
+                if (unifiedPushSwitch.isChecked) {
+                    registerUnifiedPushAuto("")
+                }
+                if (JmapEventSourceService.isEnabled(this@MainActivity)) {
+                    JmapEventSourceService.start(this@MainActivity)
+                }
+            } else {
+                loadingOverlay.visibility = View.GONE
+                val attempted = result.attemptedEndpoints.joinToString(" | ")
+                status.text =
+                        getString(
+                                R.string.status_connection_failed_verbose,
+                                result.errorMessage ?: getString(R.string.status_connection_failed),
+                                attempted
+                        )
+                updateFormState()
+            }
+        }
+    }
+
+    internal var isShowingEmailDetail = false
+
+    /** Id of the draft currently being edited, so it can be replaced (destroyed) on save/send. */
+    internal var editingDraftId: String? = null
+
+    /** Optimistic favorite state per email id, kept until the server sync reflects it. */
+    internal val optimisticFavorite = mutableMapOf<String, Boolean>()
+
+    /** Mailboxes cached so the "Move to" sheet opens instantly without a network round-trip. */
+    internal var mailboxCache: List<JMapClient.MailboxInfo>? = null
+
+    internal fun showMailboxScreen(skipRefresh: Boolean = false) {
+        onboardingContainer.visibility = View.GONE
+        loginContainer.visibility = View.GONE
+        loginBackBtn.visibility = View.GONE
+        mailboxContainer.visibility = View.VISIBLE
+        emailDetailContainer.visibility = View.GONE
+        mailSwipeRefresh.visibility = View.VISIBLE
+        fabCompose.visibility = View.VISIBLE
+        settingsContainer.visibility = View.GONE
+        customTopBar.visibility = View.VISIBLE
+        isShowingEmailDetail = false
+        currentSettingsSection = SettingsSection.ROOT
+        invalidateOptionsMenu()
+        setDrawerIndicator(true)
+        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED)
+        drawerToggle.syncState()
+        applyNavIconTint(getOnAccentColor())
+        updateTopBarState()
+        if (!skipRefresh) applyFolderFilterAndRefresh()
+
+    }
+
+    private fun autoDetectUnifiedPush() {
+        val distributors = UnifiedPush.getDistributors(this, arrayListOf())
+        val preferred = distributors.firstOrNull {
+            it.contains("ntfy", ignoreCase = true) || it.contains("sunup", ignoreCase = true)
+        } ?: distributors.firstOrNull()
+
+        if (preferred != null) {
+            try {
+                UnifiedPush.saveDistributor(this, preferred)
+                UnifiedPush.registerApp(this, INSTANCE_DEFAULT, arrayListOf(), packageName)
+                unifiedPushSwitch.isChecked = true
+                saveUnifiedPushEnabled(true)
+                Log.d("MainActivity", "UnifiedPush auto-registered: $preferred")
+            } catch (e: Throwable) {
+                Log.e("MainActivity", "UnifiedPush auto-registration failed", e)
+                saveUnifiedPushEnabled(false)
+            }
+        } else {
+            saveUnifiedPushEnabled(false)
+        }
+    }
+
+    private fun showAddAccountDialog() {
+        val dp = resources.displayMetrics.density
+        val dialogBg = getDialogBackgroundColor()
+        val accentInt = currentAccentColor.toColorInt()
+        val textColor = if (currentTheme == "light") "#212121".toColorInt() else Color.WHITE
+        val hintColor = if (currentTheme == "light") "#9E9E9E".toColorInt() else "#616161".toColorInt()
+        val secondaryColor = if (currentTheme == "light") "#757575".toColorInt() else "#9E9E9E".toColorInt()
+
+        val view = layoutInflater.inflate(R.layout.dialog_add_account, null)
+        val dialogEmail = view.findViewById<EditText>(R.id.dialogEmailInput)
+        val dialogPassword = view.findViewById<EditText>(R.id.dialogPasswordInput)
+        val dialogServerUrl = view.findViewById<EditText>(R.id.dialogServerUrlInput)
+
+        val root = view as LinearLayout
+        root.background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = 20 * dp
+            setColor(dialogBg)
+        }
+        (root.getChildAt(0) as? TextView)?.setTextColor(textColor)
+        listOf(dialogEmail, dialogPassword, dialogServerUrl).forEach {
+            it.setTextColor(textColor)
+            it.setHintTextColor(hintColor)
+            it.backgroundTintList = ColorStateList.valueOf(hintColor)
+        }
+
+        val btnRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).also { it.topMargin = (4 * dp).toInt() }
+            setPadding(0, 0, (8 * dp).toInt(), (6 * dp).toInt())
+        }
+        root.addView(btnRow)
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(view)
+            .create()
+
+        val cancelBtn = TextView(this).apply {
+            text = getString(android.R.string.cancel)
+            textSize = 14f
+            setTextColor(secondaryColor)
+            setPadding((16 * dp).toInt(), (10 * dp).toInt(), (16 * dp).toInt(), (10 * dp).toInt())
+            isClickable = true; isFocusable = true
+            setOnClickListener { dialog.dismiss() }
+        }
+        val loginBtn = TextView(this).apply {
+            text = getString(R.string.login_button)
+            textSize = 14f
+            setTextColor(accentInt)
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setPadding((16 * dp).toInt(), (10 * dp).toInt(), (4 * dp).toInt(), (10 * dp).toInt())
+            isClickable = true; isFocusable = true
+        }
+        btnRow.addView(cancelBtn)
+        btnRow.addView(loginBtn)
+
+        loginBtn.setOnClickListener {
+            val email = dialogEmail.text.toString()
+            val password = dialogPassword.text.toString()
+            val url = dialogServerUrl.text.toString()
+
+            if (email.isBlank() || password.isBlank() || url.isBlank()) {
+                android.widget.Toast.makeText(this, "Please fill in all fields", android.widget.Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            lifecycleScope.launch(Dispatchers.Main) {
+                loginBtn.isEnabled = false
+                val result = jmapClient.connect(email, password, url)
+                if (result.success && result.connectedAccount != null) {
+                    val newAccount = result.connectedAccount
+                    val entry = AccountEntry(
+                        email = newAccount.email,
+                        password = newAccount.password,
+                        serverUrl = url,
+                        sessionUrl = newAccount.sessionUrl,
+                        apiUrl = newAccount.apiUrl,
+                        accountId = newAccount.accountId
+                    )
+                    val idx = savedAccounts.indexOfFirst { it.email.equals(newAccount.email, ignoreCase = true) }
+                    if (idx >= 0) savedAccounts[idx] = entry else savedAccounts.add(entry)
+                    currentAccountEmail = newAccount.email
+                    saveAccounts()
+                    connectedAccount = newAccount
+                    refreshInboxNow()
+                    renderAccountHeader()
+                    dialog.dismiss()
+                } else {
+                    android.widget.Toast.makeText(this@MainActivity, result.errorMessage ?: "Failed to connect", android.widget.Toast.LENGTH_LONG).show()
+                    loginBtn.isEnabled = true
+                }
+            }
+        }
+
+        dialog.show()
+        dialog.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+        dialog.window?.attributes?.let { lp ->
+            lp.width = (resources.displayMetrics.widthPixels * 0.9f).toInt()
+            dialog.window?.attributes = lp
+        }
+    }
+
+    private fun setupEmailDetailView() {
+        val dp = resources.displayMetrics.density
+        val barHeight = (60 * dp).toInt()
+        // FrameLayout so the action row is a top overlay over the content: hiding it never
+        // reflows the WebView (no flicker) and leaves the email background (no grey gap).
+        emailDetailContainer =
+                FrameLayout(this).apply {
+                    id = View.generateViewId()
+                    visibility = View.GONE
+                    layoutParams =
+                            FrameLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    ViewGroup.LayoutParams.MATCH_PARENT
+                            )
+                    setBackgroundColor("#1F1F1F".toColorInt())
+                }
+        // Content column sits below the overlay bar via a top inset equal to the bar height.
+        detailBody =
+                LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    layoutParams = FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                    setPadding(0, barHeight, 0, 0)
+                }
+        // Pinned action row: sender + reply / forward / archive / trash / move / favorite.
+        val headerWrap =
+                LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setBackgroundColor("#1F1F1F".toColorInt())
+                    minimumHeight = barHeight
+                    layoutParams = FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                    )
+                    setPadding((12 * dp).toInt(), (6 * dp).toInt(), (4 * dp).toInt(), (6 * dp).toInt())
+                }
+        detailHeaderRow = headerWrap
+        detailFrom =
+                TextView(this).apply {
+                    setTextColor("#BDBDBD".toColorInt())
+                    textSize = 14f
+                    maxLines = 1
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                }
+        headerWrap.addView(detailFrom)
+
+        fun detailActionIcon(iconRes: Int, desc: String, onClick: (DisplayEmail) -> Unit): ImageView =
+                ImageView(this).apply {
+                    setImageResource(iconRes)
+                    contentDescription = desc
+                    val sz = (40 * dp).toInt()
+                    layoutParams = LinearLayout.LayoutParams(sz, sz)
+                    val p = (9 * dp).toInt()
+                    setPadding(p, p, p, p)
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                    isClickable = true
+                    isFocusable = true
+                    background = ContextCompat.getDrawable(
+                        this@MainActivity,
+                        android.util.TypedValue().also {
+                            theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, it, true)
+                        }.resourceId
+                    )
+                    setOnClickListener { currentDetailEmail?.let(onClick) }
+                }
+
+        detailReplyButton = detailActionIcon(R.drawable.ic_lucide_reply, "Reply") { startReply(it) }
+        detailForwardButton = detailActionIcon(R.drawable.ic_lucide_forward, "Forward") { startForward(it) }
+        detailArchiveButton = detailActionIcon(R.drawable.ic_lucide_archive, "Archive") { archiveDetailEmail(it) }
+        detailTrashButton = detailActionIcon(R.drawable.ic_lucide_trash, "Delete") { trashDetailEmail(it) }
+        detailMoveButton = detailActionIcon(R.drawable.ic_lucide_folder_input, "Move to") { moveDetailEmail(it) }
+        detailStarButton = detailActionIcon(R.drawable.ic_lucide_star, "Favorite") { toggleDetailFavorite(it) }
+        listOf(detailReplyButton, detailForwardButton, detailArchiveButton,
+               detailTrashButton, detailMoveButton, detailStarButton).forEach { headerWrap.addView(it) }
+
+        detailWebView =
+                android.webkit.WebView(this).apply {
+                    layoutParams =
+                            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+                    setBackgroundColor(Color.WHITE)
+                    overScrollMode = View.OVER_SCROLL_NEVER
+                }
+        detailWebView.webViewClient = object : android.webkit.WebViewClient() {
+            override fun shouldOverrideUrlLoading(
+                view: android.webkit.WebView,
+                request: android.webkit.WebResourceRequest
+            ): Boolean {
+                showLinkConfirmationDialog(request.url.toString())
+                return true
+            }
+            @Suppress("DEPRECATION")
+            override fun shouldOverrideUrlLoading(
+                view: android.webkit.WebView,
+                url: String
+            ): Boolean {
+                showLinkConfirmationDialog(url)
+                return true
+            }
+            override fun onPageFinished(view: android.webkit.WebView, url: String) {
+                super.onPageFinished(view, url)
+            }
+        }
+        // Auto-hide the action row when scrolling down, reveal it when scrolling up.
+        val scrollThreshold = (24 * dp).toInt()
+        detailWebView.setOnScrollChangeListener { _, _, scrollY, _, oldScrollY ->
+            val dy = scrollY - oldScrollY
+            when {
+                dy > 4 && scrollY > scrollThreshold && !detailBarHidden -> setDetailBarHidden(true)
+                dy < -4 && detailBarHidden -> setDetailBarHidden(false)
+            }
+        }
+        detailBody.addView(detailWebView)
+        emailDetailContainer.addView(detailBody)
+        emailDetailContainer.addView(headerWrap)
+        mailboxContainer.addView(emailDetailContainer)
+    }
+
+    private fun setDetailBarHidden(hidden: Boolean) {
+        if (detailBarHidden == hidden) return
+        detailBarHidden = hidden
+        detailHeaderRow.animate().cancel()
+        if (hidden) {
+            // Cache the measured height so the reveal animation has a distance to travel.
+            detailHeaderRow.height.takeIf { it > 0 }?.let { detailBarHeight = it }
+            detailHeaderRow.animate().translationY(-detailBarHeight.toFloat()).alpha(0f).setDuration(160).withEndAction {
+                detailHeaderRow.visibility = View.GONE
+            }.start()
+        } else {
+            detailHeaderRow.visibility = View.VISIBLE
+            detailHeaderRow.translationY = -detailBarHeight.toFloat()
+            detailHeaderRow.alpha = 0f
+            detailHeaderRow.animate().translationY(0f).alpha(1f).setDuration(160).start()
+        }
+    }
+
+    internal fun sanitizeEmailHtml(html: String): String {
+        return html
+            .replace(Regex("<script[\\s>][\\s\\S]*?</script>", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("<script\\s*/?>", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("""(\s)on[a-zA-Z]+\s*=\s*"[^"]*""""), "$1")
+            .replace(Regex("""(\s)on[a-zA-Z]+\s*=\s*'[^']*'"""), "$1")
+            .replace(Regex("""(\s)on[a-zA-Z]+\s*=[^\s>]+"""), "$1")
+            .replace(Regex("""href\s*=\s*["']?\s*javascript:[^"'\s>]*""", RegexOption.IGNORE_CASE), "href=\"#\"")
+    }
+
+    /** Heuristic: true when the body carries real HTML markup (full document or fragment). */
+    private fun looksLikeHtml(body: String): Boolean = HTML_MARKUP_REGEX.containsMatchIn(body)
+
+    internal fun buildHtmlContent(rawBody: String, subject: String = ""): String {
+        val isDark = currentTheme == "gray" || currentTheme == "oled"
+        val bgColor = if (currentTheme == "oled") "#000000" else if (isDark) "#1a1a1a" else "#ffffff"
+        val textColor = if (isDark) "#e0e0e0" else "#212121"
+        val linkColor = currentAccentColor
+
+        // Subject is rendered inside the scrollable WebView content so it scrolls away,
+        // while the action row above stays pinned.
+        val subjectHeading = if (subject.isNotBlank())
+            "<div style=\"font-size:18px;font-weight:700;color:$textColor;padding:14px 12px 6px;line-height:1.3\">" +
+                android.text.TextUtils.htmlEncode(subject) + "</div>"
+        else ""
+
+        val darkCss = if (isDark) """
+            <style id="jj-dark">
+            html,body{background-color:$bgColor!important;color:$textColor!important}
+            *:not(img):not(svg):not(video){background-color:transparent!important;color:$textColor!important;border-color:#444!important}
+            a,a *{color:$linkColor!important}
+            table{background-color:$bgColor!important}
+            td,th,tr{background-color:transparent!important;color:$textColor!important}
+            img{filter:brightness(.9) contrast(1.05)}
+            </style>
+        """.trimIndent() else ""
+
+        val isFullDoc = rawBody.contains("<html", ignoreCase = true)
+        val isFragment = !isFullDoc && looksLikeHtml(rawBody)
+        return if (isFullDoc) {
+            val body = sanitizeEmailHtml(rawBody)
+            var html = body
+            if (!html.contains("viewport", ignoreCase = true))
+                html = html.replaceFirst("<head", "<head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=3.0\">", ignoreCase = true)
+            // Insert the subject right after the opening <body> tag (fallback: prepend).
+            if (subjectHeading.isNotEmpty()) {
+                val bodyIdx = html.indexOf("<body", ignoreCase = true)
+                val gt = if (bodyIdx >= 0) html.indexOf('>', bodyIdx) else -1
+                html = if (gt >= 0) html.substring(0, gt + 1) + subjectHeading + html.substring(gt + 1)
+                       else subjectHeading + html
+            }
+            if (isDark) html
+                .replaceFirst("<html", "<html style=\"background-color:$bgColor\"", ignoreCase = true)
+                .replaceFirst("</head>", "<meta name=\"color-scheme\" content=\"dark\">$darkCss</head>", ignoreCase = true)
+                .replaceFirst("<body", "<body style=\"background-color:$bgColor;color:$textColor\"", ignoreCase = true)
+            else html
+        } else if (isFragment) {
+            // HTML fragment (no <html> root, e.g. JMAP htmlBody parts or this app's replies).
+            // Wrap it in a styled document and render as HTML instead of escaping the markup.
+            val body = sanitizeEmailHtml(rawBody)
+            val colorScheme = if (isDark) "dark" else "light"
+            "<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=3.0\"><meta name=\"color-scheme\" content=\"$colorScheme\">$darkCss<style>body{color:$textColor;background:$bgColor;font-family:-apple-system,sans-serif;word-wrap:break-word;padding:12px;margin:0;max-width:100%;box-sizing:border-box}img{max-width:100%;height:auto}a{color:$linkColor}</style></head><body>$subjectHeading$body</body></html>"
+        } else {
+            // Plain text: escape HTML entities, then style quoted lines (lines starting with ">")
+            val quoteColor = if (isDark) "#616161" else "#9E9E9E"
+            val escaped = rawBody
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+            val lines = escaped.split("\n").joinToString("<br>") { line ->
+                if (line.trimStart().startsWith("&gt;"))
+                    "<span style=\"color:$quoteColor\">$line</span>"
+                else
+                    line
+            }
+            "<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=3.0\">$darkCss<style>body{color:$textColor;background:$bgColor;font-family:-apple-system,sans-serif;word-wrap:break-word;padding:12px;margin:0;max-width:100%;box-sizing:border-box}img{max-width:100%;height:auto}</style></head><body>$subjectHeading$lines</body></html>"
+        }
+    }
+
+    private fun updateDetailStarIcon(isFavorite: Boolean) {
+        val color = if (isFavorite) currentAccentColor.toColorInt()
+                    else if (currentTheme == "light") "#9E9E9E".toColorInt() else "#888888".toColorInt()
+        detailStarButton.imageTintList = ColorStateList.valueOf(color)
+    }
+
+    private fun toggleDetailFavorite(email: DisplayEmail) {
+        val newFav = !email.isFavorite
+        email.isFavorite = newFav
+        emails.find { it.id == email.id }?.isFavorite = newFav
+        baseEmails.find { it.id == email.id }?.isFavorite = newFav
+        optimisticFavorite[email.id] = newFav
+        updateFolderCachesForFavorite(email.copy(), newFav)
+        updateDetailStarIcon(newFav)
+        emailAdapter.notifyDataSetChanged()
+        saveEmailCache()
+        val acc = resolveAccountFor(email) ?: connectedAccount ?: return
+        lifecycleScope.launch {
+            try { jmapClient.setFavorite(acc, email.id, newFav) }
+            catch (e: Exception) { Log.e(TAG, "detail star failed", e) }
+        }
+    }
+
+    private fun archiveDetailEmail(email: DisplayEmail) {
+        val acc = resolveAccountFor(email) ?: connectedAccount ?: return
+        updateFolderCachesForMove(email, R.id.nav_archive)
+        closeEmailDetail()
+        removeEmailsAnimated(listOf(email.id))
+        saveEmailCache()
+        Snackbar.make(drawerLayout, "Archived", Snackbar.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            try {
+                val archiveId = resolveOrCreateArchive(acc)
+                if (archiveId != null) jmapClient.setMailbox(acc, email.id, archiveId)
+            } catch (e: Exception) { Log.e(TAG, "detail archive failed", e) }
+        }
+    }
+
+    private fun trashDetailEmail(email: DisplayEmail) {
+        val acc = resolveAccountFor(email) ?: connectedAccount ?: return
+        // Deleting from Trash is permanent.
+        if (selectedFolder == R.id.nav_trash) {
+            closeEmailDetail()
+            confirmPermanentDelete(acc, listOf(email.id))
+            return
+        }
+        updateFolderCachesForMove(email, R.id.nav_trash)
+        closeEmailDetail()
+        removeEmailsAnimated(listOf(email.id))
+        saveEmailCache()
+        Snackbar.make(drawerLayout, "Moved to Trash", Snackbar.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            try {
+                val trashId = jmapClient.resolveMailboxIdByRole(acc, "trash")
+                if (trashId != null) jmapClient.setMailbox(acc, email.id, trashId)
+            } catch (e: Exception) { Log.e(TAG, "detail trash failed", e) }
+        }
+    }
+
+    private fun moveDetailEmail(email: DisplayEmail) {
+        val acc = resolveAccountFor(email) ?: connectedAccount ?: return
+        val ids = listOf(email.id)
+        val excludedRoles = buildList {
+            add("drafts"); add("trash")
+            if (selectedFolder == R.id.nav_inbox || selectedFolder == R.id.nav_unified_inbox) add("inbox")
+        }
+        fun present(mailboxes: List<JMapClient.MailboxInfo>) {
+            val filtered = mailboxes.filter { it.role?.lowercase() !in excludedRoles }
+            if (filtered.isNotEmpty()) showMoveLabelPicker(filtered, ids, null, setOf("sent"))
+        }
+        closeEmailDetail()
+        val cached = mailboxCache
+        if (cached != null) {
+            present(cached)
+            lifecycleScope.launch {
+                runCatching { jmapClient.fetchMailboxes(acc) }.getOrNull()?.let { mailboxCache = it }
+            }
+        } else {
+            lifecycleScope.launch {
+                val mailboxes = jmapClient.fetchMailboxes(acc)
+                mailboxCache = mailboxes
+                present(mailboxes)
+            }
+        }
+    }
+
+    internal fun closeEmailDetail() {
+        // Hard-clear WebView immediately so next open starts blank
+        detailWebView.stopLoading()
+        detailWebView.loadDataWithBaseURL(null, "", "text/html", "UTF-8", null)
+        currentDetailEmail = null
+        emailDetailContainer.visibility = View.GONE
+        mailSwipeRefresh.visibility = View.VISIBLE
+        fabCompose.visibility = View.VISIBLE
+        isShowingEmailDetail = false
+        setDrawerIndicator(true)
+        supportActionBar?.setDisplayHomeAsUpEnabled(false)
+        drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED)
+        drawerToggle.syncState()
+        applyNavIconTint(getOnAccentColor())
+        updateCustomTopBar(getCurrentMailboxTitle(), inMailbox = true)
+    }
+
+    internal fun showEmailDetail(email: DisplayEmail) {
+        mailSwipeRefresh.visibility = View.GONE
+        fabCompose.visibility = View.GONE
+        emailDetailContainer.visibility = View.VISIBLE
+        isShowingEmailDetail = true
+        currentDetailEmail = email
+        updateDetailStarIcon(email.isFavorite)
+        // Reset the auto-hide action row to fully visible on open.
+        detailBarHidden = false
+        detailHeaderRow.animate().cancel()
+        detailHeaderRow.visibility = View.VISIBLE
+        detailHeaderRow.translationY = 0f
+        detailHeaderRow.alpha = 1f
+        setDrawerIndicator(false)
+        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED)
+        drawerToggle.syncState()
+        toolbar.setNavigationIcon(R.drawable.ic_arrow_back_24dp)
+        applyNavIconTint(getOnAccentColor())
+        val (toolbarColor, textColor, secondaryTextColor) =
+                when (currentTheme) {
+                    "light" -> Triple("#F5F5F5", "#212121", "#757575")
+                    "oled" -> Triple("#000000", "#FFFFFF", "#BDBDBD")
+                    else -> Triple("#2A2A2A", "#FFFFFF", "#BDBDBD")
+                }
+
+        detailHeaderRow.setBackgroundColor(toolbarColor.toColorInt())
+        detailFrom.setTextColor(currentAccentColor.toColorInt())
+        detailFrom.text = email.fromEmail.ifBlank { email.from }
+
+        // Tint the pinned action icons to contrast the header; star reflects favourite state.
+        val actionTint = ColorStateList.valueOf(textColor.toColorInt())
+        listOf(detailReplyButton, detailForwardButton, detailArchiveButton,
+               detailTrashButton, detailMoveButton).forEach { it.imageTintList = actionTint }
+        updateDetailStarIcon(email.isFavorite)
+
+        // Remove previous attachment row if present (index 1 when no attachments → WebView)
+        if (emailDetailContainer.childCount > 2) emailDetailContainer.removeViewAt(1)
+
+        val account = resolveAccountFor(email)
+        if (email.attachments.isNotEmpty() && account != null) {
+            val attRow = buildEmailAttachmentRow(email.attachments, account)
+            emailDetailContainer.addView(attRow, 1)
+        }
+
+        val wvBgHex = when (currentTheme) {
+            "oled" -> "#000000"
+            "light" -> "#ffffff"
+            else -> "#1a1a1a"
+        }
+        detailWebView.setBackgroundColor(android.graphics.Color.parseColor(wvBgHex))
+        // Immediately clear old content so the next open starts blank
+        detailWebView.loadUrl("about:blank")
+        // JavaScript stays disabled: email HTML is untrusted sender input and the
+        // regex sanitizer cannot be relied on to block script injection.
+        detailWebView.settings.javaScriptEnabled = false
+        detailWebView.settings.allowFileAccess = false
+        detailWebView.settings.allowContentAccess = false
+        @Suppress("DEPRECATION")
+        detailWebView.settings.allowUniversalAccessFromFileURLs = false
+        @Suppress("DEPRECATION")
+        detailWebView.settings.allowFileAccessFromFileURLs = false
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            detailWebView.settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
+        }
+        detailWebView.settings.useWideViewPort = true
+        detailWebView.settings.loadWithOverviewMode = true
+        detailWebView.settings.setSupportZoom(true)
+        detailWebView.settings.builtInZoomControls = true
+        detailWebView.settings.displayZoomControls = false
+
+        // Auto-load images based on preference
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        val loadImages = prefs.getBoolean("load_images", false)
+        detailWebView.settings.blockNetworkImage = !loadImages
+
+        lifecycleScope.launch {
+            try {
+                val account = resolveAccountFor(email)
+                val needsFetch = email.fullBody.isBlank() || email.attachments.isEmpty()
+                var displayEmail = email
+                if (needsFetch && account != null) {
+                    val fresh = jmapClient.fetchEmailsById(account, listOf(email.id)).firstOrNull()
+                    if (fresh != null) {
+                        val updated = email.copy(
+                            fullBody = if (fresh.fullBody.isNotBlank()) fresh.fullBody else email.fullBody,
+                            attachments = fresh.attachments
+                        )
+                        displayEmail = updated
+                        val idx = emails.indexOfFirst { it.id == email.id }
+                        if (idx >= 0) {
+                            emails[idx] = updated
+                            val bi = baseEmails.indexOfFirst { it.id == email.id }
+                            if (bi >= 0) baseEmails[bi] = updated
+                            saveEmailCache()
+                        }
+                        // Refresh attachment row
+                        if (emailDetailContainer.childCount > 2) emailDetailContainer.removeViewAt(1)
+                        if (updated.attachments.isNotEmpty()) {
+                            val attRow = buildEmailAttachmentRow(updated.attachments, account)
+                            emailDetailContainer.addView(attRow, 1)
+                        }
+                    }
+                }
+                currentDetailEmail = displayEmail
+                val htmlContent = buildHtmlContent(displayEmail.fullBody, displayEmail.subject)
+                detailWebView.loadDataWithBaseURL(null, htmlContent, "text/html", "UTF-8", null)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to load email HTML", e)
+            }
+        }
+
+        updateCustomTopBar(email.from.ifBlank { email.fromEmail }, inMailbox = false)
+
+
+        if (!email.seen) {
+            val account = connectedAccount
+            if (account != null) {
+                // 1. Optimistic local UI update
+                email.seen = true
+                emailAdapter.notifyDataSetChanged()
+                saveEmailCache()
+                
+                // 2. Asynchronous JMAP server update
+                lifecycleScope.launch {
+                    try {
+                        jmapClient.setSeen(account, email.id, true)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to mark email seen on server", e)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun showSettingsScreen() {
+        onboardingContainer.visibility = View.GONE
+        loginContainer.visibility = View.GONE
+        mailboxContainer.visibility = View.GONE
+        settingsContainer.visibility = View.VISIBLE
+        fabCompose.visibility = View.GONE
+        customTopBar.visibility = View.VISIBLE
+        currentSettingsSection = SettingsSection.ROOT
+        invalidateOptionsMenu()
+        setDrawerIndicator(true)
+        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED)
+        drawerToggle.syncState()
+        updateTopBarState()
+        showSettingsMenuRoot()
+        loadUnifiedPushPreferences()
+    }
+
+    private fun bindSettingsMenuNavigation() {
+        loadImagesSwitch.setOnCheckedChangeListener { _, isChecked ->
+            saveGeneralPreferences()
+            if (isShowingEmailDetail) {
+                detailWebView.settings.blockNetworkImage = !isChecked
+                if (isChecked) detailWebView.reload()
+            }
+        }
+        loadFaviconsSwitch.setOnCheckedChangeListener { _, _ ->
+            saveGeneralPreferences()
+            emailAdapter.notifyDataSetChanged()
+        }
+
+        settingsGeneralHeader.setOnClickListener {
+            toggleSettingsSection(settingsGeneralContent, settingsGeneralChevron)
+        }
+        settingsThemeHeader.setOnClickListener {
+            toggleSettingsSection(settingsThemeContent, settingsThemeChevron)
+        }
+        settingsUnifiedPushHeader.setOnClickListener {
+            toggleSettingsSection(settingsUnifiedPushContent, settingsUnifiedPushChevron)
+        }
+        settingsAccountsHeader.setOnClickListener {
+            if (settingsAccountsContent.visibility != View.VISIBLE) refreshAccountsSettings()
+            toggleSettingsSection(settingsAccountsContent, settingsAccountsChevron)
+        }
+        settingsInfoRow.setOnClickListener { showAboutDialog() }
+    }
+
+    private fun toggleSettingsSection(content: LinearLayout, chevron: ImageView) {
+        val open = content.visibility != View.VISIBLE
+        content.visibility = if (open) View.VISIBLE else View.GONE
+        chevron.animate().rotation(if (open) 180f else 0f).setDuration(200).start()
+    }
+
+    private fun showAboutDialog() {
+        val dp = resources.displayMetrics.density
+        val bgColor = getDialogBackgroundColor()
+        val textColor = if (currentTheme == "light") "#212121".toColorInt() else Color.WHITE
+        val subColor = if (currentTheme == "light") "#757575".toColorInt() else "#BDBDBD".toColorInt()
+
+        val view = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding((28 * dp).toInt(), (28 * dp).toInt(), (28 * dp).toInt(), (12 * dp).toInt())
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 20 * dp
+                setColor(bgColor)
+            }
+
+            addView(ImageView(this@MainActivity).apply {
+                layoutParams = LinearLayout.LayoutParams((72 * dp).toInt(), (72 * dp).toInt()).also {
+                    it.bottomMargin = (16 * dp).toInt()
+                }
+                setImageResource(R.mipmap.ic_launcher_foreground)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+            })
+            addView(TextView(this@MainActivity).apply {
+                text = getString(R.string.app_name)
+                setTextColor(textColor)
+                textSize = 22f
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+                ).also { it.bottomMargin = (4 * dp).toInt() }
+            })
+            addView(TextView(this@MainActivity).apply {
+                text = "v${packageManager.getPackageInfo(packageName, 0).versionName}"
+                setTextColor(subColor)
+                textSize = 14f
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+                ).also { it.bottomMargin = (24 * dp).toInt() }
+            })
+            val accentInt = currentAccentColor.toColorInt()
+            addView(TextView(this@MainActivity).apply {
+                text = getString(R.string.about_source_code)
+                setTextColor(accentInt)
+                textSize = 15f
+                gravity = Gravity.CENTER
+                isClickable = true
+                isFocusable = true
+                background = android.util.TypedValue().also {
+                    theme.resolveAttribute(android.R.attr.selectableItemBackground, it, true)
+                }.resourceId.let { ContextCompat.getDrawable(this@MainActivity, it) }
+                setPadding((8 * dp).toInt(), (10 * dp).toInt(), (8 * dp).toInt(), (10 * dp).toInt())
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+                ).also { it.bottomMargin = (8 * dp).toInt() }
+                setOnClickListener {
+                    startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,
+                        android.net.Uri.parse("https://github.com/FalseEnvironment/JMAPJolt")))
+                }
+            })
+        }
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(view)
+            .create()
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        view.addView(Button(this).apply {
+            text = getString(R.string.about_close)
+            isAllCaps = false
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 24 * dp
+                setColor(currentAccentColor.toColorInt())
+            }
+            setTextColor(Color.WHITE)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            setOnClickListener { dialog.dismiss() }
+        })
+
+        dialog.show()
+    }
+
+    private fun showGeneralSettings() {
+        currentSettingsSection = SettingsSection.ROOT
+    }
+
+    private fun loadGeneralPreferences() {
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        loadImagesSwitch.isChecked = prefs.getBoolean("load_images", false)
+        loadFaviconsSwitch.isChecked = prefs.getBoolean("load_favicons", false)
+    }
+
+    private fun saveGeneralPreferences() {
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        prefs.edit()
+            .putBoolean("load_images", loadImagesSwitch.isChecked)
+            .putBoolean("load_favicons", loadFaviconsSwitch.isChecked)
+            .apply()
+        Snackbar.make(drawerLayout, getString(R.string.settings_saved_short), Snackbar.LENGTH_SHORT)
+                .setBackgroundTint("#2E7D32".toColorInt())
+                .setTextColor(Color.WHITE)
+                .show()
+    }
+
+    private fun showSettingsMenuRoot() {
+        settingsMenuContainer.visibility = View.VISIBLE
+        settingsGeneralContainer.visibility = View.VISIBLE
+        settingsSwipeContainer.visibility = View.GONE
+        settingsUnifiedPushContainer.visibility = View.VISIBLE
+        settingsThemeContainer.visibility = View.VISIBLE
+        settingsAccountsContainer.visibility = View.VISIBLE
+        currentSettingsSection = SettingsSection.ROOT
+        setDrawerIndicator(true)
+        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED)
+        drawerToggle.syncState()
+        applyNavIconTint(getOnAccentColor())
+        invalidateOptionsMenu()
+        updateTopBarState()
+    }
+
+    private fun showSettingsSection(@Suppress("UNUSED_PARAMETER") section: SettingsSection) {
+        currentSettingsSection = SettingsSection.ROOT
+        showSettingsMenuRoot()
+    }
+
+    private fun bindDrawerNavigation() {
+        navigationView.setNavigationItemSelectedListener { item ->
+            if (item.itemId == R.id.nav_settings) {
+                showSettingsScreen()
+            } else {
+                selectedFolder = item.itemId
+                if (composeContainer.visibility == View.VISIBLE) hideCompose()
+                showMailboxScreen()
+                applyFolderFilterAndRefresh()
+                navigationView.post { rebuildDrawerMenu() }
+            }
+            drawerLayout.closeDrawer(GravityCompat.START)
+            true
+        }
+    }
+
+    private fun updateTopBarState() {
+        val inMailbox = mailboxContainer.visibility == View.VISIBLE
+        val title = when {
+            settingsContainer.visibility == View.VISIBLE ->
+                when (currentSettingsSection) {
+                    SettingsSection.GENERAL -> getString(R.string.settings_general)
+                    SettingsSection.SWIPE -> getString(R.string.settings_swipe_actions)
+                    SettingsSection.UNIFIED_PUSH -> getString(R.string.settings_unifiedpush)
+                    SettingsSection.THEME -> getString(R.string.settings_theme)
+                    SettingsSection.ROOT -> getString(R.string.settings_title)
+                }
+            inMailbox -> getCurrentMailboxTitle()
+            else -> getString(R.string.app_name)
+        }
+        supportActionBar?.title = title
+        updateCustomTopBar(title, inMailbox = inMailbox)
+    }
+
+    private fun bindSettingsActions() {
+        accentColorRow.setOnClickListener { showAccentColorDialog() }
+
+        unifiedPushSwitch.setOnCheckedChangeListener { _: CompoundButton, enabled: Boolean ->
+            saveUnifiedPushEnabled(enabled)
+            if (enabled) {
+                registerUnifiedPushAuto("")
+                sendUnifiedPushTestNotification()
+            } else {
+                UnifiedPush.unregisterApp(this, INSTANCE_DEFAULT)
+                EmailSyncWorker.cancel(this)
+                Snackbar.make(
+                                drawerLayout,
+                                getString(R.string.settings_unifiedpush_disabled),
+                                Snackbar.LENGTH_SHORT
+                        )
+                        .setBackgroundTint("#616161".toColorInt())
+                        .setTextColor(Color.WHITE)
+                        .show()
+            }
+        }
+
+        sseSwitch.setOnCheckedChangeListener { _: CompoundButton, enabled: Boolean ->
+            JmapEventSourceService.setEnabled(this, enabled)
+            if (enabled && connectedAccount != null) {
+                JmapEventSourceService.start(this)
+            } else {
+                JmapEventSourceService.stop(this)
+            }
+        }
+
+    }
+
+    private fun bindPullToRefresh() {
+        mailSwipeRefresh.setOnChildScrollUpCallback { _, _ ->
+            emailsRecyclerView.canScrollVertically(-1)
+        }
+        mailSwipeRefresh.setOnRefreshListener {
+            status.text = getString(R.string.mailbox_refreshing)
+            refreshInboxNow { mailSwipeRefresh.isRefreshing = false }
+        }
+    }
+
+    private fun applySettingsChanges(showSavedStatus: Boolean = true) {
+        saveSwipePreferences()
+        saveCategoryPreferences()
+        rebuildDrawerMenu()
+        if (showSavedStatus) {
+            Snackbar.make(
+                            drawerLayout,
+                            getString(R.string.settings_saved_short),
+                            Snackbar.LENGTH_SHORT
+                    )
+                    .setBackgroundTint("#2E7D32".toColorInt())
+                    .setTextColor(Color.WHITE)
+                    .show()
+        }
+    }
+
+    internal fun attemptLeaveSettingsSubmenu() {
+        if (currentSettingsSection == SettingsSection.ROOT) return
+        showSettingsMenuRoot()
+    }
+
+    private fun refreshInboxNow(onDone: (() -> Unit)? = null) {
+        val account = connectedAccount
+        if (account == null) {
+            Log.w(TAG, "refreshInboxNow: no connected account")
+            status.text = getString(R.string.status_sync_not_connected)
+            onDone?.invoke()
+            return
+        }
+        Log.d(TAG, "refreshInboxNow: starting fetch")
+        startPeriodicSync()
+        mailSwipeRefresh.isRefreshing = false
+        onDone?.invoke()
+    }
+
+    private fun registerUnifiedPushAuto(manualDistributor: String) {
+        try {
+            val distributors = UnifiedPush.getDistributors(this, arrayListOf())
+            val preferred =
+                    distributors.firstOrNull {
+                        it.contains("ntfy", ignoreCase = true) ||
+                                it.contains("sunup", ignoreCase = true)
+                    }
+                            ?: distributors.firstOrNull()
+
+            val selected =
+                    when {
+                        manualDistributor.isNotBlank() && normalizeUnifiedPushLink(manualDistributor) == null ->
+                                manualDistributor
+                        !preferred.isNullOrBlank() -> preferred
+                        else -> null
+                    }
+
+            if (!selected.isNullOrBlank()) {
+                UnifiedPush.saveDistributor(this, selected)
+            }
+
+            UnifiedPush.registerApp(this, INSTANCE_DEFAULT, arrayListOf(), packageName)
+            // Schedule the periodic fallback immediately so background sync works
+            // even with no distributor installed or before an endpoint arrives.
+            EmailSyncWorker.schedule(this)
+            status.text = getString(R.string.settings_unifiedpush_registered, selected ?: "auto")
+        } catch (_: Throwable) {
+            status.text = getString(R.string.settings_unifiedpush_failed)
+        }
+    }
+
+    private fun rebuildDrawerMenu() {
+        val menu = navigationView.menu
+        menu.clear()
+
+        var menuIndex = 0
+        if (savedAccounts.size > 1) {
+            val unifiedTitle: CharSequence = if (selectedFolder == R.id.nav_unified_inbox) {
+                android.text.SpannableString("Unified Inbox").apply {
+                    setSpan(android.text.style.StyleSpan(Typeface.BOLD), 0, length, 0)
+                }
+            } else {
+                "Unified Inbox"
+            }
+            menu.add(0, R.id.nav_unified_inbox, menuIndex++, unifiedTitle)
+                .setIcon(R.drawable.ic_lucide_inbox)
+        }
+
+        categoryOrder.forEachIndexed { index, id ->
+            val name = categoryNames[id] ?: getDefaultCategoryTitle(id)
+            val title: CharSequence = if (id == selectedFolder) {
+                android.text.SpannableString(name).apply {
+                    setSpan(android.text.style.StyleSpan(Typeface.BOLD), 0, name.length, 0)
+                }
+            } else {
+                name
+            }
+            val item = menu.add(0, id, menuIndex + index, title)
+            item.setIcon(getCategoryIcon(id))
+        }
+
+        val settingsItem =
+                menu.add(
+                        0,
+                        R.id.nav_settings,
+                        categoryOrder.size + 1,
+                        getString(R.string.settings_title)
+                )
+        settingsItem.setIcon(R.drawable.ic_lucide_settings)
+
+        menu.findItem(selectedFolder)?.isChecked = true
+    }
+
+    private fun setupAdapters() {
+        emailAdapter = EmailAdapter(this)
+        emailsRecyclerView.layoutManager = LinearLayoutManager(this)
+        emailsRecyclerView.adapter = emailAdapter
+        attachMailSwipe()
+        setupSelectionBarListeners()
+    }
+
+    private fun attachCategoryDrag() {}
+
+    private fun attachMailSwipe() {
+        val callback =
+                object :
+                        ItemTouchHelper.SimpleCallback(
+                                0,
+                                ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT
+                        ) {
+                    private val paint = Paint()
+
+                    override fun onMove(
+                            rv: RecyclerView,
+                            vh: RecyclerView.ViewHolder,
+                            target: RecyclerView.ViewHolder
+                    ) = false
+
+                    override fun getSwipeThreshold(viewHolder: RecyclerView.ViewHolder): Float {
+                        return 0.35f
+                    }
+
+                    override fun getSwipeEscapeVelocity(defaultValue: Float): Float {
+                        return Float.MAX_VALUE  // disabilita swipe da velocità — richiede rilascio dito
+                    }
+
+                    override fun onChildDraw(
+                            c: Canvas,
+                            rv: RecyclerView,
+                            vh: RecyclerView.ViewHolder,
+                            dX: Float,
+                            dY: Float,
+                            state: Int,
+                            active: Boolean
+                    ) {
+                        val view = vh.itemView
+                        val width = view.width.toFloat()
+                        // Apply spring damping beyond 30% of item width
+                        val maxSwipeDistance = width * 0.30f
+                        val cappedDX = if (dX > 0) {
+                            if (dX <= maxSwipeDistance) dX else maxSwipeDistance + (dX - maxSwipeDistance) * 0.2f
+                        } else {
+                            if (dX >= -maxSwipeDistance) dX else -maxSwipeDistance + (dX + maxSwipeDistance) * 0.2f
+                        }
+
+                        if (cappedDX != 0f) {
+                            val action = if (cappedDX > 0) getRightSwipeAction() else getLeftSwipeAction()
+                            val (colorRes, iconRes) = when (action) {
+                                SwipeAction.DELETE -> Pair("#D32F2F".toColorInt(), R.drawable.ic_lucide_trash)
+                                SwipeAction.ARCHIVE -> Pair("#388E3C".toColorInt(), R.drawable.ic_lucide_archive)
+                                SwipeAction.MARK_READ -> Pair("#1976D2".toColorInt(), R.drawable.ic_lucide_eye)
+                                SwipeAction.MARK_SPAM -> Pair("#F57C00".toColorInt(), R.drawable.ic_lucide_ban)
+                            }
+                            paint.color = colorRes
+
+                            val itemHeight = view.bottom - view.top
+                            val icon = ContextCompat.getDrawable(this@MainActivity, iconRes)?.mutate()
+                            icon?.setTint(Color.WHITE)
+                            val intrinsicWidth = icon?.intrinsicWidth ?: 0
+                            val intrinsicHeight = icon?.intrinsicHeight ?: 0
+
+                            if (cappedDX > 0) {
+                                // Draw background color
+                                c.drawRect(
+                                        view.left.toFloat(),
+                                        view.top.toFloat(),
+                                        view.left + cappedDX,
+                                        view.bottom.toFloat(),
+                                        paint
+                                )
+                                // Draw centered icon if swiped enough
+                                if (cappedDX > 72) {
+                                    val iconLeft = view.left + 48
+                                    val iconRight = iconLeft + intrinsicWidth
+                                    val iconTop = view.top + (itemHeight - intrinsicHeight) / 2
+                                    val iconBottom = iconTop + intrinsicHeight
+                                    icon?.setBounds(iconLeft, iconTop, iconRight, iconBottom)
+                                    icon?.draw(c)
+                                }
+                            } else {
+                                // Draw background color
+                                c.drawRect(
+                                        view.right + cappedDX,
+                                        view.top.toFloat(),
+                                        view.right.toFloat(),
+                                        view.bottom.toFloat(),
+                                        paint
+                                )
+                                // Draw centered icon if swiped enough
+                                if (cappedDX < -72) {
+                                    val iconRight = view.right - 48
+                                    val iconLeft = iconRight - intrinsicWidth
+                                    val iconTop = view.top + (itemHeight - intrinsicHeight) / 2
+                                    val iconBottom = iconTop + intrinsicHeight
+                                    icon?.setBounds(iconLeft, iconTop, iconRight, iconBottom)
+                                    icon?.draw(c)
+                                }
+                            }
+                        }
+                        super.onChildDraw(c, rv, vh, cappedDX, dY, state, active)
+                    }
+
+                    override fun onSwiped(vh: RecyclerView.ViewHolder, direction: Int) {
+                        val position = vh.adapterPosition
+                        if (position !in emails.indices) return
+                        val item = emails[position]
+                        val action =
+                                if (direction == ItemTouchHelper.RIGHT) getRightSwipeAction()
+                                else getLeftSwipeAction()
+
+                        val account = resolveAccountFor(item) ?: connectedAccount ?: return
+
+                        // Drafts cannot be marked read or archived; cancel the swipe.
+                        if (selectedFolder == R.id.nav_drafts &&
+                            (action == SwipeAction.MARK_READ || action == SwipeAction.ARCHIVE)) {
+                            emailAdapter.notifyItemChanged(position)
+                            Snackbar.make(drawerLayout, "Not available for drafts", Snackbar.LENGTH_SHORT).show()
+                            return
+                        }
+
+                        // Deleting from Trash is permanent: confirm first, restoring the row meanwhile.
+                        if (selectedFolder == R.id.nav_trash && action == SwipeAction.DELETE) {
+                            emailAdapter.notifyItemChanged(position)
+                            confirmPermanentDelete(account, listOf(item.id))
+                            return
+                        }
+
+                        // Archiving from the Favourites view keeps the email flagged, so it
+                        // stays visible there (an email can be both favourited and archived).
+                        // Snap the row back instead of removing it.
+                        if (selectedFolder == R.id.nav_favourite && action == SwipeAction.ARCHIVE) {
+                            emailAdapter.notifyItemChanged(position)
+                            Snackbar.make(drawerLayout, "Archived", Snackbar.LENGTH_SHORT).show()
+                            lifecycleScope.launch {
+                                try {
+                                    val archiveId = jmapClient.resolveMailboxIdByRole(account, "archive")
+                                    if (archiveId != null) jmapClient.setMailbox(account, item.id, archiveId)
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Archive from favourites failed", e)
+                                }
+                            }
+                            return
+                        }
+
+                        // 1. Optimistic local UI update
+                        when (action) {
+                            SwipeAction.DELETE, SwipeAction.ARCHIVE, SwipeAction.MARK_SPAM -> {
+                                emails.removeAt(position)
+                                emailAdapter.notifyItemRemoved(position)
+                                emptyStateView.visibility = if (emails.isEmpty()) View.VISIBLE else View.GONE
+                                emailsRecyclerView.visibility = if (emails.isEmpty()) View.GONE else View.VISIBLE
+                                val targetNavId = when (action) {
+                                    SwipeAction.DELETE -> R.id.nav_trash
+                                    SwipeAction.ARCHIVE -> R.id.nav_archive
+                                    else -> -1 // MARK_SPAM: removals only
+                                }
+                                updateFolderCachesForMove(item, targetNavId)
+                                saveEmailCache()
+                            }
+                            SwipeAction.MARK_READ -> {
+                                item.seen = !item.seen
+                                emailAdapter.notifyItemChanged(position)
+                                saveEmailCache()
+                            }
+                        }
+
+                        // 2. Asynchronous JMAP server update
+                        lifecycleScope.launch {
+                            try {
+                                when (action) {
+                                    SwipeAction.DELETE -> {
+                                        val trashId = jmapClient.resolveMailboxIdByRole(account, "trash")
+                                        if (trashId != null) {
+                                            jmapClient.setMailbox(account, item.id, trashId)
+                                        }
+                                    }
+                                    SwipeAction.ARCHIVE -> {
+                                        val archiveId = jmapClient.resolveMailboxIdByRole(account, "archive")
+                                        if (archiveId != null) {
+                                            jmapClient.setMailbox(account, item.id, archiveId)
+                                        }
+                                    }
+                                    SwipeAction.MARK_READ -> {
+                                        jmapClient.setSeen(account, item.id, item.seen)
+                                    }
+                                    SwipeAction.MARK_SPAM -> {
+                                        val spamId = jmapClient.resolveMailboxIdByRole(account, "spam")
+                                        if (spamId != null) {
+                                            jmapClient.setMailbox(account, item.id, spamId)
+                                        }
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to perform optimistic swipe action $action on server", e)
+                            }
+                        }
+                    }
+                }
+        ItemTouchHelper(callback).attachToRecyclerView(emailsRecyclerView)
+    }
+
+    private fun moveCategory(from: Int, to: Int) {
+        if (to !in categoryOrder.indices) return
+        val item = categoryOrder.removeAt(from)
+        categoryOrder.add(to, item)
+    }
+
+    private fun loadCategoryPreferences() {
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        val savedOrder = prefs.getString(KEY_CATEGORY_ORDER, null)
+        if (!savedOrder.isNullOrBlank()) {
+            val parsed = savedOrder.split(",").mapNotNull { it.toIntOrNull() }
+            if (parsed.size == categoryOrder.size && parsed.containsAll(categoryOrder)) {
+                categoryOrder.clear()
+                categoryOrder.addAll(parsed)
+            }
+        }
+        categoryOrder.forEach { id ->
+            val key = "category_name_$id"
+            val saved = prefs.getString(key, null)
+            if (!saved.isNullOrBlank()) {
+                categoryNames[id] = saved
+            } else {
+                categoryNames[id] = getDefaultCategoryTitle(id)
+            }
+        }
+    }
+
+    private fun saveCategoryPreferences() {
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        val editor = prefs.edit()
+        editor.putString(KEY_CATEGORY_ORDER, categoryOrder.joinToString(","))
+        categoryOrder.forEach { id -> editor.putString("category_name_$id", categoryNames[id]) }
+        editor.putString(KEY_SWIPE_RIGHT_ACTION, getRightSwipeAction().name)
+        editor.putString(KEY_SWIPE_LEFT_ACTION, getLeftSwipeAction().name)
+        editor.apply()
+    }
+
+    private fun setupSwipeSpinners() {
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        swipeRightActionIdx = SwipeAction.valueOf(
+            prefs.getString(KEY_SWIPE_RIGHT_ACTION, SwipeAction.DELETE.name) ?: SwipeAction.DELETE.name
+        ).ordinal
+        swipeLeftActionIdx = SwipeAction.valueOf(
+            prefs.getString(KEY_SWIPE_LEFT_ACTION, SwipeAction.ARCHIVE.name) ?: SwipeAction.ARCHIVE.name
+        ).ordinal
+
+        val swipeOptions = SwipeAction.entries.map { labelForSwipeAction(it) }
+        swipeRightDropdown.setOnClickListener {
+            showSettingsDropdown(swipeRightDropdown, swipeOptions, swipeRightActionIdx) { idx ->
+                swipeRightActionIdx = idx
+                updateSettingsDropdownDisplays()
+                saveSwipePreferences()
+                Snackbar.make(drawerLayout, getString(R.string.settings_saved_short), Snackbar.LENGTH_SHORT)
+                    .setBackgroundTint("#2E7D32".toColorInt()).setTextColor(Color.WHITE).show()
+            }
+        }
+        swipeLeftDropdown.setOnClickListener {
+            showSettingsDropdown(swipeLeftDropdown, swipeOptions, swipeLeftActionIdx) { idx ->
+                swipeLeftActionIdx = idx
+                updateSettingsDropdownDisplays()
+                saveSwipePreferences()
+                Snackbar.make(drawerLayout, getString(R.string.settings_saved_short), Snackbar.LENGTH_SHORT)
+                    .setBackgroundTint("#2E7D32".toColorInt()).setTextColor(Color.WHITE).show()
+            }
+        }
+    }
+
+    private fun setupThemeSpinner() {
+        val themeOptions = listOf(
+            getString(R.string.settings_theme_gray),
+            getString(R.string.settings_theme_light),
+            getString(R.string.settings_theme_oled)
+        )
+        themeDropdown.setOnClickListener {
+            showSettingsDropdown(themeDropdown, themeOptions, themeIdx) { idx ->
+                themeIdx = idx
+                val newTheme = when (idx) { 1 -> "light"; 2 -> "oled"; else -> "gray" }
+                if (newTheme != currentTheme) {
+                    currentTheme = newTheme
+                    saveThemePreference()
+                    applyTheme()
+                    Snackbar.make(drawerLayout, getString(R.string.settings_saved_short), Snackbar.LENGTH_SHORT)
+                        .setBackgroundTint("#2E7D32".toColorInt()).setTextColor(Color.WHITE).show()
+                }
+            }
+        }
+    }
+
+    private fun getRightSwipeAction(): SwipeAction = SwipeAction.entries[swipeRightActionIdx]
+    private fun getLeftSwipeAction(): SwipeAction = SwipeAction.entries[swipeLeftActionIdx]
+
+    internal fun updateSettingsDropdownDisplays() {
+        val swipeLabels = SwipeAction.entries.map { labelForSwipeAction(it) }
+        swipeLeftDropdownText.text = swipeLabels.getOrElse(swipeLeftActionIdx) { "" }
+        swipeRightDropdownText.text = swipeLabels.getOrElse(swipeRightActionIdx) { "" }
+        val themeLabels = listOf(
+            getString(R.string.settings_theme_gray),
+            getString(R.string.settings_theme_light),
+            getString(R.string.settings_theme_oled)
+        )
+        themeDropdownText.text = themeLabels.getOrElse(themeIdx) { "" }
+    }
+
+    internal fun showSettingsDropdown(
+        anchor: View,
+        options: List<String>,
+        currentIdx: Int,
+        onSelected: (Int) -> Unit
+    ) {
+        val dp = resources.displayMetrics.density
+        val accentInt = currentAccentColor.toColorInt()
+        val popupBg = darkenColor(accentInt, 0.82f)
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 10 * dp
+                setColor(popupBg)
+            }
+            val vp = (4 * dp).toInt()
+            setPadding(0, vp, 0, vp)
+            elevation = 8 * dp
+        }
+
+        var popupRef: android.widget.PopupWindow? = null
+
+        options.forEachIndexed { idx, label ->
+            if (idx > 0) {
+                container.addView(View(this).apply {
+                    layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1)
+                    setBackgroundColor(0x22FFFFFF)
+                })
+            }
+            container.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                val rowW = (200 * dp).toInt()
+                layoutParams = LinearLayout.LayoutParams(rowW, (48 * dp).toInt())
+                val hp = (16 * dp).toInt()
+                setPadding(hp, 0, hp, 0)
+                if (idx == currentIdx) setBackgroundColor(0x22FFFFFF)
+                addView(TextView(this@MainActivity).apply {
+                    text = label
+                    textSize = 14f
+                    setTextColor(Color.WHITE)
+                    layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                })
+                setOnClickListener { popupRef?.dismiss(); onSelected(idx) }
+            })
+        }
+
+        val pw = android.widget.PopupWindow(
+            container,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+            true
+        ).apply {
+            elevation = 10 * dp
+            isOutsideTouchable = true
+        }
+        popupRef = pw
+        pw.showAsDropDown(anchor, 0, 0)
+    }
+
+    private fun saveSwipePreferences() {
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                .edit()
+                .putString(KEY_SWIPE_RIGHT_ACTION, getRightSwipeAction().name)
+                .putString(KEY_SWIPE_LEFT_ACTION, getLeftSwipeAction().name)
+                .apply()
+    }
+
+    private fun labelForSwipeAction(action: SwipeAction): String =
+            when (action) {
+                SwipeAction.DELETE -> getString(R.string.swipe_action_delete)
+                SwipeAction.ARCHIVE -> getString(R.string.swipe_action_archive)
+                SwipeAction.MARK_READ -> getString(R.string.swipe_action_read)
+                SwipeAction.MARK_SPAM -> getString(R.string.swipe_action_spam)
+            }
+
+    private fun updateEmailsList(newList: List<DisplayEmail>) {
+        val folderChanged = prevUpdateFolder != selectedFolder
+        prevUpdateFolder = selectedFolder
+
+        val diffResult = if (!folderChanged) {
+            androidx.recyclerview.widget.DiffUtil.calculateDiff(
+                    object : androidx.recyclerview.widget.DiffUtil.Callback() {
+                        override fun getOldListSize(): Int = emails.size
+                        override fun getNewListSize(): Int = newList.size
+                        override fun areItemsTheSame(
+                                oldItemPosition: Int,
+                                newItemPosition: Int
+                        ): Boolean {
+                            return emails[oldItemPosition].id == newList[newItemPosition].id
+                        }
+                        override fun areContentsTheSame(
+                                oldItemPosition: Int,
+                                newItemPosition: Int
+                        ): Boolean {
+                            return emails[oldItemPosition] == newList[newItemPosition]
+                        }
+                    }
+            )
+        } else null
+
+        val firstChanged = emails.firstOrNull()?.id != newList.firstOrNull()?.id
+        baseEmails.clear()
+        baseEmails.addAll(newList)
+        emails.clear()
+        emails.addAll(newList)
+        if (diffResult != null) diffResult.dispatchUpdatesTo(emailAdapter)
+        else emailAdapter.notifyDataSetChanged()
+
+        if (firstChanged && !isSearchActive) {
+            emailsRecyclerView.post { emailsRecyclerView.scrollToPosition(0) }
+        }
+
+        saveEmailCache()
+
+        emptyStateView.visibility = if (emails.isEmpty()) View.VISIBLE else View.GONE
+        emailsRecyclerView.visibility = if (emails.isEmpty()) View.GONE else View.VISIBLE
+
+        if (pendingMailboxShow) {
+            pendingMailboxShow = false
+            showMailboxScreen(skipRefresh = true)
+            loadingOverlay.animate()
+                .alpha(0f)
+                .setDuration(350)
+                .withEndAction {
+                    loadingOverlay.visibility = View.GONE
+                    loadingOverlay.alpha = 1f
+                }
+                .start()
+        }
+    }
+
+    private fun applyFolderFilterAndRefresh() {
+        val folderTitle = getCurrentMailboxTitle()
+        supportActionBar?.title = folderTitle
+        updateCustomTopBar(folderTitle, inMailbox = true)
+
+        val cached = folderCache[selectedFolder]
+        if (cached != null) {
+            updateEmailsList(cached)
+        } else {
+            emails.clear()
+            emailAdapter.notifyDataSetChanged()
+            emptyStateView.visibility = View.GONE
+            emailsRecyclerView.visibility = View.GONE
+        }
+
+        startPeriodicSync()
+    }
+
+    private fun getFolderRole(navId: Int): String? =
+            when (navId) {
+                R.id.nav_sent -> "sent"
+                R.id.nav_drafts -> "drafts"
+                R.id.nav_spam -> "junk"
+                R.id.nav_trash -> "trash"
+                R.id.nav_archive -> "archive"
+                else -> null
+            }
+
+    internal fun toggleSelection(id: String) {
+        if (selectedEmails.contains(id)) {
+            selectedEmails.remove(id)
+        } else {
+            selectedEmails.add(id)
+        }
+        updateSelectionBar()
+        emailAdapter.notifyDataSetChanged()
+    }
+
+    private fun updateSelectionBar() {
+        if (selectedEmails.isEmpty()) {
+            searchBarContainer.visibility = View.VISIBLE
+            selectionBarContainer.visibility = View.GONE
+        } else {
+            searchBarContainer.visibility = View.GONE
+            selectionBarContainer.visibility = View.VISIBLE
+            selectionCountText.text = "${selectedEmails.size} selected"
+            val allSeen = selectedEmails.all { id -> emails.find { it.id == id }?.seen == true }
+            selectionReadBtn.contentDescription = if (allSeen) "Mark Unread" else "Mark Read"
+            // In Archive the action button restores the email to the Inbox instead.
+            if (selectedFolder == R.id.nav_archive) {
+                selectionArchiveBtn.setImageResource(R.drawable.ic_lucide_archive_restore)
+                selectionArchiveBtn.contentDescription = "Move to Inbox"
+            } else {
+                selectionArchiveBtn.setImageResource(R.drawable.ic_lucide_archive)
+                selectionArchiveBtn.contentDescription = "Archive"
+            }
+        }
+    }
+
+    private fun setupSelectionBarListeners() {
+        selectionCloseBtn.setOnClickListener { clearSelection() }
+        selectionArchiveBtn.setOnClickListener {
+            performAction(if (selectedFolder == R.id.nav_archive) "unarchive" else "archive")
+        }
+        selectionDeleteBtn.setOnClickListener { performAction("delete") }
+        selectionReadBtn.setOnClickListener { performAction("toggleRead") }
+        selectionMoreBtn.setOnClickListener { performAction("more") }
+
+        searchBarMenuIcon.setOnClickListener {
+            if (drawerToggle.isDrawerIndicatorEnabled) drawerLayout.openDrawer(GravityCompat.START)
+            else handleNavigationClick()
+        }
+
+        searchBarTitle.setOnClickListener { activateSearch() }
+
+        searchInput.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                val query = s?.toString() ?: ""
+                searchClearBtn.visibility = if (query.isNotEmpty()) View.VISIBLE else View.GONE
+                val filtered = if (query.isBlank()) baseEmails else baseEmails.filter {
+                    it.subject.contains(query, ignoreCase = true) ||
+                    it.from.contains(query, ignoreCase = true) ||
+                    it.preview.contains(query, ignoreCase = true)
+                }
+                emails.clear()
+                emails.addAll(filtered)
+                emailAdapter.notifyDataSetChanged()
+                emptyStateView.visibility = if (emails.isEmpty()) View.VISIBLE else View.GONE
+                emailsRecyclerView.visibility = if (emails.isEmpty()) View.GONE else View.VISIBLE
+            }
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        })
+
+        searchClearBtn.setOnClickListener { deactivateSearch() }
+    }
+
+    private fun activateSearch() {
+        isSearchActive = true
+        searchBarTitle.visibility = View.GONE
+        searchInput.visibility = View.VISIBLE
+        searchClearBtn.visibility = View.GONE
+        searchInput.requestFocus()
+        val imm = getSystemService(InputMethodManager::class.java)
+        imm?.showSoftInput(searchInput, InputMethodManager.SHOW_IMPLICIT)
+    }
+
+    private fun deactivateSearch() {
+        isSearchActive = false
+        searchInput.text.clear()
+        searchInput.visibility = View.GONE
+        searchBarTitle.visibility = View.VISIBLE
+        searchClearBtn.visibility = View.GONE
+        hideKeyboard()
+        emails.clear()
+        emails.addAll(baseEmails)
+        emailAdapter.notifyDataSetChanged()
+        emptyStateView.visibility = if (emails.isEmpty()) View.VISIBLE else View.GONE
+        emailsRecyclerView.visibility = if (emails.isEmpty()) View.GONE else View.VISIBLE
+    }
+
+    private fun clearSelection() {
+        selectedEmails.clear()
+        updateSelectionBar()
+        emailAdapter.notifyDataSetChanged()
+    }
+
+    /**
+     * Removes the given emails from the visible list (and the search base list) with a
+     * per-row removal animation. Call any clearSelection()/ActionMode.finish() BEFORE this,
+     * since those trigger a full notifyDataSetChanged that would cancel the animation.
+     */
+    private fun removeEmailsAnimated(ids: Collection<String>) {
+        val idSet = ids.toSet()
+        for (i in emails.indices.reversed()) {
+            if (emails[i].id in idSet) {
+                emails.removeAt(i)
+                emailAdapter.notifyItemRemoved(i)
+            }
+        }
+        baseEmails.removeAll { it.id in idSet }
+        emptyStateView.visibility = if (emails.isEmpty()) View.VISIBLE else View.GONE
+        emailsRecyclerView.visibility = if (emails.isEmpty()) View.GONE else View.VISIBLE
+    }
+
+    /** Overlays pending favorite toggles on freshly synced data until the server reflects them. */
+    private fun applyOptimisticFavorite(
+        list: List<DisplayEmail>,
+        isFavFolder: Boolean
+    ): List<DisplayEmail> {
+        if (optimisticFavorite.isEmpty()) return list
+        // Drop overrides the server has already caught up with.
+        list.forEach { e -> if (optimisticFavorite[e.id] == e.isFavorite) optimisticFavorite.remove(e.id) }
+        if (isFavFolder) {
+            val idsInList = list.map { it.id }.toSet()
+            optimisticFavorite.entries.removeAll { (id, fav) -> !fav && id !in idsInList }
+        }
+        if (optimisticFavorite.isEmpty()) return list
+        var result = list.map { e ->
+            val ov = optimisticFavorite[e.id]
+            if (ov != null && ov != e.isFavorite) e.copy(isFavorite = ov) else e
+        }
+        if (isFavFolder) result = result.filter { optimisticFavorite[it.id] != false }
+        return result
+    }
+
+    /** Inserts a just-saved draft into the Drafts list immediately, before the next sync. */
+    internal fun insertOptimisticDraft(
+        to: String,
+        subject: String,
+        bodyHtml: String,
+        accountEmail: String,
+        removeId: String?
+    ) {
+        @Suppress("DEPRECATION")
+        val plain = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N)
+            Html.fromHtml(bodyHtml, Html.FROM_HTML_MODE_LEGACY)
+        else
+            Html.fromHtml(bodyHtml)).toString().trim()
+
+        val draft = DisplayEmail(
+            id = "local-draft-" + System.currentTimeMillis(),
+            subject = if (subject.isBlank()) "(No Subject)" else subject,
+            from = accountEmail,
+            fromEmail = accountEmail,
+            preview = plain.take(140),
+            fullBody = bodyHtml,
+            seen = true,
+            isFavorite = false,
+            receivedAt = System.currentTimeMillis(),
+            toEmail = to
+        )
+        val current = (folderCache[R.id.nav_drafts] ?: emptyList()).toMutableList()
+        if (removeId != null) current.removeAll { it.id == removeId }
+        current.add(0, draft)
+        folderCache[R.id.nav_drafts] = current
+        if (selectedFolder == R.id.nav_drafts) updateEmailsList(current)
+    }
+
+    /** Asks for confirmation, then permanently destroys emails (used in Trash). */
+    private fun confirmPermanentDelete(account: JMapClient.ConnectedAccount, ids: List<String>) {
+        showThemedConfirmDialog(
+            title = "Delete permanently",
+            message = if (ids.size == 1)
+                "Permanently delete this email? This can't be undone."
+            else
+                "Permanently delete ${ids.size} emails? This can't be undone.",
+            confirmLabel = "Delete",
+            isDangerous = true
+        ) {
+            clearSelection()
+            removeEmailsAnimated(ids)
+            folderCache[R.id.nav_trash] = emails.toList()
+            saveEmailCache()
+            lifecycleScope.launch {
+                ids.forEach {
+                    try { jmapClient.destroyEmail(account, it) }
+                    catch (e: Exception) { Log.e(TAG, "destroyEmail failed", e) }
+                }
+            }
+        }
+    }
+
+    private fun performAction(action: String) {
+        val account = connectedAccount ?: return
+        val ids = selectedEmails.toList()
+        if (ids.isEmpty()) return
+
+        if (selectedFolder == R.id.nav_drafts && (action == "archive" || action == "toggleRead")) {
+            Snackbar.make(drawerLayout, "Not available for drafts", Snackbar.LENGTH_SHORT).show()
+            clearSelection()
+            return
+        }
+
+        if (action == "delete" && selectedFolder == R.id.nav_trash) {
+            confirmPermanentDelete(account, ids)
+            return
+        }
+
+        when (action) {
+            "archive", "delete" -> {
+                // Archiving from Favourites keeps the email flagged, so it must stay
+                // visible there (an email can be both favourited and archived).
+                if (action == "archive" && selectedFolder == R.id.nav_favourite) {
+                    clearSelection()
+                    emailAdapter.notifyDataSetChanged()
+                    Snackbar.make(drawerLayout, "Archived", Snackbar.LENGTH_SHORT).show()
+                    lifecycleScope.launch {
+                        try {
+                            ids.forEach { id ->
+                                val acc = resolveAccountForId(id) ?: return@forEach
+                                val archiveId = resolveOrCreateArchive(acc) ?: return@forEach
+                                jmapClient.setMailbox(acc, id, archiveId)
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Archive from favourites failed", e)
+                        }
+                    }
+                    return
+                }
+                val movedEmails = emails.filter { it.id in ids }
+                // Resolve accounts before removeEmailsAnimated wipes baseEmails
+                val accountsById = movedEmails.associate { it.id to (resolveAccountFor(it) ?: connectedAccount) }
+                clearSelection()
+                removeEmailsAnimated(ids)
+                val targetNavId = if (action == "archive") R.id.nav_archive else R.id.nav_trash
+                movedEmails.forEach { updateFolderCachesForMove(it, targetNavId) }
+                saveEmailCache()
+
+                lifecycleScope.launch {
+                    try {
+                        when (action) {
+                            "archive" -> ids.forEach { id ->
+                                val acc = accountsById[id] ?: return@forEach
+                                val archiveId = resolveOrCreateArchive(acc) ?: return@forEach
+                                jmapClient.setMailbox(acc, id, archiveId)
+                            }
+                            "delete" -> ids.forEach { id ->
+                                val acc = accountsById[id] ?: return@forEach
+                                val trashId = resolveMailboxIdByRole(acc, "trash") ?: return@forEach
+                                jmapClient.setMailbox(acc, id, trashId)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Action failed", e)
+                    }
+                }
+            }
+            "unarchive" -> {
+                val movedEmails = emails.filter { it.id in ids }
+                // Resolve accounts before removeEmailsAnimated wipes baseEmails
+                val accountsById = movedEmails.associate { it.id to (resolveAccountFor(it) ?: connectedAccount) }
+                clearSelection()
+                removeEmailsAnimated(ids)
+                movedEmails.forEach { updateFolderCachesForInbox(it) }
+                saveEmailCache()
+                lifecycleScope.launch {
+                    try {
+                        ids.forEach { id ->
+                            val acc = accountsById[id] ?: return@forEach
+                            val inboxId = resolveMailboxIdByRole(acc, "inbox") ?: return@forEach
+                            jmapClient.setMailbox(acc, id, inboxId)
+                            BackgroundEmailSyncReceiver.addToBaseline(this@MainActivity, acc.email, listOf(id))
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Unarchive failed", e)
+                    }
+                }
+            }
+            "toggleRead" -> {
+                val allSeen = ids.all { id -> baseEmails.find { it.id == id }?.seen == true }
+                val newState = !allSeen
+                emails.forEach { if (it.id in ids) it.seen = newState }
+                baseEmails.forEach { if (it.id in ids) it.seen = newState }
+                clearSelection()
+                emailAdapter.notifyDataSetChanged()
+                saveEmailCache()
+                lifecycleScope.launch {
+                    try {
+                        ids.forEach { id ->
+                            val acc = resolveAccountForId(id) ?: return@forEach
+                            jmapClient.setSeen(acc, id, newState)
+                        }
+                    }
+                    catch (e: Exception) { Log.e(TAG, "toggleRead failed", e) }
+                }
+            }
+            "more" -> showMoreOptionsPopup(null)
+        }
+    }
+
+    /**
+     * Inserts an email into a receivedAt-descending list at its correct chronological
+     * position, so optimistic updates match the order the server sync will produce
+     * (no visible "jump" once the background sync lands).
+     */
+    private fun insertSortedByDate(
+        list: List<DisplayEmail>,
+        email: DisplayEmail
+    ): List<DisplayEmail> {
+        val result = ArrayList<DisplayEmail>(list.size + 1)
+        var inserted = false
+        for (e in list) {
+            if (!inserted && email.receivedAt >= e.receivedAt) {
+                result.add(email)
+                inserted = true
+            }
+            result.add(e)
+        }
+        if (!inserted) result.add(email)
+        return result
+    }
+
+    internal fun updateFolderCachesForFavorite(email: DisplayEmail, isFavorite: Boolean) {
+        val favKey = R.id.nav_favourite
+        if (isFavorite) {
+            // Only add to favourites cache when the email is not from Trash
+            if (selectedFolder != R.id.nav_trash) {
+                val current = folderCache[favKey]
+                if (current != null && current.none { it.id == email.id }) {
+                    folderCache[favKey] = insertSortedByDate(current, email.copy(isFavorite = true))
+                }
+            }
+        } else {
+            val current = folderCache[favKey]
+            if (current != null) {
+                folderCache[favKey] = current.filter { it.id != email.id }
+            }
+        }
+    }
+
+    /** Moves an email back from Archive to the Inbox cache, keeping date order. */
+    internal fun updateFolderCachesForInbox(email: DisplayEmail) {
+        val archiveCurrent = folderCache[R.id.nav_archive]
+        if (archiveCurrent != null) {
+            folderCache[R.id.nav_archive] = archiveCurrent.filter { it.id != email.id }
+        }
+        val inboxCurrent = folderCache[R.id.nav_inbox]
+        if (inboxCurrent != null && inboxCurrent.none { it.id == email.id }) {
+            folderCache[R.id.nav_inbox] = insertSortedByDate(inboxCurrent, email)
+        }
+    }
+
+    internal fun updateFolderCachesForMove(email: DisplayEmail, targetNavId: Int) {
+        // Insert into target cache at top (if already loaded and not already present)
+        if (targetNavId == R.id.nav_archive || targetNavId == R.id.nav_trash) {
+            val current = folderCache[targetNavId]
+            if (current != null && current.none { it.id == email.id }) {
+                folderCache[targetNavId] = insertSortedByDate(current, email)
+            }
+        }
+        // Remove from inbox and archive on delete/trash
+        if (targetNavId == R.id.nav_trash) {
+            val archiveCurrent = folderCache[R.id.nav_archive]
+            if (archiveCurrent != null) {
+                folderCache[R.id.nav_archive] = archiveCurrent.filter { it.id != email.id }
+            }
+            val favCurrent = folderCache[R.id.nav_favourite]
+            if (favCurrent != null) {
+                folderCache[R.id.nav_favourite] = favCurrent.filter { it.id != email.id }
+            }
+        }
+        // Remove from inbox always
+        val inboxCurrent = folderCache[R.id.nav_inbox]
+        if (inboxCurrent != null) {
+            folderCache[R.id.nav_inbox] = inboxCurrent.filter { it.id != email.id }
+        }
+        // Spam: also remove from archive and favourite
+        if (targetNavId != R.id.nav_archive && targetNavId != R.id.nav_trash) {
+            val archiveCurrent = folderCache[R.id.nav_archive]
+            if (archiveCurrent != null) {
+                folderCache[R.id.nav_archive] = archiveCurrent.filter { it.id != email.id }
+            }
+            val favCurrent = folderCache[R.id.nav_favourite]
+            if (favCurrent != null) {
+                folderCache[R.id.nav_favourite] = favCurrent.filter { it.id != email.id }
+            }
+        }
+    }
+
+    private val actionModeCallback =
+            object : androidx.appcompat.view.ActionMode.Callback {
+                override fun onCreateActionMode(
+                        mode: androidx.appcompat.view.ActionMode,
+                        menu: Menu
+                ): Boolean {
+                    menu.add(0, 1, 0, getString(R.string.swipe_action_archive))
+                            .setIcon(R.drawable.ic_lucide_archive)
+                            .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                    menu.add(0, 2, 0, getString(R.string.swipe_action_delete))
+                            .setIcon(R.drawable.ic_lucide_trash)
+                            .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                    menu.add(0, 3, 0, "Mark Unread")
+                            .setIcon(R.drawable.ic_lucide_eye)
+                            .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                    menu.add(0, 6, 0, "More")
+                            .setIcon(R.drawable.ic_lucide_more_vertical)
+                            .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                    val barTint = getOnAccentColor()
+                    for (i in 0 until menu.size()) {
+                        menu.getItem(i).icon?.mutate()?.setTint(barTint)
+                    }
+                    tintActionModeBar()
+                    return true
+                }
+
+                override fun onPrepareActionMode(
+                        mode: androidx.appcompat.view.ActionMode,
+                        menu: Menu
+                ): Boolean {
+                    val allSeen =
+                            selectedEmails.isNotEmpty() &&
+                                    selectedEmails.all { id ->
+                                        emails.find { it.id == id }?.seen == true
+                                    }
+                    menu.findItem(3)?.title = if (allSeen) "Mark Unread" else "Mark Read"
+                    return true
+                }
+
+                override fun onActionItemClicked(
+                        mode: androidx.appcompat.view.ActionMode,
+                        item: MenuItem
+                ): Boolean {
+                    val account = connectedAccount ?: return false
+                    val ids = selectedEmails.toList()
+
+                    if (item.itemId == 6) {
+                        showMoreOptionsPopup(mode)
+                        return true
+                    }
+
+                    mode.finish()
+                    val movedEmails = emails.filter { it.id in ids }
+                    val accountsById = movedEmails.associate { it.id to (resolveAccountFor(it) ?: account) }
+                    when (item.itemId) {
+                        1 -> { // Archive
+                            // Archiving from Favourites keeps the email flagged, so it
+                            // must stay visible there instead of being removed.
+                            val keepVisible = selectedFolder == R.id.nav_favourite
+                            if (!keepVisible) {
+                                removeEmailsAnimated(ids)
+                                saveEmailCache()
+                            }
+
+                            lifecycleScope.launch {
+                                try {
+                                    ids.forEach { id ->
+                                        val acc = accountsById[id] ?: return@forEach
+                                        val archiveId = resolveOrCreateArchive(acc) ?: return@forEach
+                                        jmapClient.setMailbox(acc, id, archiveId)
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Failed to archive selection", e)
+                                }
+                            }
+                        }
+                        2 -> { // Delete
+                            removeEmailsAnimated(ids)
+                            saveEmailCache()
+
+                            lifecycleScope.launch {
+                                try {
+                                    ids.forEach { id ->
+                                        val acc = accountsById[id] ?: return@forEach
+                                        val trashId = resolveMailboxIdByRole(acc, "trash") ?: return@forEach
+                                        jmapClient.setMailbox(acc, id, trashId)
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Failed to delete selection", e)
+                                }
+                            }
+                        }
+                        3 -> { // Toggle Read/Unread
+                            val allSeen = ids.all { id -> emails.find { e -> e.id == id }?.seen == true }
+                            val newState = !allSeen
+                            emails.forEach { if (it.id in ids) it.seen = newState }
+                            emailAdapter.notifyDataSetChanged()
+                            saveEmailCache()
+
+                            lifecycleScope.launch {
+                                try {
+                                    ids.forEach { id ->
+                                        val acc = resolveAccountForId(id) ?: return@forEach
+                                        jmapClient.setSeen(acc, id, newState)
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Failed to toggle seen state for selection", e)
+                                }
+                            }
+                        }
+                    }
+                    return true
+                }
+
+                override fun onDestroyActionMode(mode: androidx.appcompat.view.ActionMode) {
+                    selectedEmails.clear()
+                    emailAdapter.notifyDataSetChanged()
+                }
+            }
+
+    private suspend fun resolveMailboxIdByRole(
+            account: JMapClient.ConnectedAccount,
+            role: String
+    ): String? {
+        val fromQuery = jmapClient.resolveMailboxIdByRole(account, role)
+        if (fromQuery != null) return fromQuery
+        // Some servers don't assign the IMAP special-use role, so the query returns
+        // nothing. Fall back to fetching all mailboxes and matching by role, then by name.
+        return try {
+            val mailboxes = jmapClient.fetchMailboxes(account)
+            mailboxes.firstOrNull { it.role?.lowercase() == role.lowercase() }?.id
+                ?: mailboxes.firstOrNull { mbox ->
+                    mailboxNameMatchesRole(mbox.name, role)
+                }?.id
+                ?: run {
+                    Log.w(TAG, "resolveMailboxIdByRole: no '$role' mailbox for ${account.email}; " +
+                            "available=${mailboxes.joinToString { "${it.name}/${it.role}" }}")
+                    null
+                }
+        } catch (e: Exception) {
+            Log.w(TAG, "resolveMailboxIdByRole fallback failed for $role", e)
+            null
+        }
+    }
+
+    /**
+     * Resolves the archive mailbox for an account, creating it if the server doesn't ship
+     * one. Stalwart (and some other servers) don't provision an Archive folder by default
+     * but recognise the "archive" special-use role, so we create it on first use.
+     */
+    private suspend fun resolveOrCreateArchive(account: JMapClient.ConnectedAccount): String? {
+        resolveMailboxIdByRole(account, "archive")?.let { return it }
+        val created = jmapClient.createMailbox(account, "Archive", "archive")
+        if (created != null) {
+            Log.i(TAG, "Created Archive mailbox for ${account.email}")
+            // Invalidate cached mailbox list so the new folder shows up in pickers.
+            mailboxCache = null
+        } else {
+            Log.w(TAG, "Could not resolve or create Archive mailbox for ${account.email}")
+        }
+        return created
+    }
+
+    /** Heuristic name match for servers that don't expose IMAP special-use roles. */
+    private fun mailboxNameMatchesRole(name: String, role: String): Boolean {
+        val n = name.trim().lowercase()
+        val candidates = when (role.lowercase()) {
+            "archive" -> listOf("archive", "archived", "all mail", "archivio")
+            "junk", "spam" -> listOf("junk", "spam", "junk e-mail", "junk email", "posta indesiderata")
+            "trash" -> listOf("trash", "deleted", "deleted items", "bin", "cestino")
+            "sent" -> listOf("sent", "sent items", "sent mail", "posta inviata", "inviata")
+            "drafts" -> listOf("drafts", "draft", "bozze")
+            "inbox" -> listOf("inbox", "posta in arrivo")
+            else -> listOf(role.lowercase())
+        }
+        return candidates.any { n == it }
+    }
+
+    private fun startPeriodicSync() {
+        syncJob?.cancel()
+        val account = connectedAccount ?: return
+        val currentFolderId = selectedFolder
+        val role = getFolderRole(selectedFolder)
+        val isFav = selectedFolder == R.id.nav_favourite
+        val isInbox = selectedFolder == R.id.nav_inbox
+        val isUnifiedInbox = selectedFolder == R.id.nav_unified_inbox
+        val folderTitle = getCurrentMailboxTitle()
+
+        syncJob =
+                lifecycleScope.launch {
+                    // Warm the mailbox cache so the "Move to" sheet opens without waiting on the network.
+                    if (mailboxCache == null) {
+                        runCatching { mailboxCache = jmapClient.fetchMailboxes(account) }
+                    }
+                    while (true) {
+                        try {
+                            if (folderCache[currentFolderId] == null) {
+                                status.text =
+                                        getString(R.string.status_sync_contacting, account.apiUrl)
+                            }
+
+                            if (isUnifiedInbox) {
+                                val allAccounts = BackgroundEmailSyncReceiver.readAllAccounts(this@MainActivity)
+                                val merged = allAccounts.flatMap { acc ->
+                                    try {
+                                        jmapClient.fetchEmails(acc).map { e ->
+                                            DisplayEmail(
+                                                e.id, e.subject, e.from, e.fromEmail,
+                                                e.preview, e.fullBody, e.seen, e.isStarred,
+                                                e.receivedAt, e.toEmail,
+                                                attachments = e.attachments,
+                                                accountEmail = acc.email
+                                            )
+                                        }
+                                    } catch (e: kotlinx.coroutines.CancellationException) {
+                                        throw e
+                                    } catch (_: Exception) {
+                                        emptyList()
+                                    }
+                                }.sortedByDescending { it.receivedAt }
+                                folderCache[currentFolderId] = merged
+                                updateEmailsList(merged)
+                                status.text = if (merged.isEmpty())
+                                    getString(R.string.status_sync_ok_empty, folderTitle)
+                                else getString(R.string.status_sync_ok, merged.size)
+                                delay(10000)
+                                continue
+                            }
+
+                            val mailboxId =
+                                    if (role != null) resolveMailboxIdByRole(account, role)
+                                    else null
+                            val fresh =
+                                    if (isFav) {
+                                        jmapClient.fetchStarredEmails(account)
+                                    } else if (isInbox) {
+                                        jmapClient.fetchEmails(account)
+                                    } else if (role != null && mailboxId == null) {
+                                        emptyList()
+                                    } else {
+                                        jmapClient.fetchEmails(account, mailboxId)
+                                    }
+
+                            val newEmailsList =
+                                    fresh.map {
+                                        DisplayEmail(
+                                                it.id,
+                                                it.subject,
+                                                it.from,
+                                                it.fromEmail,
+                                                it.preview,
+                                                it.fullBody,
+                                                it.seen,
+                                                it.isStarred,
+                                                it.receivedAt,
+                                                it.toEmail,
+                                                attachments = it.attachments,
+                                                accountEmail = account.email
+                                        )
+                                    }
+                            val mergedList = applyOptimisticFavorite(newEmailsList, isFav)
+                            folderCache[currentFolderId] = mergedList
+                            updateEmailsList(mergedList)
+
+                            status.text =
+                                    if (fresh.isEmpty())
+                                            getString(R.string.status_sync_ok_empty, folderTitle)
+                                    else getString(R.string.status_sync_ok, fresh.size)
+                        } catch (_: CancellationException) {
+                            return@launch
+                        } catch (e: Throwable) {
+                            Log.e(TAG, "Sync failed", e)
+                            status.text = getString(R.string.status_sync_failed, e.message ?: "-")
+                            if (pendingMailboxShow) {
+                                pendingMailboxShow = false
+                                showMailboxScreen(skipRefresh = true)
+                                loadingOverlay.animate().alpha(0f).setDuration(350).withEndAction {
+                                    loadingOverlay.visibility = View.GONE
+                                    loadingOverlay.alpha = 1f
+                                }.start()
+                            }
+                        }
+                        delay(10000)
+                    }
+                }
+    }
+
+    private fun loadUnifiedPushPreferences() {
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        unifiedPushSwitch.isChecked = prefs.getBoolean(KEY_UP_ENABLED, false)
+        sseSwitch.isChecked = JmapEventSourceService.isEnabled(this)
+    }
+
+    private fun saveUnifiedPushEnabled(enabled: Boolean) {
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                .edit()
+                .putBoolean(KEY_UP_ENABLED, enabled)
+                .apply()
+    }
+
+    private fun normalizeUnifiedPushLink(value: String): String? {
+        val trimmed = value.trim().trimEnd('/')
+        if (trimmed.isBlank()) return null
+        val withScheme =
+                if (trimmed.startsWith("http://", ignoreCase = true) ||
+                                trimmed.startsWith("https://", ignoreCase = true)
+                ) {
+                    trimmed
+                } else {
+                    "https://$trimmed"
+                }
+        return try {
+            val url = URL(withScheme)
+            if (url.protocol != "https" || url.host.isNullOrBlank()) return null
+            val topic = url.path.trim('/').ifBlank { getOrCreateUnifiedPushTopic() }
+            URL("https", url.host, url.port, "/$topic").toString()
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    private fun getOrCreateUnifiedPushTopic(): String {
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        val saved = prefs.getString(KEY_UP_AUTO_TOPIC, null)
+        if (!saved.isNullOrBlank()) return saved
+        val generated = "jmapjolt-${UUID.randomUUID().toString().take(8)}"
+        prefs.edit().putString(KEY_UP_AUTO_TOPIC, generated).apply()
+        return generated
+    }
+
+    private fun sendUnifiedPushTestNotification() {
+        val endpoint = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                .getString(KEY_LAST_UP_ENDPOINT, null)
+                ?.takeIf { it.isNotBlank() }
+        if (endpoint == null) {
+            Snackbar.make(
+                            drawerLayout,
+                            getString(R.string.settings_unifiedpush_waiting_endpoint),
+                            Snackbar.LENGTH_SHORT
+                    )
+                    .setBackgroundTint("#616161".toColorInt())
+                    .setTextColor(Color.WHITE)
+                    .show()
+            return
+        }
+        lifecycleScope.launch {
+            val result =
+                    withContext(Dispatchers.IO) {
+                        try {
+                            val connection = URL(endpoint).openConnection() as HttpURLConnection
+                            connection.requestMethod = "POST"
+                            connection.connectTimeout = 10000
+                            connection.readTimeout = 10000
+                            connection.doOutput = true
+                            connection.setRequestProperty("Content-Type", "text/plain; charset=utf-8")
+                            connection.outputStream.use {
+                                it.write(getString(R.string.settings_unifiedpush_test_body).toByteArray())
+                            }
+                            val code = connection.responseCode
+                            connection.disconnect()
+                            TestNotificationResult(code in 200..299, code)
+                        } catch (e: Throwable) {
+                            Log.e(TAG, "UnifiedPush test notification failed", e)
+                            TestNotificationResult(false, null)
+                        }
+                    }
+
+            Snackbar.make(
+                            drawerLayout,
+                            if (result.success) {
+                                getString(R.string.settings_unifiedpush_test_sent)
+                            } else if (result.httpCode != null) {
+                                getString(
+                                        R.string.settings_unifiedpush_error_with_code,
+                                        result.httpCode
+                                )
+                            } else {
+                                getString(R.string.settings_unifiedpush_error)
+                            },
+                            Snackbar.LENGTH_SHORT
+                    )
+                    .setBackgroundTint(
+                            if (result.success) "#2E7D32".toColorInt()
+                            else "#C62828".toColorInt()
+                    )
+                    .setTextColor(Color.WHITE)
+                    .show()
+        }
+    }
+
+    private fun hideKeyboard() {
+        val imm = getSystemService(InputMethodManager::class.java)
+        imm?.hideSoftInputFromWindow(currentFocus?.windowToken, 0)
+        currentFocus?.clearFocus()
+    }
+
+    private fun persistConnectedAccount(account: JMapClient.ConnectedAccount, serverUrl: String) {
+        val existingIndex =
+                savedAccounts.indexOfFirst { it.email.equals(account.email, ignoreCase = true) }
+        val entry =
+                AccountEntry(
+                        email = account.email,
+                        password = account.password,
+                        serverUrl = serverUrl,
+                        sessionUrl = account.sessionUrl,
+                        apiUrl = account.apiUrl,
+                        accountId = account.accountId
+                )
+        if (existingIndex >= 0) savedAccounts[existingIndex] = entry else savedAccounts.add(entry)
+        currentAccountEmail = account.email
+        saveAccounts()
+        renderAccountHeader()
+    }
+
+    private fun loadAccounts() {
+        val raw =
+                SecureStorage.prefs(this).getString(KEY_ACCOUNTS_JSON, null)
+                        ?: return
+        val root = JSONObject(raw)
+        val list = root.optJSONArray("accounts") ?: JSONArray()
+        savedAccounts.clear()
+        for (i in 0 until list.length()) {
+            val item = list.optJSONObject(i) ?: continue
+            savedAccounts.add(
+                    AccountEntry(
+                            email = item.optString("email"),
+                            password = item.optString("password"),
+                            serverUrl = item.optString("serverUrl"),
+                            sessionUrl = item.optString("sessionUrl"),
+                            apiUrl = item.optString("apiUrl"),
+                            accountId = item.optString("accountId")
+                    )
+            )
+        }
+        val current = root.optString("current", "")
+        currentAccountEmail = current.ifBlank { null }
+        renderAccountHeader()
+    }
+
+    private fun saveAccounts() {
+        val accounts = JSONArray()
+        savedAccounts.forEach {
+            accounts.put(
+                    JSONObject()
+                            .put("email", it.email)
+                            .put("password", it.password)
+                            .put("serverUrl", it.serverUrl)
+                            .put("sessionUrl", it.sessionUrl)
+                            .put("apiUrl", it.apiUrl)
+                            .put("accountId", it.accountId)
+            )
+        }
+        val root = JSONObject().put("accounts", accounts).put("current", currentAccountEmail ?: "")
+        SecureStorage.prefs(this)
+                .edit()
+                .putString(KEY_ACCOUNTS_JSON, root.toString())
+                .apply()
+    }
+
+    private fun closeAccountsList() {
+        drawerAccountsList.visibility = View.GONE
+        drawerAccountArrow.rotation = 0f
+    }
+
+    internal fun renderAccountHeader() {
+        val label = currentAccountEmail ?: savedAccounts.firstOrNull()?.email.orEmpty()
+        drawerAccountName.text = label
+        drawerAccountsList.removeAllViews()
+
+        val dp = resources.displayMetrics.density
+        val textInt = if (currentTheme == "light") "#212121".toColorInt() else Color.WHITE
+        val secondaryTextInt =
+                if (currentTheme == "light") "#757575".toColorInt() else "#BDBDBD".toColorInt()
+        drawerAccountArrow.imageTintList = ColorStateList.valueOf(secondaryTextInt)
+        val iconTint =
+                if (currentTheme == "light") "#757575".toColorInt() else "#9E9E9E".toColorInt()
+
+        savedAccounts.forEach { account ->
+            if (account.email == currentAccountEmail) return@forEach
+
+            val accentColor = getAccountColor(account.email)
+            val rowBg = when (currentTheme) {
+                "light" -> "#F0F0F0".toColorInt()
+                "oled"  -> "#181818".toColorInt()
+                else    -> "#2A2A2A".toColorInt()
+            }
+
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = (4 * dp).toInt() }
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = 8 * dp
+                    setColor(rowBg)
+                }
+                setPadding((10 * dp).toInt(), (6 * dp).toInt(), (6 * dp).toInt(), (6 * dp).toInt())
+            }
+
+            // Colored dot indicating account color
+            row.addView(View(this).apply {
+                val sz = (8 * dp).toInt()
+                layoutParams = LinearLayout.LayoutParams(sz, sz).apply { marginEnd = (10 * dp).toInt() }
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(accentColor)
+                }
+            })
+
+            row.addView(TextView(this).apply {
+                text = account.email
+                textSize = 15f
+                setTextColor(textInt)
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                setOnClickListener {
+                    showThemedConfirmDialog(
+                        title = "Switch Account",
+                        message = "Switch to ${account.email}?",
+                        confirmLabel = "Switch"
+                    ) {
+                        switchToSavedAccount(account)
+                        closeAccountsList()
+                        drawerLayout.closeDrawer(GravityCompat.START)
+                    }
+                }
+            })
+
+            row.addView(ImageView(this).apply {
+                setImageResource(R.drawable.ic_lucide_log_out)
+                imageTintList = android.content.res.ColorStateList.valueOf(iconTint)
+                setPadding((8 * dp).toInt(), (8 * dp).toInt(), (8 * dp).toInt(), (8 * dp).toInt())
+                layoutParams = LinearLayout.LayoutParams((36 * dp).toInt(), (36 * dp).toInt())
+                setOnClickListener {
+                    showThemedConfirmDialog(
+                        title = "Remove Account",
+                        message = "Remove ${account.email}?",
+                        confirmLabel = "Remove",
+                        isDangerous = true
+                    ) { deleteAccount(account) }
+                }
+            })
+
+            drawerAccountsList.addView(row)
+        }
+
+        val add = TextView(this).apply {
+            text = getString(R.string.drawer_add_account_action)
+            textSize = 14f
+            setTextColor(secondaryTextInt)
+            setPadding((4 * dp).toInt(), (10 * dp).toInt(), (4 * dp).toInt(), (6 * dp).toInt())
+            setOnClickListener {
+                showAddAccountDialog()
+                closeAccountsList()
+                drawerLayout.closeDrawer(GravityCompat.START)
+            }
+        }
+        drawerAccountsList.addView(add)
+    }
+
+    private fun deleteAccount(account: AccountEntry) {
+        savedAccounts.removeAll { it.email.equals(account.email, ignoreCase = true) }
+        saveAccounts()
+        if (account.email == currentAccountEmail) {
+            val next = savedAccounts.firstOrNull()
+            if (next != null) {
+                switchToSavedAccount(next)
+            } else {
+                currentAccountEmail = null
+                connectedAccount = null
+                closeAccountsList()
+                drawerLayout.closeDrawer(GravityCompat.START)
+                showLoginScreen()
+            }
+        } else {
+            // If only one account remains and we're in unified inbox, return to that account's inbox
+            if (savedAccounts.size <= 1 && selectedFolder == R.id.nav_unified_inbox) {
+                selectedFolder = R.id.nav_inbox
+                applyFolderFilterAndRefresh()
+            }
+            renderAccountHeader()
+            navigationView.post { rebuildDrawerMenu() }
+        }
+    }
+
+    internal fun getAccountColor(email: String): Int {
+        val saved = getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getInt("account_color_$email", Int.MIN_VALUE)
+        if (saved != Int.MIN_VALUE) return saved
+        val hue = kotlin.math.abs(email.hashCode() % 360).toFloat()
+        return Color.HSVToColor(floatArrayOf(hue, 0.65f, 0.85f))
+    }
+
+    internal fun resolveAccountFor(email: DisplayEmail): JMapClient.ConnectedAccount? {
+        if (email.accountEmail.isBlank()) return connectedAccount
+        val entry = savedAccounts.firstOrNull { it.email.equals(email.accountEmail, ignoreCase = true) }
+            ?: return connectedAccount
+        return JMapClient.ConnectedAccount(
+            email = entry.email,
+            password = entry.password,
+            sessionUrl = entry.sessionUrl,
+            apiUrl = entry.apiUrl,
+            accountId = entry.accountId
+        )
+    }
+
+    private fun resolveAccountForId(emailId: String): JMapClient.ConnectedAccount? {
+        val email = baseEmails.find { it.id == emailId } ?: return connectedAccount
+        return resolveAccountFor(email)
+    }
+
+    private fun setAccountColor(email: String, color: Int) {
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().putInt("account_color_$email", color).apply()
+    }
+
+    private fun refreshAccountsSettings() {
+        settingsAccountsContent.removeAllViews()
+        val dp = resources.displayMetrics.density
+        val textColor = if (currentTheme == "light") "#212121".toColorInt() else Color.WHITE
+        val secondaryColor = if (currentTheme == "light") "#757575".toColorInt() else "#9E9E9E".toColorInt()
+
+        if (savedAccounts.isEmpty()) {
+            settingsAccountsContent.addView(TextView(this).apply {
+                text = "No accounts configured"
+                textSize = 13f
+                setTextColor(secondaryColor)
+                setPadding(0, (8 * dp).toInt(), 0, 0)
+            })
+            return
+        }
+
+        savedAccounts.forEach { account ->
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, (52 * dp).toInt()
+                )
+            }
+
+            // Color dot
+            val colorDot = View(this).apply {
+                val sz = (12 * dp).toInt()
+                layoutParams = LinearLayout.LayoutParams(sz, sz).apply { marginEnd = (12 * dp).toInt() }
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(getAccountColor(account.email))
+                }
+            }
+            row.addView(colorDot)
+
+            // Email label
+            row.addView(TextView(this).apply {
+                text = account.email
+                textSize = 14f
+                setTextColor(textColor)
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+            })
+
+            // Change color button
+            row.addView(TextView(this).apply {
+                text = "Change color"
+                textSize = 12f
+                setTextColor(getOnAccentColor())
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = 10 * dp
+                    setColor(currentAccentColor.toColorInt())
+                }
+                setPadding((12 * dp).toInt(), (6 * dp).toInt(), (12 * dp).toInt(), (6 * dp).toInt())
+                isClickable = true
+                isFocusable = true
+                setOnClickListener {
+                    showAccountColorDialog(account.email) {
+                        colorDot.background = GradientDrawable().apply {
+                            shape = GradientDrawable.OVAL
+                            setColor(getAccountColor(account.email))
+                        }
+                    }
+                }
+            })
+
+            settingsAccountsContent.addView(row)
+        }
+    }
+
+    private fun switchToSavedAccount(account: AccountEntry, forceInbox: Boolean = false) {
+        connectedAccount = JMapClient.ConnectedAccount(
+            email = account.email,
+            password = account.password,
+            sessionUrl = account.sessionUrl,
+            apiUrl = account.apiUrl,
+            accountId = account.accountId
+        )
+        currentAccountEmail = account.email
+        saveAccounts()
+        renderAccountHeader()
+
+        // Show UI immediately, load cache async, then start live sync
+        showMailboxScreen(skipRefresh = true)
+        status.text = "Fetching new emails..."
+        if (JmapEventSourceService.isEnabled(this)) {
+            JmapEventSourceService.stop(this)
+            JmapEventSourceService.start(this)
+        }
+
+        lifecycleScope.launch {
+            val cached = emailCache.load(account.email)
+            if (cached != null) {
+                selectedFolder = if (forceInbox) R.id.nav_inbox else cached.selectedFolder
+                folderCache.clear()
+                folderCache.putAll(cached.folderCache)
+                updateEmailsList(cached.emails)
+                updateTopBarState()
+                rebuildDrawerMenu()
+            }
+            startPeriodicSync()
+            fetchAllFoldersBackground()
+        }
+    }
+
+    private fun restoreLastAccountSession(): Boolean {
+        val target =
+                currentAccountEmail?.let { selected ->
+                    savedAccounts.firstOrNull { it.email == selected }
+                }
+                        ?: savedAccounts.firstOrNull()
+        if (target == null) return false
+        switchToSavedAccount(target, forceInbox = true)
+        triggerSyncOnAppUpdateIfNeeded()
+        return true
+    }
+
+    private fun triggerSyncOnAppUpdateIfNeeded() {
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        val currentVersion =
+                try {
+                    val pi = packageManager.getPackageInfo(packageName, 0)
+                    androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(pi)
+                } catch (_: PackageManager.NameNotFoundException) {
+                    -1L
+                }
+        val lastVersion = prefs.getLong(KEY_LAST_SYNC_APP_VERSION, -1L)
+
+        if (currentVersion > 0 && currentVersion != lastVersion) {
+            refreshInboxNow()
+            prefs.edit().putLong(KEY_LAST_SYNC_APP_VERSION, currentVersion).apply()
+        }
+    }
+
+    private fun getDefaultCategoryTitle(id: Int): String {
+        return when (id) {
+            R.id.nav_unified_inbox -> "Unified Inbox"
+            R.id.nav_inbox -> "Inbox"
+            R.id.nav_favourite -> "Favorite"
+            R.id.nav_archive -> "Archive"
+            R.id.nav_sent -> "Sent"
+            R.id.nav_drafts -> "Drafts"
+            R.id.nav_spam -> "Spam"
+            R.id.nav_trash -> "Trash"
+            else -> "Folder"
+        }
+    }
+
+    private fun getCategoryIcon(id: Int): Int {
+        return when (id) {
+            R.id.nav_unified_inbox -> R.drawable.ic_lucide_inbox
+            R.id.nav_inbox -> R.drawable.ic_lucide_inbox
+            R.id.nav_favourite -> R.drawable.ic_lucide_star
+            R.id.nav_archive -> R.drawable.ic_lucide_archive
+            R.id.nav_sent -> R.drawable.ic_lucide_send
+            R.id.nav_drafts -> R.drawable.ic_lucide_file_text
+            R.id.nav_spam -> R.drawable.ic_lucide_ban
+            R.id.nav_trash -> R.drawable.ic_lucide_trash
+            else -> R.drawable.ic_lucide_inbox
+        }
+    }
+
+    override fun onPostCreate(savedInstanceState: Bundle?) {
+        super.onPostCreate(savedInstanceState)
+        drawerToggle.syncState()
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menu.clear()
+        return super.onCreateOptionsMenu(menu)
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        // Only intercept home/up when drawer indicator is NOT showing (i.e. we are in a sub-view)
+        if (item.itemId == android.R.id.home && !drawerToggle.isDrawerIndicatorEnabled) {
+            if (settingsContainer.visibility == View.VISIBLE) {
+                if (currentSettingsSection != SettingsSection.ROOT) {
+                    attemptLeaveSettingsSubmenu()
+                } else {
+                    showMailboxScreen()
+                }
+                return true
+            }
+            if (isShowingEmailDetail) {
+                closeEmailDetail()
+                return true
+            }
+        }
+
+        if (drawerToggle.onOptionsItemSelected(item)) {
+            return true
+        }
+        return super.onOptionsItemSelected(item)
+    }
+
+    override fun onDestroy() {
+        syncJob?.cancel()
+        unregisterReceiver(pushMessageReceiver)
+        super.onDestroy()
+    }
+
+    override fun onSupportNavigateUp(): Boolean {
+        if (settingsContainer.visibility == View.VISIBLE &&
+                        currentSettingsSection != SettingsSection.ROOT
+        ) {
+            attemptLeaveSettingsSubmenu()
+            return true
+        } else if (settingsContainer.visibility == View.VISIBLE &&
+                        currentSettingsSection == SettingsSection.ROOT
+        ) {
+            showMailboxScreen()
+            return true
+        } else if (isShowingEmailDetail) {
+            closeEmailDetail()
+            return true
+        }
+        return super.onSupportNavigateUp()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        onboardingPermRefresh?.invoke()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        saveEmailCache()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        saveEmailCache()
+    }
+
+    internal fun getCurrentMailboxTitle(): String {
+        return categoryNames[selectedFolder]?.takeIf { it.isNotBlank() }
+                ?: getDefaultCategoryTitle(selectedFolder)
+    }
+
+    private class SimpleSelectionListener(private val onSelected: () -> Unit) :
+            AdapterView.OnItemSelectedListener {
+        private var firstEvent = true
+
+        override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+            if (firstEvent) {
+                firstEvent = false
+                return
+            }
+            onSelected()
+        }
+
+        override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+    }
+
+    companion object {
+        internal const val TAG = "MainActivity"
+        internal const val PREFS_NAME = "mail_prefs"
+
+        // Detects common HTML elements so HTML fragments (no <html> root) are rendered as
+        // markup instead of being escaped and shown as raw text.
+        private val HTML_MARKUP_REGEX = Regex(
+            "</?(?:p|div|br|span|a|table|tr|td|th|tbody|thead|ul|ol|li|blockquote|" +
+                "h[1-6]|strong|em|b|i|u|img|pre|code|font|hr|center|dl|dt|dd|figure|" +
+                "article|section|head|body|html)\\b",
+            RegexOption.IGNORE_CASE
+        )
+
+        private const val KEY_WELCOME_SHOWN = "welcome_shown"
+        private const val KEY_CATEGORY_ORDER = "category_order"
+        private const val KEY_UP_ENABLED = "up_enabled"
+        private const val KEY_UP_MANUAL_DISTRIBUTOR = "up_manual_distributor"
+        private const val KEY_UP_AUTO_TOPIC = "up_auto_topic"
+        private const val KEY_LAST_UP_ENDPOINT = "last_up_endpoint"
+        private const val KEY_SWIPE_RIGHT_ACTION = "swipe_right_action"
+        private const val KEY_SWIPE_LEFT_ACTION = "swipe_left_action"
+        private const val KEY_ACCOUNTS_JSON = "accounts_json"
+        private const val KEY_LAST_SYNC_APP_VERSION = "last_sync_app_version"
+        internal const val KEY_ACCENT_COLOR = "accent_color"
+        val ACCENT_COLORS = listOf(
+            "#1976D2", "#2E7D32", "#7B1FA2",
+            "#D84315", "#00838F", "#AD1457", "#F57F17"
+        )
+    }
+
+    private fun showThemedConfirmDialog(
+        title: String,
+        message: String,
+        confirmLabel: String,
+        isDangerous: Boolean = false,
+        onConfirm: () -> Unit
+    ) {
+        val dp = resources.displayMetrics.density
+        val dialogBg = getDialogBackgroundColor()
+        val textColor = if (currentTheme == "light") "#212121".toColorInt() else Color.WHITE
+        val secondaryColor = if (currentTheme == "light") "#757575".toColorInt() else "#9E9E9E".toColorInt()
+        val confirmColor = if (isDangerous) "#EF5350".toColorInt() else currentAccentColor.toColorInt()
+
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            val p = (22 * dp).toInt()
+            setPadding(p, p, p, (14 * dp).toInt())
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 20 * dp
+                setColor(dialogBg)
+            }
+        }
+
+        if (title.isNotBlank()) {
+            root.addView(TextView(this).apply {
+                text = title
+                textSize = 18f
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                setTextColor(textColor)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+                ).also { it.bottomMargin = (8 * dp).toInt() }
+            })
+        }
+
+        root.addView(TextView(this).apply {
+            text = message
+            textSize = 14f
+            setTextColor(secondaryColor)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).also { it.bottomMargin = (20 * dp).toInt() }
+        })
+
+        val btnRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        }
+        root.addView(btnRow)
+
+        val dialog = AlertDialog.Builder(this).setView(root).create()
+
+        btnRow.addView(TextView(this).apply {
+            text = "Cancel"
+            textSize = 14f
+            setTextColor(secondaryColor)
+            setPadding((16 * dp).toInt(), (10 * dp).toInt(), (16 * dp).toInt(), (8 * dp).toInt())
+            isClickable = true; isFocusable = true
+            setOnClickListener { dialog.dismiss() }
+        })
+        btnRow.addView(TextView(this).apply {
+            text = confirmLabel
+            textSize = 14f
+            setTextColor(confirmColor)
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setPadding((16 * dp).toInt(), (10 * dp).toInt(), (4 * dp).toInt(), (8 * dp).toInt())
+            isClickable = true; isFocusable = true
+            setOnClickListener { dialog.dismiss(); onConfirm() }
+        })
+
+        dialog.show()
+        dialog.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+        dialog.window?.attributes?.let { lp ->
+            lp.width = (resources.displayMetrics.widthPixels * 0.88f).toInt()
+            dialog.window?.attributes = lp
+        }
+    }
+
+    private fun showLinkConfirmationDialog(url: String) {
+        val dp = resources.displayMetrics.density
+        val dialogBg = getDialogBackgroundColor()
+        val accentInt = currentAccentColor.toColorInt()
+        val textColor = if (currentTheme == "light") "#212121".toColorInt() else Color.WHITE
+        val secondaryColor = if (currentTheme == "light") "#757575".toColorInt() else "#9E9E9E".toColorInt()
+
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            val p = (22 * dp).toInt()
+            setPadding(p, p, p, (14 * dp).toInt())
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 20 * dp
+                setColor(dialogBg)
+            }
+        }
+
+        root.addView(TextView(this).apply {
+            text = "Open Link?"
+            textSize = 18f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setTextColor(textColor)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).also { it.bottomMargin = (10 * dp).toInt() }
+        })
+
+        root.addView(TextView(this).apply {
+            text = url
+            textSize = 12f
+            setTextColor(secondaryColor)
+            maxLines = 4
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).also { it.bottomMargin = (20 * dp).toInt() }
+        })
+
+        val btnRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        }
+        root.addView(btnRow)
+
+        val dialog = AlertDialog.Builder(this).setView(root).create()
+
+        btnRow.addView(TextView(this).apply {
+            text = "Cancel"
+            textSize = 14f
+            setTextColor(secondaryColor)
+            setPadding((16 * dp).toInt(), (10 * dp).toInt(), (16 * dp).toInt(), (8 * dp).toInt())
+            isClickable = true; isFocusable = true
+            setOnClickListener { dialog.dismiss() }
+        })
+        btnRow.addView(TextView(this).apply {
+            text = "Open"
+            textSize = 14f
+            setTextColor(accentInt)
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setPadding((16 * dp).toInt(), (10 * dp).toInt(), (4 * dp).toInt(), (8 * dp).toInt())
+            isClickable = true; isFocusable = true
+            setOnClickListener {
+                dialog.dismiss()
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                } catch (_: Exception) {
+                    android.widget.Toast.makeText(this@MainActivity, "Cannot open link", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        })
+
+        dialog.show()
+        dialog.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+        dialog.window?.attributes?.let { lp ->
+            lp.width = (resources.displayMetrics.widthPixels * 0.88f).toInt()
+            dialog.window?.attributes = lp
+        }
+    }
+
+    private fun showMoveLabelPicker(
+        mailboxes: List<JMapClient.MailboxInfo>,
+        ids: List<String>,
+        mode: androidx.appcompat.view.ActionMode?,
+        disabledRoles: Set<String> = emptySet()
+    ) {
+        val account = connectedAccount ?: return
+        val dp = resources.displayMetrics.density
+        val bgColor = getDialogBackgroundColor()
+        val textColor = if (currentTheme == "light") "#212121".toColorInt() else Color.WHITE
+        val secondaryColor = if (currentTheme == "light") "#757575".toColorInt() else "#BDBDBD".toColorInt()
+        val accentInt = currentAccentColor.toColorInt()
+
+        val outer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 16 * dp
+                setColor(bgColor)
+            }
+            elevation = 8 * dp
+        }
+
+        // Title row
+        outer.addView(TextView(this).apply {
+            text = "Move to"
+            textSize = 13f
+            setTextColor(secondaryColor)
+            typeface = Typeface.DEFAULT_BOLD
+            letterSpacing = 0.08f
+            setPadding((20 * dp).toInt(), (16 * dp).toInt(), (20 * dp).toInt(), (8 * dp).toInt())
+        })
+
+        outer.addView(View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1)
+            setBackgroundColor(0x22FFFFFF)
+        })
+
+        val scroll = ScrollView(this).apply {
+            isVerticalScrollBarEnabled = false
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                minOf(mailboxes.size, 6) * (52 * dp).toInt()
+            )
+        }
+        val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+
+        var dialog: AlertDialog? = null
+
+        mailboxes.forEach { mbox ->
+            val iconRes = when (mbox.role?.lowercase()) {
+                "inbox" -> R.drawable.ic_lucide_inbox
+                "archive" -> R.drawable.ic_lucide_archive
+                "sent" -> R.drawable.ic_lucide_send
+                "junk", "spam" -> R.drawable.ic_lucide_ban
+                "starred", "flagged" -> R.drawable.ic_lucide_star
+                else -> R.drawable.ic_lucide_tag
+            }
+            val isDisabled = mbox.role?.lowercase() in disabledRoles
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, (52 * dp).toInt()
+                )
+                setPadding((20 * dp).toInt(), 0, (20 * dp).toInt(), 0)
+                isClickable = !isDisabled
+                isFocusable = !isDisabled
+                alpha = if (isDisabled) 0.4f else 1f
+                if (!isDisabled) {
+                    background = ContextCompat.getDrawable(
+                        this@MainActivity,
+                        android.util.TypedValue().also {
+                            theme.resolveAttribute(android.R.attr.selectableItemBackground, it, true)
+                        }.resourceId
+                    )
+                    setOnClickListener {
+                        dialog?.dismiss()
+                        val mailboxId = mbox.id
+                        val mboxRole = mbox.role?.lowercase()
+                        // Capture account+role mapping BEFORE removeEmailsAnimated wipes
+                        // the lists. The picker shows the active account's mailboxes, so the
+                        // cached mailboxId only applies to same-account moves; cross-account
+                        // moves must re-resolve the target mailbox by role on the email's own
+                        // account (a foreign mailboxId would silently fail on the server).
+                        val accByIdForMove = emails.filter { it.id in ids }
+                            .associate { it.id to (resolveAccountFor(it) ?: account) }
+                        mode?.finish()
+                        clearSelection()
+                        removeEmailsAnimated(ids)
+                        saveEmailCache()
+                        lifecycleScope.launch {
+                            try {
+                                ids.forEach { id ->
+                                    val acc = accByIdForMove[id] ?: account
+                                    val sameAccount = acc.email.equals(account.email, ignoreCase = true)
+                                    val targetId = when {
+                                        mboxRole == "archive" -> resolveOrCreateArchive(acc)
+                                        mboxRole != null -> resolveMailboxIdByRole(acc, mboxRole)
+                                        sameAccount -> mailboxId
+                                        else -> null // custom folder: no cross-account mapping
+                                    } ?: return@forEach
+                                    jmapClient.setMailbox(acc, id, targetId)
+                                    if (mboxRole == "inbox") {
+                                        BackgroundEmailSyncReceiver.addToBaseline(this@MainActivity, acc.email, listOf(id))
+                                    }
+                                }
+                            }
+                            catch (e: Exception) { Log.e(TAG, "Failed label move", e) }
+                        }
+                    }
+                }
+            }
+            row.addView(ImageView(this).apply {
+                setImageResource(iconRes)
+                imageTintList = ColorStateList.valueOf(accentInt)
+                val sz = (20 * dp).toInt()
+                layoutParams = LinearLayout.LayoutParams(sz, sz).also { it.marginEnd = (16 * dp).toInt() }
+                scaleType = ImageView.ScaleType.FIT_CENTER
+            })
+            row.addView(TextView(this).apply {
+                text = mbox.name
+                textSize = 15f
+                setTextColor(textColor)
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            })
+            list.addView(row)
+        }
+
+        scroll.addView(list)
+        outer.addView(scroll)
+
+        dialog = AlertDialog.Builder(this)
+            .setView(outer)
+            .create()
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        dialog.show()
+    }
+
+    private fun showMoreOptionsPopup(mode: androidx.appcompat.view.ActionMode?) {
+        val account = connectedAccount ?: return
+        val dp = resources.displayMetrics.density
+        val ids = selectedEmails.toList()
+        val allFavorites = ids.isNotEmpty() && ids.all { id -> emails.find { it.id == id }?.isFavorite == true }
+        val darker = darkenColor(currentAccentColor.toColorInt())
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                cornerRadius = 8 * dp
+                setColor(darker)
+            }
+            val vp = (4 * dp).toInt()
+            setPadding(0, vp, 0, vp)
+            elevation = 8 * dp
+        }
+
+        var popupRef: android.widget.PopupWindow? = null
+
+        fun row(label: String, iconRes: Int, action: () -> Unit): LinearLayout =
+            LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                layoutParams = LinearLayout.LayoutParams(
+                    (200 * dp).toInt(), (48 * dp).toInt()
+                )
+                val hp = (16 * dp).toInt()
+                setPadding(hp, 0, hp, 0)
+                addView(ImageView(this@MainActivity).apply {
+                    setImageResource(iconRes)
+                    imageTintList = ColorStateList.valueOf(Color.WHITE)
+                    val sz = (18 * dp).toInt()
+                    layoutParams = LinearLayout.LayoutParams(sz, sz).also { it.marginEnd = (12 * dp).toInt() }
+                })
+                addView(TextView(this@MainActivity).apply {
+                    text = label; textSize = 14f; setTextColor(Color.WHITE)
+                })
+                setOnClickListener { popupRef?.dismiss(); action() }
+            }
+
+        // Sent appears as a move target only outside the Sent folder and only when the
+        // selection involves mail this account actually sent. It is greyed out when the
+        // selection mixes sent and received mail (received mail can't be filed as Sent).
+        val isSentBy = { id: String ->
+            val em = emails.find { it.id == id }
+            val emAccount = if (em != null) resolveAccountFor(em) else null
+            em?.fromEmail.equals((emAccount ?: account).email, ignoreCase = true)
+        }
+        val anySent = ids.any(isSentBy)
+        val allSent = ids.all(isSentBy)
+        val includeSent = selectedFolder != R.id.nav_sent && selectedFolder != R.id.nav_unified_inbox && anySent
+        container.addView(row("Move to", R.drawable.ic_lucide_folder_input) {
+            val excludedRoles = buildList {
+                add("drafts")
+                add("trash")
+                if (!includeSent) add("sent")
+                // Already in (unified) inbox: "Move to Inbox" is a no-op, hide it.
+                if (selectedFolder == R.id.nav_inbox || selectedFolder == R.id.nav_unified_inbox) add("inbox")
+            }
+            val disabledRoles = if (allSent) emptySet() else setOf("sent")
+            fun present(mailboxes: List<JMapClient.MailboxInfo>) {
+                val filtered = mailboxes.filter { it.role?.lowercase() !in excludedRoles }
+                if (filtered.isNotEmpty()) showMoveLabelPicker(filtered, ids, mode, disabledRoles)
+            }
+            val resolvedAccount = ids.firstOrNull()?.let { resolveAccountForId(it) } ?: account
+            val cached = mailboxCache
+            if (cached != null) {
+                // Instant: show from cache, refresh in the background for next time.
+                present(cached)
+                lifecycleScope.launch {
+                    runCatching { jmapClient.fetchMailboxes(resolvedAccount) }.getOrNull()?.let { mailboxCache = it }
+                }
+            } else {
+                lifecycleScope.launch {
+                    val mailboxes = jmapClient.fetchMailboxes(resolvedAccount)
+                    mailboxCache = mailboxes
+                    present(mailboxes)
+                }
+            }
+        })
+
+        container.addView(View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1)
+            setBackgroundColor(0x22FFFFFF)
+        })
+
+        container.addView(row(
+            if (allFavorites) "Remove from Favorites" else "Add to Favorites",
+            R.drawable.ic_lucide_star
+        ) {
+            val newState = !allFavorites
+            // Mirror the star-button path so the Favourites view updates instantly:
+            // flag the rows, record the optimistic override, and patch the cache.
+            ids.forEach { id ->
+                emails.find { it.id == id }?.isFavorite = newState
+                baseEmails.find { it.id == id }?.isFavorite = newState
+                optimisticFavorite[id] = newState
+                val source = emails.find { it.id == id } ?: baseEmails.find { it.id == id }
+                if (source != null) updateFolderCachesForFavorite(source.copy(), newState)
+            }
+            mode?.finish()
+            clearSelection()
+            // Removing a favourite while viewing Favourites drops it from the list now.
+            if (!newState && selectedFolder == R.id.nav_favourite) {
+                emails.removeAll { it.id in ids }
+                baseEmails.removeAll { it.id in ids }
+                folderCache[R.id.nav_favourite] = emails.toList()
+            }
+            emailAdapter.notifyDataSetChanged()
+            emptyStateView.visibility = if (emails.isEmpty()) View.VISIBLE else View.GONE
+            emailsRecyclerView.visibility = if (emails.isEmpty()) View.GONE else View.VISIBLE
+            saveEmailCache()
+            lifecycleScope.launch {
+                ids.forEach { id ->
+                    val acc = resolveAccountForId(id) ?: account
+                    try { jmapClient.setFavorite(acc, id, newState) }
+                    catch (e: Exception) { Log.e(TAG, "Failed favorite toggle", e) }
+                }
+            }
+        })
+
+        val pw = android.widget.PopupWindow(
+            container,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+            true
+        ).also {
+            it.elevation = 10 * dp
+            it.isOutsideTouchable = true
+        }
+        popupRef = pw
+        pw.showAsDropDown(toolbar, toolbar.width - (220 * dp).toInt(), 0)
+    }
+
+    private fun forceShowMenuIcons(menu: Menu) {
+        try {
+            val m = menu.javaClass.getDeclaredMethod("setOptionalIconsVisible", Boolean::class.java)
+            m.isAccessible = true
+            m.invoke(menu, true)
+        } catch (_: Exception) {}
+    }
+
+    private fun fetchAllFoldersBackground() {
+        val account = connectedAccount ?: return
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                for (navId in categoryOrder) {
+                    val role = getFolderRole(navId)
+                    val isFav = navId == R.id.nav_favourite
+                    val isInbox = navId == R.id.nav_inbox
+
+                    val fresh = if (isFav) {
+                        jmapClient.fetchStarredEmails(account)
+                    } else if (isInbox) {
+                        jmapClient.fetchEmails(account)
+                    } else if (role != null) {
+                        val mailboxId = jmapClient.resolveMailboxIdByRole(account, role)
+                        if (mailboxId != null) jmapClient.fetchEmails(account, mailboxId) else continue
+                    } else {
+                        continue
+                    }
+
+                    val newEmailsList = fresh.map {
+                        DisplayEmail(it.id, it.subject, it.from, it.fromEmail, it.preview, it.fullBody, it.seen, it.isStarred, it.receivedAt, attachments = it.attachments)
+                    }
+                    folderCache[navId] = newEmailsList
+
+                    if (navId == selectedFolder) {
+                        withContext(Dispatchers.Main) {
+                            updateEmailsList(newEmailsList)
+                        }
+                    }
+                }
+                withContext(Dispatchers.Main) {
+                    saveEmailCache()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Background fetch all folders failed", e)
+            }
+        }
+    }
+
+    internal fun saveEmailCache() {
+        val email = currentAccountEmail ?: return
+        if (folderCache.isEmpty() && emails.isEmpty()) return
+        val snapshot = HashMap(folderCache)
+        val currentList = emails.toList()
+        val folder = selectedFolder
+        lifecycleScope.launch {
+            emailCache.save(email, folder, snapshot, currentList)
+        }
+    }
+}

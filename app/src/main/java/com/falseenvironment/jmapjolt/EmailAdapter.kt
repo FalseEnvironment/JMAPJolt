@@ -1,0 +1,356 @@
+package com.falseenvironment.jmapjolt
+
+import android.content.res.ColorStateList
+import android.graphics.Color
+import android.graphics.Typeface
+import android.text.format.DateUtils
+import android.util.Log
+import android.view.Gravity
+import android.view.ViewGroup
+import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
+import androidx.core.graphics.toColorInt
+import androidx.recyclerview.widget.RecyclerView
+import coil.load
+import coil.transform.CircleCropTransformation
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.Adapter<EmailAdapter.EmailHolder>() {
+
+    @android.annotation.SuppressLint("ResourceType")
+    inner class EmailHolder(root: LinearLayout) : RecyclerView.ViewHolder(root) {
+        val colorStrip: android.view.View = root.findViewById(20)
+        val starButton: ImageView = root.findViewById(7)
+        val avatarContainer: FrameLayout = root.findViewById(9)
+        val avatar: TextView = root.findViewById(5)
+        val avatarImage: ImageView = root.findViewById(8)
+        val senderText: TextView = root.findViewById(11)
+        val title: TextView = root.findViewById(1)   // subject
+        val subtitle: TextView = root.findViewById(2) // preview
+        val dateText: TextView = root.findViewById(6)
+    }
+
+    @android.annotation.SuppressLint("ResourceType")
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): EmailHolder {
+        val dp = parent.context.resources.displayMetrics.density
+        val root = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.TOP
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            setPadding((8 * dp).toInt(), (10 * dp).toInt(), (8 * dp).toInt(), (10 * dp).toInt())
+        }
+
+        // Account color strip (left edge, 4dp wide)
+        val colorStrip = android.view.View(activity).apply {
+            id = 20
+            layoutParams = LinearLayout.LayoutParams((4 * dp).toInt(), ViewGroup.LayoutParams.MATCH_PARENT)
+                .apply { marginEnd = (6 * dp).toInt() }
+            visibility = android.view.View.GONE
+        }
+        root.addView(colorStrip)
+
+        // Avatar circle
+        val avatarContainer = FrameLayout(activity).apply {
+            id = 9
+            layoutParams = LinearLayout.LayoutParams((40 * dp).toInt(), (40 * dp).toInt())
+                .apply { topMargin = (2 * dp).toInt() }
+        }
+        val avatar = TextView(activity).apply {
+            id = 5
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            textSize = 16f
+            setTypeface(null, Typeface.BOLD)
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        }
+        val avatarImage = ImageView(activity).apply {
+            id = 8
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        }
+        avatarContainer.addView(avatar)
+        avatarContainer.addView(avatarImage)
+
+        // Text column
+        val textWrap = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                .apply { setMargins((10 * dp).toInt(), 0, (4 * dp).toInt(), 0) }
+        }
+        val senderTv = TextView(activity).apply {
+            id = 11
+            textSize = 12f
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
+        val subjectTv = TextView(activity).apply {
+            id = 1
+            textSize = 15f
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
+        val previewTv = TextView(activity).apply {
+            id = 2
+            textSize = 13f
+            maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
+        textWrap.addView(senderTv)
+        textWrap.addView(subjectTv)
+        textWrap.addView(previewTv)
+
+        // Right column: date + star
+        val rightWrap = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.END or Gravity.CENTER_HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
+        val dText = TextView(activity).apply {
+            id = 6
+            textSize = 11f
+            maxLines = 1
+            setSingleLine()
+            gravity = Gravity.END
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                .apply { topMargin = (4 * dp).toInt() }
+        }
+        val starBtn = ImageView(activity).apply {
+            id = 7
+            setImageResource(R.drawable.ic_lucide_star)
+            layoutParams = LinearLayout.LayoutParams(
+                (18 * dp).toInt(), (18 * dp).toInt()
+            ).apply { topMargin = (6 * dp).toInt() }
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        }
+        rightWrap.addView(dText)
+        rightWrap.addView(starBtn)
+
+        root.addView(avatarContainer)
+        root.addView(textWrap)
+        root.addView(rightWrap)
+        return EmailHolder(root)
+    }
+
+    override fun getItemCount(): Int = activity.emails.size
+
+    override fun onBindViewHolder(holder: EmailHolder, position: Int) {
+        val item = activity.emails[position]
+        val isLight = activity.currentTheme == "light"
+        val primaryColor = if (isLight) Color.BLACK else Color.WHITE
+        val secondaryColor = if (isLight) "#757575".toColorInt() else "#9E9E9E".toColorInt()
+        val mutedColor = if (isLight) "#BDBDBD".toColorInt() else "#616161".toColorInt()
+
+        val senderName = if (activity.selectedFolder == R.id.nav_drafts) {
+            "To: " + item.toEmail.ifBlank { "(no recipient)" }
+        } else {
+            item.from.ifBlank { item.fromEmail }
+        }
+
+        // Account color strip only in unified inbox
+        if (activity.selectedFolder == R.id.nav_unified_inbox && item.accountEmail.isNotBlank()) {
+            val accentColor = activity.getAccountColor(item.accountEmail)
+            holder.colorStrip.visibility = android.view.View.VISIBLE
+            holder.colorStrip.setBackgroundColor(accentColor)
+        } else {
+            holder.colorStrip.visibility = android.view.View.GONE
+        }
+        holder.senderText.text = senderName
+        holder.senderText.setTextColor(secondaryColor)
+        holder.title.text = item.subject
+        holder.subtitle.text = item.preview
+
+        // Sent and Drafts are always shown as read — their seen state is irrelevant.
+        val alwaysRead = activity.selectedFolder == R.id.nav_sent ||
+                activity.selectedFolder == R.id.nav_drafts
+        if (!item.seen && !alwaysRead) {
+            holder.senderText.setTypeface(null, Typeface.BOLD)
+            holder.title.setTypeface(null, Typeface.BOLD)
+            holder.title.setTextColor(primaryColor)
+            holder.subtitle.setTextColor(if (isLight) "#424242".toColorInt() else "#E0E0E0".toColorInt())
+            holder.dateText.setTextColor(if (isLight) "#616161".toColorInt() else "#BDBDBD".toColorInt())
+        } else {
+            holder.senderText.setTypeface(null, Typeface.NORMAL)
+            holder.title.setTypeface(null, Typeface.NORMAL)
+            holder.title.setTextColor(secondaryColor)
+            holder.subtitle.setTextColor(mutedColor)
+            holder.dateText.setTextColor(mutedColor)
+        }
+
+        holder.dateText.text = if (item.receivedAt > 0) {
+            formatRelativeDate(item.receivedAt)
+        } else {
+            ""
+        }
+
+        holder.starButton.imageTintList = ColorStateList.valueOf(
+            if (item.isFavorite) activity.currentAccentColor.toColorInt()
+            else if (isLight) "#CCCCCC".toColorInt() else "#444444".toColorInt()
+        )
+        holder.starButton.setOnClickListener {
+            val newFav = !item.isFavorite
+            item.isFavorite = newFav
+            activity.baseEmails.find { it.id == item.id }?.isFavorite = newFav
+            activity.optimisticFavorite[item.id] = newFav
+            activity.updateFolderCachesForFavorite(item.copy(), newFav)
+            // Update tint immediately — no animation, no rebind
+            holder.starButton.imageTintList = ColorStateList.valueOf(
+                if (newFav) activity.currentAccentColor.toColorInt()
+                else if (isLight) "#CCCCCC".toColorInt() else "#444444".toColorInt()
+            )
+            val pos = holder.adapterPosition
+            if (!newFav && activity.selectedFolder == R.id.nav_favourite &&
+                pos != RecyclerView.NO_POSITION) {
+                activity.emails.removeAt(pos)
+                activity.baseEmails.removeAll { it.id == item.id }
+                activity.folderCache[R.id.nav_favourite] = activity.emails.toList()
+                notifyItemRemoved(pos)
+                activity.emptyStateView.visibility = if (activity.emails.isEmpty()) android.view.View.VISIBLE else android.view.View.GONE
+                activity.emailsRecyclerView.visibility = if (activity.emails.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
+            }
+            activity.saveEmailCache()
+            val acc = activity.resolveAccountFor(item) ?: activity.connectedAccount ?: return@setOnClickListener
+            activity.lifecycleScope.launch {
+                try { activity.jmapClient.setFavorite(acc, item.id, newFav) }
+                catch (e: Exception) { Log.e(MainActivity.TAG, "toggle star failed", e) }
+            }
+        }
+
+        val isSelected = activity.selectedEmails.contains(item.id)
+        val bg = android.graphics.drawable.GradientDrawable()
+        bg.shape = android.graphics.drawable.GradientDrawable.OVAL
+
+        if (isSelected) {
+            bg.setColor(activity.currentAccentColor.toColorInt())
+            holder.avatar.text = ""
+            holder.avatarImage.tag = null
+            val selPad = (7 * holder.itemView.resources.displayMetrics.density).toInt()
+            holder.avatarImage.setPadding(selPad, selPad, selPad, selPad)
+            // load() via Coil cancels any in-flight favicon request on this view
+            holder.avatarImage.load(R.drawable.ic_lucide_check) { crossfade(false) }
+            holder.avatarImage.imageTintList = ColorStateList.valueOf(activity.getOnAccentColor())
+            holder.avatarImage.visibility = android.view.View.VISIBLE
+            holder.itemView.setBackgroundColor(
+                when (activity.currentTheme) {
+                    "oled" -> Color.BLACK
+                    "light" -> "#E8E8E8".toColorInt()
+                    else -> "#242424".toColorInt()
+                }
+            )
+        } else {
+            holder.avatarImage.imageTintList = null
+            holder.avatarImage.setPadding(0, 0, 0, 0)
+            val letter =
+                    if (item.from.isNotBlank()) item.from.first().uppercaseChar().toString()
+                    else "?"
+            val hash = item.from.hashCode()
+            val hue = kotlin.math.abs(hash % 360).toFloat()
+            val hashColor = android.graphics.Color.HSVToColor(floatArrayOf(hue, 0.6f, 0.6f))
+            holder.itemView.setBackgroundColor(Color.TRANSPARENT)
+
+            val prefs = activity.getSharedPreferences(MainActivity.PREFS_NAME, android.content.Context.MODE_PRIVATE)
+            val loadFavicons = prefs.getBoolean("load_favicons", false)
+
+            val domain =
+                    item.fromEmail.substringAfter("@", "").ifEmpty {
+                        "[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}"
+                                .toRegex()
+                                .find(item.from)
+                                ?.value
+                                ?.substringAfter("@")
+                                ?: ""
+                    }
+            val normalizedDomain = if (domain.isNotEmpty()) FaviconRepository.getRootDomain(domain.lowercase()) else ""
+
+            if (loadFavicons && normalizedDomain.isNotEmpty()) {
+                val neutralBg = when (activity.currentTheme) {
+                    "light" -> "#E0E0E0".toColorInt()
+                    "oled"  -> "#000000".toColorInt()
+                    else    -> "#1E1E1E".toColorInt()
+                }
+                bg.setColor(neutralBg)
+                holder.avatar.text = letter
+                holder.avatarImage.visibility = android.view.View.VISIBLE
+                holder.avatarImage.setImageDrawable(null)
+                holder.avatarImage.tag = normalizedDomain
+                activity.lifecycleScope.launch {
+                    val bitmap = FaviconRepository.fetchFavicon(normalizedDomain)
+                    if (holder.avatarImage.tag != normalizedDomain) return@launch
+                    if (activity.selectedEmails.contains(item.id)) return@launch
+                    if (bitmap != null) {
+                        holder.avatarImage.load(bitmap) {
+                            crossfade(true)
+                            transformations(CircleCropTransformation())
+                        }
+                        holder.avatar.text = ""
+                    } else {
+                        (holder.avatar.background as? android.graphics.drawable.GradientDrawable)
+                            ?.setColor(hashColor)
+                        holder.avatar.text = letter
+                        holder.avatarImage.visibility = android.view.View.GONE
+                    }
+                }
+            } else {
+                bg.setColor(hashColor)
+                holder.avatar.text = letter
+                holder.avatarImage.visibility = android.view.View.GONE
+            }
+        }
+        holder.avatar.background = bg
+
+        holder.avatarContainer.setOnClickListener { activity.toggleSelection(item.id) }
+        holder.itemView.setOnLongClickListener {
+            if (activity.selectedEmails.isEmpty()) {
+                activity.toggleSelection(item.id)
+                true
+            } else false
+        }
+        holder.itemView.setOnClickListener {
+            if (activity.selectedEmails.isNotEmpty()) {
+                activity.toggleSelection(item.id)
+            } else if (activity.selectedFolder == R.id.nav_drafts) {
+                activity.openDraftForEdit(item)
+            } else {
+                activity.showEmailDetail(item)
+            }
+        }
+    }
+}
+
+/**
+ * Relative time for email rows:
+ *  - under 1 minute -> "now"
+ *  - 1-59 minutes   -> "Nm ago"
+ *  - 1-23 hours     -> "Nh ago"
+ *  - 1-5 days       -> "Nd ago"
+ *  - older          -> absolute date ("MMM dd")
+ */
+private fun formatRelativeDate(timestamp: Long): String {
+    val diff = System.currentTimeMillis() - timestamp
+    if (diff < 0) return SimpleDateFormat("MMM dd", Locale.getDefault()).format(Date(timestamp))
+    val minutes = diff / 60_000
+    val hours = diff / 3_600_000
+    val days = diff / 86_400_000
+    return when {
+        minutes < 1 -> "now"
+        minutes < 60 -> "${minutes}m ago"
+        hours < 24 -> "${hours}h ago"
+        days <= 5 -> "${days}d ago"
+        else -> SimpleDateFormat("MMM dd", Locale.getDefault()).format(Date(timestamp))
+    }
+}

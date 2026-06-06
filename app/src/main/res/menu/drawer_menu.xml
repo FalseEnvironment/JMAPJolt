@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/nav_unified_inbox"
+        android:icon="@drawable/ic_lucide_inbox"
+        android:title="Unified Inbox" />
+    <item
+        android:id="@+id/nav_inbox"
+        android:icon="@drawable/ic_lucide_inbox"
+        android:title="@string/folder_inbox" />
+    <item
+        android:id="@+id/nav_favourite"
+        android:icon="@drawable/ic_lucide_star"
+        android:title="@string/folder_favourite" />
+    <item
+        android:id="@+id/nav_archive"
+        android:icon="@drawable/ic_lucide_archive"
+        android:title="@string/folder_archive" />
+    <item
+        android:id="@+id/nav_sent"
+        android:icon="@drawable/ic_lucide_send"
+        android:title="@string/folder_sent" />
+    <item
+        android:id="@+id/nav_drafts"
+        android:icon="@drawable/ic_lucide_file_text"
+        android:title="@string/folder_drafts" />
+    <item
+        android:id="@+id/nav_spam"
+        android:icon="@drawable/ic_lucide_ban"
+        android:title="@string/folder_spam" />
+    <item
+        android:id="@+id/nav_trash"
+        android:icon="@drawable/ic_lucide_trash"
+        android:title="@string/folder_trash" />
+    <item
+        android:id="@+id/nav_settings"
+        android:icon="@drawable/ic_lucide_settings"
+        android:title="@string/settings_title" />
+</menu>
