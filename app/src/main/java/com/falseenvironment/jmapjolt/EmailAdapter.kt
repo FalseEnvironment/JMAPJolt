@@ -3,6 +3,7 @@ package com.falseenvironment.jmapjolt
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.ColorDrawable
 import android.text.format.DateUtils
 import android.util.Log
 import android.view.Gravity
@@ -44,29 +45,40 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
             gravity = Gravity.TOP
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-            setPadding((8 * dp).toInt(), (10 * dp).toInt(), (8 * dp).toInt(), (10 * dp).toInt())
+            setPadding((12 * dp).toInt(), (10 * dp).toInt(), (12 * dp).toInt(), (10 * dp).toInt())
+            // Ripple feedback on tap (MD3 state layer)
+            background = android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(0x1AFFFFFF),
+                null,
+                android.graphics.drawable.ColorDrawable(android.graphics.Color.WHITE)
+            )
         }
 
-        // Account color strip (left edge, 4dp wide)
+        // Account color strip (left edge, 3dp wide, slightly rounded)
         val colorStrip = android.view.View(activity).apply {
             id = 20
-            layoutParams = LinearLayout.LayoutParams((4 * dp).toInt(), ViewGroup.LayoutParams.MATCH_PARENT)
-                .apply { marginEnd = (6 * dp).toInt() }
+            layoutParams = LinearLayout.LayoutParams((3 * dp).toInt(), ViewGroup.LayoutParams.MATCH_PARENT)
+                .apply { marginEnd = (8 * dp).toInt(); topMargin = (4 * dp).toInt(); bottomMargin = (4 * dp).toInt() }
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                cornerRadius = 999 * dp
+            }
             visibility = android.view.View.GONE
         }
         root.addView(colorStrip)
 
-        // Avatar circle
+        // Avatar circle — 44dp (meets 44pt touch target)
+        val avatarSize = (44 * dp).toInt()
         val avatarContainer = FrameLayout(activity).apply {
             id = 9
-            layoutParams = LinearLayout.LayoutParams((40 * dp).toInt(), (40 * dp).toInt())
-                .apply { topMargin = (2 * dp).toInt() }
+            layoutParams = LinearLayout.LayoutParams(avatarSize, avatarSize)
+                .apply { topMargin = (1 * dp).toInt() }
         }
         val avatar = TextView(activity).apply {
             id = 5
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
-            textSize = 16f
+            textSize = 17f
             setTypeface(null, Typeface.BOLD)
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
@@ -83,7 +95,7 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
         val textWrap = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-                .apply { setMargins((10 * dp).toInt(), 0, (4 * dp).toInt(), 0) }
+                .apply { setMargins((12 * dp).toInt(), 0, (4 * dp).toInt(), 0) }
         }
         val senderTv = TextView(activity).apply {
             id = 11
@@ -92,22 +104,26 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
             ellipsize = android.text.TextUtils.TruncateAt.END
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            letterSpacing = 0.01f
         }
         val subjectTv = TextView(activity).apply {
             id = 1
-            textSize = 15f
+            textSize = 14f
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                .apply { topMargin = (1 * dp).toInt() }
+            letterSpacing = 0.005f
         }
         val previewTv = TextView(activity).apply {
             id = 2
-            textSize = 13f
+            textSize = 12f
             maxLines = 2
             ellipsize = android.text.TextUtils.TruncateAt.END
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                .apply { topMargin = (1 * dp).toInt() }
         }
         textWrap.addView(senderTv)
         textWrap.addView(subjectTv)
@@ -126,6 +142,7 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
             maxLines = 1
             setSingleLine()
             gravity = Gravity.END
+            letterSpacing = 0.01f
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
                 .apply { topMargin = (4 * dp).toInt() }
@@ -133,9 +150,9 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
         val starBtn = ImageView(activity).apply {
             id = 7
             setImageResource(R.drawable.ic_lucide_star)
-            layoutParams = LinearLayout.LayoutParams(
-                (18 * dp).toInt(), (18 * dp).toInt()
-            ).apply { topMargin = (6 * dp).toInt() }
+            val starSize = (20 * dp).toInt()
+            layoutParams = LinearLayout.LayoutParams(starSize, starSize)
+                .apply { topMargin = (8 * dp).toInt() }
             scaleType = ImageView.ScaleType.FIT_CENTER
         }
         rightWrap.addView(dText)
@@ -155,6 +172,22 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
         val primaryColor = if (isLight) Color.BLACK else Color.WHITE
         val secondaryColor = if (isLight) "#757575".toColorInt() else "#9E9E9E".toColorInt()
         val mutedColor = if (isLight) "#BDBDBD".toColorInt() else "#616161".toColorInt()
+
+        // Staggered entrance: only animate for first 12 items on fresh loads
+        if (position < 12 && holder.itemView.alpha == 0f) {
+            val dp = holder.itemView.resources.displayMetrics.density
+            holder.itemView.alpha = 0f
+            holder.itemView.translationY = 16 * dp
+            holder.itemView.animate()
+                .alpha(1f).translationY(0f)
+                .setStartDelay((position * 35L).coerceAtMost(280L))
+                .setDuration(260)
+                .setInterpolator(android.view.animation.DecelerateInterpolator(2f))
+                .start()
+        } else {
+            holder.itemView.alpha = 1f
+            holder.itemView.translationY = 0f
+        }
 
         val senderName = if (activity.selectedFolder == R.id.nav_drafts) {
             "To: " + item.toEmail.ifBlank { "(no recipient)" }
@@ -203,6 +236,7 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
             else if (isLight) "#CCCCCC".toColorInt() else "#444444".toColorInt()
         )
         holder.starButton.setOnClickListener {
+            holder.starButton.animateTap()
             val newFav = !item.isFavorite
             item.isFavorite = newFav
             activity.baseEmails.find { it.id == item.id }?.isFavorite = newFav
@@ -278,23 +312,29 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
             val normalizedDomain = if (domain.isNotEmpty()) FaviconRepository.getRootDomain(domain.lowercase()) else ""
 
             if (loadFavicons && normalizedDomain.isNotEmpty()) {
+                // Offset from the theme background so dark favicons stay visible on dark themes
+                // (and light favicons on the light theme).
                 val neutralBg = when (activity.currentTheme) {
-                    "light" -> "#E0E0E0".toColorInt()
-                    "oled"  -> "#000000".toColorInt()
-                    else    -> "#1E1E1E".toColorInt()
+                    "light" -> "#E8E8E8".toColorInt()
+                    "oled"  -> "#212121".toColorInt()
+                    else    -> "#383838".toColorInt()
                 }
                 bg.setColor(neutralBg)
+                val favPad = (6 * holder.itemView.resources.displayMetrics.density).toInt()
+                holder.avatarImage.setPadding(favPad, favPad, favPad, favPad)
                 holder.avatar.text = letter
                 holder.avatarImage.visibility = android.view.View.VISIBLE
                 holder.avatarImage.setImageDrawable(null)
                 holder.avatarImage.tag = normalizedDomain
-                activity.lifecycleScope.launch {
+                // Cancel any in-flight job so stale crossfades don't flicker on rebind.
+                (holder.avatarImage.getTag(R.id.tag_favicon_job) as? kotlinx.coroutines.Job)?.cancel()
+                val faviconJob = activity.lifecycleScope.launch {
                     val bitmap = FaviconRepository.fetchFavicon(normalizedDomain)
                     if (holder.avatarImage.tag != normalizedDomain) return@launch
                     if (activity.selectedEmails.contains(item.id)) return@launch
                     if (bitmap != null) {
                         holder.avatarImage.load(bitmap) {
-                            crossfade(true)
+                            crossfade(false)
                             transformations(CircleCropTransformation())
                         }
                         holder.avatar.text = ""
@@ -305,6 +345,7 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
                         holder.avatarImage.visibility = android.view.View.GONE
                     }
                 }
+                holder.avatarImage.setTag(R.id.tag_favicon_job, faviconJob)
             } else {
                 bg.setColor(hashColor)
                 holder.avatar.text = letter

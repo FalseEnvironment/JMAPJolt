@@ -1,58 +1,77 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="actionModeBlue">#1976D2</color>
     <style name="AppTheme" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="windowActionModeOverlay">true</item>
         <item name="actionModeBackground">@color/actionModeBlue</item>
         <item name="actionBarTheme">@style/ThemeOverlay.AppCompat.Dark.ActionBar</item>
         <item name="actionBarSize">48dp</item>
+        <!-- MD3 shape tokens surfaced to MaterialComponents -->
+        <item name="shapeAppearanceSmallComponent">@style/ShapeSmall</item>
+        <item name="shapeAppearanceMediumComponent">@style/ShapeMedium</item>
+        <item name="shapeAppearanceLargeComponent">@style/ShapeLarge</item>
     </style>
+
+    <!-- MD3 shape appearances -->
+    <style name="ShapeSmall">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">@dimen/radius_sm</item>
+    </style>
+    <style name="ShapeMedium">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">@dimen/radius_md</item>
+    </style>
+    <style name="ShapeLarge">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">@dimen/radius_xl</item>
+    </style>
+
+    <!-- Navigation drawer items -->
     <style name="NavItemActive">
         <item name="android:textStyle">bold</item>
         <item name="android:textSize">14sp</item>
+        <item name="android:letterSpacing">0.01</item>
     </style>
     <style name="NavItemInactive">
         <item name="android:textStyle">normal</item>
         <item name="android:textSize">14sp</item>
+        <item name="android:letterSpacing">0.01</item>
     </style>
 
     <!-- Onboarding feature rows -->
     <style name="FeatureRow">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_marginBottom">20dp</item>
+        <item name="android:layout_marginBottom">@dimen/space_lg</item>
         <item name="android:orientation">horizontal</item>
         <item name="android:gravity">center_vertical</item>
     </style>
-
     <style name="FeatureIcon">
-        <item name="android:layout_width">30dp</item>
-        <item name="android:layout_height">30dp</item>
+        <item name="android:layout_width">32dp</item>
+        <item name="android:layout_height">32dp</item>
         <item name="android:scaleType">fitCenter</item>
         <item name="android:tint">#FFFFFF</item>
     </style>
-
     <style name="FeatureText">
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_weight">1</item>
-        <item name="android:layout_marginStart">16dp</item>
+        <item name="android:layout_marginStart">@dimen/space_md</item>
         <item name="android:orientation">vertical</item>
     </style>
-
     <style name="FeatureTitle">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:textColor">#FFFFFF</item>
         <item name="android:textSize">16sp</item>
         <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.005</item>
     </style>
-
     <style name="FeatureDesc">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_marginTop">2dp</item>
-        <item name="android:textColor">#BDBDBD</item>
+        <item name="android:layout_marginTop">@dimen/space_xs</item>
+        <item name="android:textColor">#B0AABB</item>
         <item name="android:textSize">13sp</item>
+        <item name="android:lineSpacingMultiplier">1.4</item>
     </style>
 </resources>

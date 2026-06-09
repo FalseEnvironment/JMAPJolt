@@ -48,6 +48,10 @@ class UnifiedPushService : MessagingReceiver() {
                 Log.w(TAG, "No account configured — relying on WorkManager fallback only")
                 return@launch
             }
+            if (!endpoint.startsWith("https://")) {
+                Log.w(TAG, "Rejecting non-HTTPS push endpoint: $endpoint")
+                return@launch
+            }
             val deviceClientId = getOrCreateDeviceClientId(context)
             val ok = try {
                 JMapClient(context).registerPushSubscription(context, account, endpoint, deviceClientId)

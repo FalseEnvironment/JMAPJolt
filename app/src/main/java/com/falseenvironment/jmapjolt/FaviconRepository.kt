@@ -31,7 +31,7 @@ object FaviconRepository {
     }
 
     private fun domainToFilename(domain: String) =
-        domain.replace(".", "_").replace("/", "_") + ".png"
+        domain.replace(Regex("[^a-zA-Z0-9._-]"), "_") + ".png"
 
     private fun readFromDisk(domain: String): CacheEntry? {
         val dir = diskCacheDir ?: return null
@@ -478,8 +478,10 @@ object FaviconRepository {
     }
 
     private fun fetchBytes(urlString: String): ByteArray? {
+        if (!urlString.startsWith("https://")) return null
         val conn = URL(urlString).openConnection() as HttpURLConnection
         return try {
+            conn.instanceFollowRedirects = false
             conn.connectTimeout = 5000
             conn.readTimeout = 5000
             conn.setRequestProperty("User-Agent", "Mozilla/5.0")

@@ -158,12 +158,14 @@ class MainActivity : AppCompatActivity() {
     internal lateinit var loginButton: Button
     internal lateinit var mailboxContainer: FrameLayout
     internal lateinit var emailsRecyclerView: RecyclerView
-    internal lateinit var emailDetailContainer: FrameLayout
+    internal lateinit var emailDetailContainer: EmailDetailContainer
     internal lateinit var detailFrom: TextView
     internal lateinit var detailHeaderRow: LinearLayout
     internal lateinit var detailBody: LinearLayout
     private var detailBarHidden = false
     private var detailBarHeight = 0
+    private var detailBarLastToggleMs = 0L
+    private val prefetchingIds = mutableSetOf<String>()
     private lateinit var detailWebView: android.webkit.WebView
     private lateinit var mailSwipeRefresh: SwipeRefreshLayout
     internal lateinit var unifiedPushSwitch: SwitchCompat
@@ -657,9 +659,10 @@ class MainActivity : AppCompatActivity() {
         loginContainer.visibility = View.GONE
         loginBackBtn.visibility = View.GONE
         mailboxContainer.visibility = View.VISIBLE
+        mailboxContainer.animateScreenInBack()
         emailDetailContainer.visibility = View.GONE
         mailSwipeRefresh.visibility = View.VISIBLE
-        fabCompose.visibility = View.VISIBLE
+        fabCompose.animateFabIn()
         settingsContainer.visibility = View.GONE
         customTopBar.visibility = View.VISIBLE
         isShowingEmailDetail = false
@@ -808,9 +811,11 @@ class MainActivity : AppCompatActivity() {
         // FrameLayout so the action row is a top overlay over the content: hiding it never
         // reflows the WebView (no flicker) and leaves the email background (no grey gap).
         emailDetailContainer =
-                FrameLayout(this).apply {
+                EmailDetailContainer(this).apply {
                     id = View.generateViewId()
                     visibility = View.GONE
+                    topZoneHeight = barHeight
+                    onHorizontalSwipe = { forward -> navigateDetailEmail(forward) }
                     layoutParams =
                             FrameLayout.LayoutParams(
                                     ViewGroup.LayoutParams.MATCH_PARENT,
@@ -827,6 +832,7 @@ class MainActivity : AppCompatActivity() {
                     )
                     setPadding(0, barHeight, 0, 0)
                 }
+        detailBarHeight = barHeight
         // Pinned action row: sender + reply / forward / archive / trash / move / favorite.
         val headerWrap =
                 LinearLayout(this).apply {
@@ -885,6 +891,21 @@ class MainActivity : AppCompatActivity() {
                             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
                     setBackgroundColor(Color.WHITE)
                     overScrollMode = View.OVER_SCROLL_NEVER
+                    settings.javaScriptEnabled = false
+                    settings.allowFileAccess = false
+                    settings.allowContentAccess = false
+                    @Suppress("DEPRECATION")
+                    settings.allowUniversalAccessFromFileURLs = false
+                    @Suppress("DEPRECATION")
+                    settings.allowFileAccessFromFileURLs = false
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                        settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                    }
+                    settings.useWideViewPort = true
+                    settings.loadWithOverviewMode = true
+                    settings.setSupportZoom(true)
+                    settings.builtInZoomControls = true
+                    settings.displayZoomControls = false
                 }
         detailWebView.webViewClient = object : android.webkit.WebViewClient() {
             override fun shouldOverrideUrlLoading(
@@ -923,6 +944,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun setDetailBarHidden(hidden: Boolean) {
         if (detailBarHidden == hidden) return
+        val now = System.currentTimeMillis()
+        if (now - detailBarLastToggleMs < 200) return
+        detailBarLastToggleMs = now
         detailBarHidden = hidden
         detailHeaderRow.animate().cancel()
         if (hidden) {
@@ -931,26 +955,101 @@ class MainActivity : AppCompatActivity() {
             detailHeaderRow.animate().translationY(-detailBarHeight.toFloat()).alpha(0f).setDuration(160).withEndAction {
                 detailHeaderRow.visibility = View.GONE
             }.start()
+            android.animation.ValueAnimator.ofInt(detailBarHeight, 0).apply {
+                duration = 160
+                addUpdateListener { detailBody.setPadding(0, it.animatedValue as Int, 0, 0) }
+                start()
+            }
         } else {
             detailHeaderRow.visibility = View.VISIBLE
             detailHeaderRow.translationY = -detailBarHeight.toFloat()
             detailHeaderRow.alpha = 0f
             detailHeaderRow.animate().translationY(0f).alpha(1f).setDuration(160).start()
+            android.animation.ValueAnimator.ofInt(0, detailBarHeight).apply {
+                duration = 160
+                addUpdateListener { detailBody.setPadding(0, it.animatedValue as Int, 0, 0) }
+                start()
+            }
         }
+    }
+
+    private fun navigateDetailEmail(forward: Boolean) {
+        val current = currentDetailEmail ?: return
+        val idx = emails.indexOfFirst { it.id == current.id }
+        if (idx < 0) return
+        val next = (if (forward) emails.getOrNull(idx + 1) else emails.getOrNull(idx - 1)) ?: return
+        val w = detailBody.width.toFloat().takeIf { it > 0 } ?: resources.displayMetrics.widthPixels.toFloat()
+        val exitX = if (forward) -w * 0.35f else w * 0.35f
+        val enterX = -exitX
+        detailBody.animate()
+            .translationX(exitX)
+            .alpha(0f)
+            .setDuration(180)
+            .setInterpolator(android.view.animation.AccelerateInterpolator(1.5f))
+            .withEndAction {
+                detailBody.translationX = enterX
+                detailBody.alpha = 0f
+                showEmailDetail(next, fromSwipe = true)
+                detailBody.animate()
+                    .translationX(0f)
+                    .alpha(1f)
+                    .setDuration(280)
+                    .setInterpolator(android.view.animation.DecelerateInterpolator(2f))
+                    .start()
+            }
+            .start()
     }
 
     internal fun sanitizeEmailHtml(html: String): String {
         return html
-            .replace(Regex("<script[\\s>][\\s\\S]*?</script>", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("<script[\\s>][\\s\\S]*?</script\\s*>", RegexOption.IGNORE_CASE), "")
             .replace(Regex("<script\\s*/?>", RegexOption.IGNORE_CASE), "")
+            // Embedding/navigation vectors: strip the tags, keep inner text content.
+            .replace(Regex("</?(iframe|object|embed|frame|frameset|base|applet|form)\\b[^>]*>", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("<meta\\b[^>]*http-equiv\\s*=\\s*[\"']?refresh[^>]*>", RegexOption.IGNORE_CASE), "")
             .replace(Regex("""(\s)on[a-zA-Z]+\s*=\s*"[^"]*""""), "$1")
             .replace(Regex("""(\s)on[a-zA-Z]+\s*=\s*'[^']*'"""), "$1")
             .replace(Regex("""(\s)on[a-zA-Z]+\s*=[^\s>]+"""), "$1")
-            .replace(Regex("""href\s*=\s*["']?\s*javascript:[^"'\s>]*""", RegexOption.IGNORE_CASE), "href=\"#\"")
+            .replace(Regex("""(\s)srcdoc\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)""", RegexOption.IGNORE_CASE), "$1")
+            // Block script-bearing URI schemes; data: stays allowed in src so inline images keep working.
+            .replace(Regex("""(href|action|formaction)\s*=\s*["']?\s*(javascript|data|vbscript):[^"'\s>]*""", RegexOption.IGNORE_CASE), "$1=\"#\"")
+            .replace(Regex("""(src|background)\s*=\s*["']?\s*(javascript|vbscript):[^"'\s>]*""", RegexOption.IGNORE_CASE), "$1=\"\"")
+            .replace(Regex("""expression\s*\(""", RegexOption.IGNORE_CASE), "no-expression(")
     }
 
     /** Heuristic: true when the body carries real HTML markup (full document or fragment). */
     private fun looksLikeHtml(body: String): Boolean = HTML_MARKUP_REGEX.containsMatchIn(body)
+
+    private fun buildSkeletonHtml(): String {
+        val isDark = currentTheme == "gray" || currentTheme == "oled"
+        val bg = if (currentTheme == "oled") "#000000" else if (isDark) "#1a1a1a" else "#f5f5f5"
+        val base = if (currentTheme == "oled") "#111111" else if (isDark) "#2a2a2a" else "#e0e0e0"
+        val shine = if (currentTheme == "oled") "#1e1e1e" else if (isDark) "#3a3a3a" else "#f0f0f0"
+        return """<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:$bg;padding:20px}
+.s{background:linear-gradient(90deg,$base 25%,$shine 50%,$base 75%);background-size:300% 100%;animation:sh 1.4s infinite;border-radius:6px;height:13px;margin-bottom:14px}
+.w100{width:100%}.w85{width:85%}.w70{width:70%}.w55{width:55%}.w40{width:40%}.w30{width:30%}
+.gap{height:24px}
+@keyframes sh{0%{background-position:100% 0}100%{background-position:-100% 0}}
+</style></head><body>
+<div class="s w85"></div>
+<div class="s w70"></div>
+<div class="s w100"></div>
+<div class="gap"></div>
+<div class="s w100"></div>
+<div class="s w85"></div>
+<div class="s w55"></div>
+<div class="gap"></div>
+<div class="s w100"></div>
+<div class="s w70"></div>
+<div class="s w100"></div>
+<div class="s w40"></div>
+<div class="gap"></div>
+<div class="s w85"></div>
+<div class="s w30"></div>
+</body></html>"""
+    }
 
     internal fun buildHtmlContent(rawBody: String, subject: String = ""): String {
         val isDark = currentTheme == "gray" || currentTheme == "oled"
@@ -1107,11 +1206,11 @@ class MainActivity : AppCompatActivity() {
     internal fun closeEmailDetail() {
         // Hard-clear WebView immediately so next open starts blank
         detailWebView.stopLoading()
-        detailWebView.loadDataWithBaseURL(null, "", "text/html", "UTF-8", null)
+        detailWebView.loadDataWithBaseURL("https://jmapjolt.invalid/email/","", "text/html", "UTF-8", null)
         currentDetailEmail = null
-        emailDetailContainer.visibility = View.GONE
+        emailDetailContainer.animateScreenOutBack()
         mailSwipeRefresh.visibility = View.VISIBLE
-        fabCompose.visibility = View.VISIBLE
+        fabCompose.animateFabIn()
         isShowingEmailDetail = false
         setDrawerIndicator(true)
         supportActionBar?.setDisplayHomeAsUpEnabled(false)
@@ -1121,10 +1220,13 @@ class MainActivity : AppCompatActivity() {
         updateCustomTopBar(getCurrentMailboxTitle(), inMailbox = true)
     }
 
-    internal fun showEmailDetail(email: DisplayEmail) {
-        mailSwipeRefresh.visibility = View.GONE
-        fabCompose.visibility = View.GONE
-        emailDetailContainer.visibility = View.VISIBLE
+    internal fun showEmailDetail(email: DisplayEmail, fromSwipe: Boolean = false) {
+        if (!fromSwipe) {
+            mailSwipeRefresh.visibility = View.GONE
+            fabCompose.animateFabOut()
+            emailDetailContainer.visibility = View.VISIBLE
+            emailDetailContainer.animateScreenIn()
+        }
         isShowingEmailDetail = true
         currentDetailEmail = email
         updateDetailStarIcon(email.isFavorite)
@@ -1134,6 +1236,7 @@ class MainActivity : AppCompatActivity() {
         detailHeaderRow.visibility = View.VISIBLE
         detailHeaderRow.translationY = 0f
         detailHeaderRow.alpha = 1f
+        detailBody.setPadding(0, detailBarHeight, 0, 0)
         setDrawerIndicator(false)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED)
@@ -1157,13 +1260,13 @@ class MainActivity : AppCompatActivity() {
                detailTrashButton, detailMoveButton).forEach { it.imageTintList = actionTint }
         updateDetailStarIcon(email.isFavorite)
 
-        // Remove previous attachment row if present (index 1 when no attachments → WebView)
-        if (emailDetailContainer.childCount > 2) emailDetailContainer.removeViewAt(1)
+        // Remove previous attachment footer if present (detailBody: index 0=WebView, 1=attRow)
+        if (detailBody.childCount > 1) detailBody.removeViewAt(1)
 
         val account = resolveAccountFor(email)
         if (email.attachments.isNotEmpty() && account != null) {
             val attRow = buildEmailAttachmentRow(email.attachments, account)
-            emailDetailContainer.addView(attRow, 1)
+            detailBody.addView(attRow)
         }
 
         val wvBgHex = when (currentTheme) {
@@ -1172,26 +1275,13 @@ class MainActivity : AppCompatActivity() {
             else -> "#1a1a1a"
         }
         detailWebView.setBackgroundColor(android.graphics.Color.parseColor(wvBgHex))
-        // Immediately clear old content so the next open starts blank
-        detailWebView.loadUrl("about:blank")
-        // JavaScript stays disabled: email HTML is untrusted sender input and the
-        // regex sanitizer cannot be relied on to block script injection.
-        detailWebView.settings.javaScriptEnabled = false
-        detailWebView.settings.allowFileAccess = false
-        detailWebView.settings.allowContentAccess = false
-        @Suppress("DEPRECATION")
-        detailWebView.settings.allowUniversalAccessFromFileURLs = false
-        @Suppress("DEPRECATION")
-        detailWebView.settings.allowFileAccessFromFileURLs = false
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            detailWebView.settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
+        // Show cached body immediately (zero latency) or a shimmer skeleton while fetching.
+        val bodyAvailableNow = email.fullBody.isNotBlank()
+        if (bodyAvailableNow) {
+            detailWebView.loadDataWithBaseURL("https://jmapjolt.invalid/email/",buildHtmlContent(email.fullBody, email.subject), "text/html", "UTF-8", null)
+        } else {
+            detailWebView.loadDataWithBaseURL("https://jmapjolt.invalid/email/",buildSkeletonHtml(), "text/html", "UTF-8", null)
         }
-        detailWebView.settings.useWideViewPort = true
-        detailWebView.settings.loadWithOverviewMode = true
-        detailWebView.settings.setSupportZoom(true)
-        detailWebView.settings.builtInZoomControls = true
-        detailWebView.settings.displayZoomControls = false
-
         // Auto-load images based on preference
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         val loadImages = prefs.getBoolean("load_images", false)
@@ -1217,17 +1307,20 @@ class MainActivity : AppCompatActivity() {
                             if (bi >= 0) baseEmails[bi] = updated
                             saveEmailCache()
                         }
-                        // Refresh attachment row
-                        if (emailDetailContainer.childCount > 2) emailDetailContainer.removeViewAt(1)
+                        // Refresh attachment footer
+                        if (detailBody.childCount > 1) detailBody.removeViewAt(1)
                         if (updated.attachments.isNotEmpty()) {
                             val attRow = buildEmailAttachmentRow(updated.attachments, account)
-                            emailDetailContainer.addView(attRow, 1)
+                            detailBody.addView(attRow)
                         }
                     }
                 }
                 currentDetailEmail = displayEmail
-                val htmlContent = buildHtmlContent(displayEmail.fullBody, displayEmail.subject)
-                detailWebView.loadDataWithBaseURL(null, htmlContent, "text/html", "UTF-8", null)
+                // Only render if body was skeleton (not already rendered synchronously above).
+                if (!bodyAvailableNow) {
+                    val htmlContent = buildHtmlContent(displayEmail.fullBody, displayEmail.subject)
+                    detailWebView.loadDataWithBaseURL("https://jmapjolt.invalid/email/",htmlContent, "text/html", "UTF-8", null)
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load email HTML", e)
             }
@@ -1243,7 +1336,7 @@ class MainActivity : AppCompatActivity() {
                 email.seen = true
                 emailAdapter.notifyDataSetChanged()
                 saveEmailCache()
-                
+
                 // 2. Asynchronous JMAP server update
                 lifecycleScope.launch {
                     try {
@@ -1254,6 +1347,37 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+
+        // Prefetch adjacent emails so swipe navigation loads instantly.
+        val curIdx = emails.indexOfFirst { it.id == email.id }
+        if (curIdx >= 0) {
+            emails.getOrNull(curIdx - 1)?.let { prefetchEmailBody(it) }
+            emails.getOrNull(curIdx + 1)?.let { prefetchEmailBody(it) }
+        }
+    }
+
+    private fun prefetchEmailBody(email: DisplayEmail) {
+        if (email.fullBody.isNotBlank()) return
+        if (!prefetchingIds.add(email.id)) return
+        val account = resolveAccountFor(email) ?: run { prefetchingIds.remove(email.id); return }
+        lifecycleScope.launch {
+            try {
+                val fresh = jmapClient.fetchEmailsById(account, listOf(email.id)).firstOrNull()
+                if (fresh != null && fresh.fullBody.isNotBlank()) {
+                    val updated = email.copy(fullBody = fresh.fullBody, attachments = fresh.attachments)
+                    val idx = emails.indexOfFirst { it.id == email.id }
+                    if (idx >= 0) {
+                        emails[idx] = updated
+                        val bi = baseEmails.indexOfFirst { it.id == email.id }
+                        if (bi >= 0) baseEmails[bi] = updated
+                    }
+                }
+            } catch (_: Exception) {
+                // Silent failure — will retry on open
+            } finally {
+                prefetchingIds.remove(email.id)
+            }
+        }
     }
 
     private fun showSettingsScreen() {
@@ -1261,7 +1385,8 @@ class MainActivity : AppCompatActivity() {
         loginContainer.visibility = View.GONE
         mailboxContainer.visibility = View.GONE
         settingsContainer.visibility = View.VISIBLE
-        fabCompose.visibility = View.GONE
+        settingsContainer.animateScreenIn()
+        fabCompose.animateFabOut()
         customTopBar.visibility = View.VISIBLE
         currentSettingsSection = SettingsSection.ROOT
         invalidateOptionsMenu()
@@ -2106,7 +2231,8 @@ class MainActivity : AppCompatActivity() {
             selectedEmails.add(id)
         }
         updateSelectionBar()
-        emailAdapter.notifyDataSetChanged()
+        val pos = emails.indexOfFirst { it.id == id }
+        if (pos >= 0) emailAdapter.notifyItemChanged(pos) else emailAdapter.notifyDataSetChanged()
     }
 
     private fun updateSelectionBar() {
@@ -2193,9 +2319,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun clearSelection() {
+        val positions = selectedEmails.mapNotNull { id ->
+            emails.indexOfFirst { it.id == id }.takeIf { it >= 0 }
+        }
         selectedEmails.clear()
         updateSelectionBar()
-        emailAdapter.notifyDataSetChanged()
+        positions.forEach { emailAdapter.notifyItemChanged(it) }
     }
 
     /**
@@ -3542,7 +3671,13 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener {
                 dialog.dismiss()
                 try {
-                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                    val uri = Uri.parse(url)
+                    val scheme = uri.scheme?.lowercase()
+                    if (scheme == "https" || scheme == "http" || scheme == "mailto") {
+                        startActivity(Intent(Intent.ACTION_VIEW, uri))
+                    } else {
+                        android.widget.Toast.makeText(this@MainActivity, "Cannot open link", android.widget.Toast.LENGTH_SHORT).show()
+                    }
                 } catch (_: Exception) {
                     android.widget.Toast.makeText(this@MainActivity, "Cannot open link", android.widget.Toast.LENGTH_SHORT).show()
                 }

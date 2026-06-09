@@ -258,11 +258,11 @@ internal fun MainActivity.buildEmailAttachmentRow(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
         )
     }
-    wrapper.addView(scroll)
     wrapper.addView(android.view.View(this).apply {
         layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1)
         setBackgroundColor(dividerColor)
     })
+    wrapper.addView(scroll)
     return wrapper
 }
 
@@ -374,13 +374,14 @@ private fun MainActivity.openAttachment(
             Snackbar.make(drawerLayout, "Download failed", Snackbar.LENGTH_SHORT).show()
             return@launch
         }
+        val safeName = sanitizeAttachmentName(att.name)
         withContext(Dispatchers.IO) {
             val dir = File(cacheDir, "attachments").also { it.mkdirs() }
-            val file = File(dir, att.name)
+            val file = File(dir, safeName)
             file.writeBytes(bytes)
         }
         val dir = File(cacheDir, "attachments")
-        val file = File(dir, att.name)
+        val file = File(dir, safeName)
         val uri = FileProvider.getUriForFile(this@openAttachment,
             "${packageName}.fileprovider", file)
         val intent = Intent(Intent.ACTION_VIEW).apply {
@@ -406,11 +407,12 @@ private fun MainActivity.saveAttachmentToDownloads(
             Snackbar.make(drawerLayout, "Download failed", Snackbar.LENGTH_SHORT).show()
             return@launch
         }
+        val safeName = sanitizeAttachmentName(att.name)
         val saved = withContext(Dispatchers.IO) {
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     val values = ContentValues().apply {
-                        put(MediaStore.Downloads.DISPLAY_NAME, att.name)
+                        put(MediaStore.Downloads.DISPLAY_NAME, safeName)
                         put(MediaStore.Downloads.MIME_TYPE, att.mimeType)
                         put(MediaStore.Downloads.IS_PENDING, 1)
                     }
@@ -424,7 +426,7 @@ private fun MainActivity.saveAttachmentToDownloads(
                     @Suppress("DEPRECATION")
                     val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
                     dir.mkdirs()
-                    File(dir, att.name).writeBytes(bytes)
+                    File(dir, safeName).writeBytes(bytes)
                 }
                 true
             } catch (e: Exception) {
@@ -438,6 +440,18 @@ private fun MainActivity.saveAttachmentToDownloads(
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * Attachment names come from the untrusted email part name; strip path components
+ * so a name like "../../shared_prefs/x.xml" cannot escape the target directory.
+ */
+internal fun sanitizeAttachmentName(name: String): String =
+    name.substringAfterLast('/')
+        .substringAfterLast('\\')
+        .replace(Regex("[^A-Za-z0-9 ()._-]"), "_")
+        .trim()
+        .removePrefix("..")
+        .ifBlank { "attachment" }
 
 internal fun attachmentIcon(mimeType: String): Int = when {
     mimeType.startsWith("image/") -> R.drawable.ic_lucide_image

@@ -95,11 +95,16 @@ class JmapEventSourceService : Service() {
                 val body = conn.inputStream.bufferedReader().readText()
                 val template = JSONObject(body).optString("eventSourceUrl").takeIf { it.isNotBlank() }
                     ?: return@withContext null
-                template
+                val resolved = template
                     .replace("{types}", "Email")
                     .replace("{+types}", "Email")
                     .replace("{closeafter}", "no")
                     .replace("{ping}", PING_SECONDS.toString())
+                if (!JMapClient.isTrustedServerUrl(resolved, account.sessionUrl)) {
+                    Log.w(TAG, "Refusing eventSourceUrl outside session origin")
+                    return@withContext null
+                }
+                resolved
             } catch (e: Throwable) {
                 Log.e(TAG, "Failed to fetch JMAP session for ${account.email}", e)
                 null

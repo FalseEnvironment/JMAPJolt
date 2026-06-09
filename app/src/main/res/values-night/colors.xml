@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- MD3-inspired surface tokens (dark mode) -->
+    <color name="surface">#121212</color>
+    <color name="surfaceVariant">#1C1B1F</color>
+    <color name="surfaceContainer">#1E1E1E</color>
+    <color name="onSurface">#E6E1E5</color>
+    <color name="onSurfaceVariant">#938F99</color>
+    <color name="outline">#938F99</color>
+    <color name="outlineVariant">#49454F</color>
+
+    <!-- Ripple / state layer -->
+    <color name="rippleDark">#1AFFFFFF</color>
+    <color name="rippleLight">#1AFFFFFF</color>
+    <color name="stateLayerSelected">#28FFFFFF</color>
+</resources>

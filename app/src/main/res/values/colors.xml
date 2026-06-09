@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- MD3-inspired surface tokens (light mode) -->
+    <color name="surface">#FFFBFE</color>
+    <color name="surfaceVariant">#F4EFF4</color>
+    <color name="surfaceContainer">#F3EDF7</color>
+    <color name="onSurface">#1C1B1F</color>
+    <color name="onSurfaceVariant">#49454F</color>
+    <color name="outline">#79747E</color>
+    <color name="outlineVariant">#CAC4D0</color>
+
+    <!-- Action mode bar tint (overridden by accent at runtime) -->
+    <color name="actionModeBlue">#1976D2</color>
+
+    <!-- Ripple / state layer -->
+    <color name="rippleDark">#1A000000</color>
+    <color name="rippleLight">#1AFFFFFF</color>
+    <color name="stateLayerSelected">#14000000</color>
+</resources>

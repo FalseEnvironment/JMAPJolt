@@ -542,10 +542,11 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
         val input = rawInput.trim().removeSuffix("/")
         if (input.isBlank()) return emptyList()
 
-        val withScheme = if (input.startsWith("http://") || input.startsWith("https://")) {
-            input
-        } else {
-            "https://$input"
+        // Credentials travel as Basic auth: never allow cleartext, upgrade http:// input.
+        val withScheme = when {
+            input.startsWith("https://", ignoreCase = true) -> input
+            input.startsWith("http://", ignoreCase = true) -> "https://" + input.substringAfter("://")
+            else -> "https://$input"
         }
 
         val base = withScheme.removeSuffix("/jmap").removeSuffix("/jmap/session").removeSuffix("/")
@@ -564,8 +565,8 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
     ): String? {
         return try {
             val uploadUrl = uploadUrlTemplate.replace("{accountId}", connectedAccount.accountId)
-            if (!uploadUrl.startsWith("https://", ignoreCase = true)) {
-                Log.w(TAG, "uploadBlob: refusing non-HTTPS upload URL")
+            if (!isTrustedServerUrl(uploadUrl, connectedAccount.sessionUrl)) {
+                Log.w(TAG, "uploadBlob: refusing upload URL outside session origin")
                 return null
             }
             val http = OkHttpClient.Builder().callTimeout(30, TimeUnit.SECONDS).build()
@@ -861,8 +862,8 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
                     ?: return@withContext null
                 val downloadUrl = session.getDownloadUrl(accountId, blobId, filename, mimeType)
                     ?: return@withContext null
-                if (!downloadUrl.toString().startsWith("https://", ignoreCase = true)) {
-                    Log.w(TAG, "downloadBlob: refusing non-HTTPS download URL")
+                if (!isTrustedServerUrl(downloadUrl.toString(), connectedAccount.sessionUrl)) {
+                    Log.w(TAG, "downloadBlob: refusing download URL outside session origin")
                     return@withContext null
                 }
                 val http = OkHttpClient.Builder().callTimeout(60, TimeUnit.SECONDS).build()
@@ -884,5 +885,15 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
 
     companion object {
         private const val TAG = "JMapClient"
+
+        /**
+         * Server-provided URLs (upload/download/eventSource templates) receive Basic auth
+         * credentials, so they must be HTTPS and on the same host as the session URL.
+         */
+        internal fun isTrustedServerUrl(url: String, sessionUrl: String): Boolean {
+            val u = url.toHttpUrlOrNull() ?: return false
+            val s = sessionUrl.toHttpUrlOrNull() ?: return false
+            return u.scheme == "https" && u.host.equals(s.host, ignoreCase = true)
+        }
     }
 }

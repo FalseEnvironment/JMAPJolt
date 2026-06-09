@@ -37,9 +37,9 @@ internal fun MainActivity.saveThemePreference() {
 internal fun MainActivity.applyTheme() {
     val themeColors =
             when (currentTheme) {
-                "light" -> arrayOf("#FFFFFF", "#F5F5F5", "#212121", "#757575")
-                "oled" -> arrayOf("#000000", "#000000", "#FFFFFF", "#BDBDBD")
-                else -> arrayOf("#1F1F1F", "#2A2A2A", "#FFFFFF", "#BDBDBD")
+                "light" -> arrayOf("#FFFBFE", "#FFFFFF", "#1C1B1F", "#49454F")
+                "oled"  -> arrayOf("#000000", "#000000", "#FFFFFF", "#BDBDBD")
+                else    -> arrayOf("#1F1F1F", "#2A2A2A", "#FFFFFF", "#BDBDBD")
             }
     val bgColor = themeColors[0]
     val toolbarColor = themeColors[1]
@@ -142,18 +142,23 @@ internal fun MainActivity.styleLoginInputs() {
     }
 }
 
-/** Rounded accent-colored button used for primary actions (login, grant, settings). */
+/** Pill-shaped accent button for primary actions (MD3 filled button shape). */
 internal fun MainActivity.styleAccentButton(button: Button) {
     val d = resources.displayMetrics.density
     button.background = GradientDrawable().apply {
         shape = GradientDrawable.RECTANGLE
-        cornerRadius = 14 * d
+        cornerRadius = 999 * d
         setColor(currentAccentColor.toColorInt())
     }
     button.setTextColor(getOnAccentColor())
     button.isAllCaps = false
     button.stateListAnimator = null
-    button.alpha = if (button.isEnabled) 1f else 0.5f
+    button.alpha = if (button.isEnabled) 1f else 0.4f
+    button.setPadding(
+        (24 * d).toInt(), (14 * d).toInt(),
+        (24 * d).toInt(), (14 * d).toInt()
+    )
+    button.letterSpacing = 0.01f
 }
 
 internal fun MainActivity.applyAccentColor() {
@@ -483,7 +488,107 @@ internal fun MainActivity.darkenColor(color: Int, factor: Float = 0.72f): Int = 
 )
 
 internal fun MainActivity.getDialogBackgroundColor(): Int = when (currentTheme) {
-    "light" -> "#EEEEEE".toColorInt()
-    "oled"  -> "#121212".toColorInt()
+    "light" -> "#F4EFF4".toColorInt()
+    "oled"  -> "#0D0D0D".toColorInt()
     else    -> "#252525".toColorInt()
+}
+
+// ---------------------------------------------------------------------------
+// Screen transition helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Animate a container into view (forward navigation: enter from right).
+ * Call AFTER setting visibility = VISIBLE.
+ */
+internal fun android.view.View.animateScreenIn() {
+    alpha = 0f
+    translationX = width * 0.06f
+    animate()
+        .alpha(1f)
+        .translationX(0f)
+        .setDuration(300)
+        .setInterpolator(android.view.animation.DecelerateInterpolator(2f))
+        .start()
+}
+
+/**
+ * Animate a container out of view (forward navigation: exit to left), then hide it.
+ */
+internal fun android.view.View.animateScreenOut(onEnd: (() -> Unit)? = null) {
+    animate()
+        .alpha(0f)
+        .setDuration(160)
+        .setInterpolator(android.view.animation.AccelerateInterpolator(1.5f))
+        .withEndAction {
+            visibility = android.view.View.GONE
+            alpha = 1f
+            onEnd?.invoke()
+        }
+        .start()
+}
+
+/**
+ * Animate a container back into view (back navigation: fade in).
+ * Call AFTER setting visibility = VISIBLE.
+ */
+internal fun android.view.View.animateScreenInBack() {
+    alpha = 0f
+    translationX = 0f
+    animate()
+        .alpha(1f)
+        .setDuration(250)
+        .setInterpolator(android.view.animation.DecelerateInterpolator(2f))
+        .start()
+}
+
+/**
+ * Animate the detail container out (back nav: slide right), then hide it.
+ */
+internal fun android.view.View.animateScreenOutBack(onEnd: (() -> Unit)? = null) {
+    animate()
+        .alpha(0f)
+        .translationX(width * 0.06f)
+        .setDuration(200)
+        .setInterpolator(android.view.animation.AccelerateInterpolator(1.5f))
+        .withEndAction {
+            visibility = android.view.View.GONE
+            alpha = 1f
+            translationX = 0f
+            onEnd?.invoke()
+        }
+        .start()
+}
+
+/** Scale-pulse feedback for icon buttons (star, etc.). */
+internal fun android.view.View.animateTap() {
+    animate().scaleX(0.75f).scaleY(0.75f).setDuration(80)
+        .withEndAction {
+            animate().scaleX(1f).scaleY(1f)
+                .setDuration(160)
+                .setInterpolator(android.view.animation.OvershootInterpolator(2f))
+                .start()
+        }.start()
+}
+
+/** Show FAB with scale-in animation. */
+internal fun android.view.View.animateFabIn() {
+    if (visibility == android.view.View.VISIBLE) return
+    scaleX = 0f; scaleY = 0f; alpha = 0f
+    visibility = android.view.View.VISIBLE
+    animate().scaleX(1f).scaleY(1f).alpha(1f)
+        .setStartDelay(120)
+        .setDuration(250)
+        .setInterpolator(android.view.animation.OvershootInterpolator(1.5f))
+        .start()
+}
+
+/** Hide FAB with scale-out animation. */
+internal fun android.view.View.animateFabOut() {
+    if (visibility != android.view.View.VISIBLE) return
+    animate().scaleX(0f).scaleY(0f).alpha(0f)
+        .setDuration(150)
+        .setInterpolator(android.view.animation.AccelerateInterpolator(1.5f))
+        .withEndAction { visibility = android.view.View.GONE; scaleX = 1f; scaleY = 1f; alpha = 1f }
+        .start()
 }
