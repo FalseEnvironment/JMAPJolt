@@ -27,6 +27,7 @@ internal fun MainActivity.showOnboarding(page: Int = 0) {
     emailDetailContainer.visibility = View.GONE
     fabCompose.visibility = View.GONE
     customTopBar.visibility = View.GONE
+    status.visibility = View.GONE
     drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED)
     if (page != onboardingPager.currentItem) onboardingPager.setCurrentItem(page, false)
 }
@@ -36,12 +37,18 @@ internal fun MainActivity.setupOnboardingPager() {
     val dp = resources.displayMetrics.density
     val accentInt = currentAccentColor.toColorInt()
     val bgColor = when (currentTheme) {
-        "light" -> Color.parseColor("#F5F5F5")
-        "oled" -> Color.BLACK
-        else -> Color.parseColor("#1F1F1F")
+        "light" -> Color.parseColor("#F5F5F7")
+        "oled"  -> Color.BLACK
+        else    -> Color.parseColor("#141414")
     }
-    val textColor = if (currentTheme == "light") Color.parseColor("#212121") else Color.WHITE
-    val subColor = if (currentTheme == "light") Color.parseColor("#757575") else Color.parseColor("#BDBDBD")
+    val textColor = when (currentTheme) {
+        "light" -> Color.parseColor("#1A1A1A")
+        else    -> Color.parseColor("#EBEBF0")
+    }
+    val subColor = when (currentTheme) {
+        "light" -> Color.parseColor("#636366")
+        else    -> Color.parseColor("#8E8E93")
+    }
 
     val pageViews = listOf(
         buildOnboardingWelcomePage(dp, bgColor, textColor, subColor),
@@ -51,27 +58,61 @@ internal fun MainActivity.setupOnboardingPager() {
 
     onboardingDots.removeAllViews()
     val dotSize = (8 * dp).toInt()
+    val dotPillWidth = (24 * dp).toInt()
     val dotMargin = (5 * dp).toInt()
     val dotViews = pageViews.indices.map { i ->
         View(this).apply {
-            layoutParams = LinearLayout.LayoutParams(dotSize, dotSize).also {
-                it.setMargins(dotMargin, 0, dotMargin, 0)
-            }
+            layoutParams = LinearLayout.LayoutParams(
+                if (i == 0) dotPillWidth else dotSize, dotSize
+            ).also { it.setMargins(dotMargin, 0, dotMargin, 0) }
             background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dotSize / 2f
                 setColor(if (i == 0) accentInt else Color.parseColor("#555555"))
             }
             onboardingDots.addView(this)
         }
     }
 
+    var activeDot = 0
     fun updateDots(pos: Int) {
+        if (pos == activeDot) return
         val accent = currentAccentColor.toColorInt()
+        val inactive = Color.parseColor("#555555")
         dotViews.forEachIndexed { i, dot ->
-            (dot.background as GradientDrawable).setColor(
-                if (i == pos) accent else Color.parseColor("#555555")
-            )
+            val from = dot.layoutParams.width
+            val to = if (i == pos) dotPillWidth else dotSize
+            if (from != to) {
+                // Swoosh: width morphs dot <-> pill, color crossfades in sync
+                android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
+                    duration = 280
+                    interpolator = android.view.animation.DecelerateInterpolator(2f)
+                    addUpdateListener { a ->
+                        val f = a.animatedValue as Float
+                        dot.layoutParams = (dot.layoutParams as LinearLayout.LayoutParams).also {
+                            it.width = (from + (to - from) * f).toInt()
+                        }
+                        (dot.background as GradientDrawable).setColor(
+                            androidx.core.graphics.ColorUtils.blendARGB(
+                                if (i == pos) inactive else accent,
+                                if (i == pos) accent else inactive,
+                                f
+                            )
+                        )
+                    }
+                    start()
+                }
+                // Little vertical squash-and-pop on the dot becoming active
+                if (i == pos) {
+                    dot.scaleY = 0.6f
+                    dot.animate().scaleY(1f)
+                        .setDuration(320)
+                        .setInterpolator(android.view.animation.OvershootInterpolator(2.5f))
+                        .start()
+                }
+            }
         }
+        activeDot = pos
     }
 
     onboardingPager.adapter = object : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
@@ -89,6 +130,26 @@ internal fun MainActivity.setupOnboardingPager() {
     onboardingPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
         override fun onPageSelected(position: Int) { updateDots(position) }
     })
+
+    // Staggered parallax that tracks the finger: each child of the page lags
+    // progressively behind the swipe and fades, so content "builds up" as the
+    // page settles instead of popping in after the scroll ends.
+    onboardingPager.setPageTransformer { page, position ->
+        val content: ViewGroup =
+            ((page as? LinearLayout)?.getChildAt(0) as? ScrollView)
+                ?.getChildAt(0) as? LinearLayout ?: page as ViewGroup
+        val w = page.width.toFloat()
+        val clamped = position.coerceIn(-1f, 1f)
+        for (i in 0 until content.childCount) {
+            val child = content.getChildAt(i)
+            val factor = 0.30f + i * 0.12f
+            child.translationX = clamped * w * factor
+            child.alpha = 1f - kotlin.math.abs(clamped) * 1.15f
+        }
+    }
+
+    // One-time entrance for the first page on initial display.
+    onboardingPager.post { animateOnboardingPageEntrance(pageViews[0], dp) }
 
     fun allPermissionsGranted(): Boolean {
         val notif = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU)
@@ -115,19 +176,37 @@ internal fun MainActivity.setupOnboardingPager() {
     }
 }
 
+/** Staggered fade+slide entrance for the children of an onboarding page. */
+internal fun animateOnboardingPageEntrance(page: LinearLayout, dp: Float) {
+    // Page 2 wraps its rows in a ScrollView > LinearLayout; animate the inner children.
+    val content: ViewGroup =
+        (page.getChildAt(0) as? ScrollView)?.getChildAt(0) as? LinearLayout ?: page
+    for (i in 0 until content.childCount) {
+        val child = content.getChildAt(i)
+        child.animate().cancel()
+        child.alpha = 0f
+        child.translationY = 24 * dp
+        child.animate()
+            .alpha(1f)
+            .translationY(0f)
+            .setStartDelay(80L + i * 60L)
+            .setDuration(320)
+            .setInterpolator(android.view.animation.DecelerateInterpolator(2f))
+            .start()
+    }
+}
+
 internal fun MainActivity.buildOnboardingWelcomePage(dp: Float, bgColor: Int, textColor: Int, subColor: Int): LinearLayout =
     LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         gravity = Gravity.CENTER
         setBackgroundColor(bgColor)
-        setPadding((32 * dp).toInt(), 0, (32 * dp).toInt(), (80 * dp).toInt())
+        setPadding((32 * dp).toInt(), 0, (32 * dp).toInt(), 0)
 
-        addView(ImageView(this@buildOnboardingWelcomePage).apply {
-            layoutParams = LinearLayout.LayoutParams((160 * dp).toInt(), (160 * dp).toInt()).also {
-                it.bottomMargin = (28 * dp).toInt()
+        addView(OnboardingHeroView(this@buildOnboardingWelcomePage, currentAccentColor.toColorInt(), subColor).apply {
+            layoutParams = LinearLayout.LayoutParams((260 * dp).toInt(), (260 * dp).toInt()).also {
+                it.bottomMargin = (12 * dp).toInt()
             }
-            setImageResource(R.mipmap.ic_launcher_foreground)
-            scaleType = ImageView.ScaleType.FIT_CENTER
         })
         addView(TextView(this@buildOnboardingWelcomePage).apply {
             text = getString(R.string.onboarding_welcome_title)
@@ -158,13 +237,15 @@ internal fun MainActivity.buildOnboardingFeaturesPage(dp: Float, bgColor: Int, t
     }
     val scroll = ScrollView(this).apply {
         isVerticalScrollBarEnabled = false
+        isFillViewport = true
         layoutParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT
         )
     }
     val inner = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
-        setPadding(0, 0, 0, (80 * dp).toInt())
+        gravity = Gravity.CENTER
+        setPadding(0, 0, 0, 0)
     }
     inner.addView(TextView(this).apply {
         text = getString(R.string.onboarding_features_title)
@@ -231,8 +312,9 @@ internal fun MainActivity.buildOnboardingGetStartedPage(
 
     val page = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER_VERTICAL
         setBackgroundColor(bgColor)
-        setPadding((24 * dp).toInt(), (40 * dp).toInt(), (24 * dp).toInt(), (100 * dp).toInt())
+        setPadding((24 * dp).toInt(), (24 * dp).toInt(), (24 * dp).toInt(), (24 * dp).toInt())
     }
 
     // Title
@@ -241,6 +323,7 @@ internal fun MainActivity.buildOnboardingGetStartedPage(
         setTextColor(textColor)
         textSize = 26f
         typeface = Typeface.DEFAULT_BOLD
+        gravity = Gravity.CENTER
         layoutParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
         ).also { it.bottomMargin = (8 * dp).toInt() }
@@ -249,6 +332,7 @@ internal fun MainActivity.buildOnboardingGetStartedPage(
         text = "Grant these permissions for the best experience."
         setTextColor(subColor)
         textSize = 14f
+        gravity = Gravity.CENTER
         layoutParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
         ).also { it.bottomMargin = (32 * dp).toInt() }
@@ -497,5 +581,54 @@ internal fun MainActivity.showPermissionSkipWarning(onSkip: () -> Unit) {
 }
 
 internal fun MainActivity.triggerOnboardingExplosion() {
-    completeOnboardingToLogin()
+    // Zoom-and-fade the whole onboarding away, then reveal the login screen
+    // (whose own entrance animation staggers the fields in).
+    onboardingContainer.animate()
+        .alpha(0f)
+        .scaleX(1.12f)
+        .scaleY(1.12f)
+        .setDuration(280)
+        .setInterpolator(android.view.animation.AccelerateInterpolator(1.4f))
+        .withEndAction {
+            onboardingContainer.scaleX = 1f
+            onboardingContainer.scaleY = 1f
+            onboardingContainer.alpha = 1f
+            completeOnboardingToLogin()
+        }
+        .start()
+}
+
+/**
+ * Staggered entrance for the login screen: the logo pops in with a soft
+ * overshoot, then title and input fields slide up one after the other.
+ */
+internal fun MainActivity.animateLoginEntrance() {
+    val dp = resources.displayMetrics.density
+    for (i in 0 until loginContainer.childCount) {
+        val child = loginContainer.getChildAt(i)
+        child.animate().cancel()
+        // Blend each view toward the alpha it already has (e.g. the disabled
+        // login button sits at 0.5), instead of forcing everything to 1.
+        val targetAlpha = child.alpha.takeIf { it > 0f } ?: 1f
+        child.alpha = 0f
+        child.translationY = 28 * dp
+        if (i == 0) {
+            // logo: scale-in with overshoot
+            child.scaleX = 0.6f
+            child.scaleY = 0.6f
+            child.animate()
+                .alpha(targetAlpha).translationY(0f).scaleX(1f).scaleY(1f)
+                .setStartDelay(60)
+                .setDuration(420)
+                .setInterpolator(android.view.animation.OvershootInterpolator(1.3f))
+                .start()
+        } else {
+            child.animate()
+                .alpha(targetAlpha).translationY(0f)
+                .setStartDelay(100L + i * 55L)
+                .setDuration(330)
+                .setInterpolator(android.view.animation.DecelerateInterpolator(2f))
+                .start()
+        }
+    }
 }

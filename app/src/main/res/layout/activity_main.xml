@@ -167,15 +167,36 @@
 
             </LinearLayout>
 
+            <!-- Search scope chips (All / Inbox / Favorite / ...), visible while searching -->
+            <HorizontalScrollView
+                android:id="@+id/searchChipsScroll"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="none"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:paddingTop="8dp"
+                android:paddingBottom="4dp"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:id="@+id/searchChipsRow"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal" />
+            </HorizontalScrollView>
+
             <!-- Folder label — below the accent bar, window background -->
             <TextView
                 android:id="@+id/folderLabel"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:paddingStart="16dp"
-                android:paddingTop="4dp"
-                android:paddingBottom="4dp"
-                android:textSize="12sp"
+                android:paddingTop="5dp"
+                android:paddingBottom="5dp"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.02"
                 android:text="Inbox"
                 android:visibility="gone" />
 
@@ -215,6 +236,7 @@
                     android:layout_weight="1" />
 
                 <RelativeLayout
+                    android:id="@+id/onboardingBottomBar"
                     android:layout_width="match_parent"
                     android:layout_height="80dp"
                     android:paddingStart="20dp"
@@ -238,7 +260,7 @@
                         android:layout_centerVertical="true"
                         android:src="@drawable/ic_lucide_chevron_right"
                         android:contentDescription="@string/onboarding_next"
-                        app:backgroundTint="#1976D2"
+                        app:backgroundTint="#3D8BFD"
                         app:tint="#FFFFFF"
                         app:fabSize="normal" />
 
@@ -250,97 +272,103 @@
                 android:id="@+id/loginContainer"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:gravity="center"
+                android:gravity="center_horizontal"
                 android:orientation="vertical"
+                android:paddingTop="96dp"
                 android:paddingStart="28dp"
                 android:paddingEnd="28dp"
                 android:visibility="gone">
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="4dp"
-                    android:text="@string/app_name"
-                    android:textColor="#FFFFFF"
-                    android:textSize="28sp"
-                    android:textStyle="bold" />
+                <ImageView
+                    android:layout_width="120dp"
+                    android:layout_height="120dp"
+                    android:layout_marginBottom="10dp"
+                    android:src="@mipmap/ic_launcher_foreground"
+                    android:scaleType="fitCenter"
+                    android:contentDescription="@string/app_name" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="28dp"
-                    android:text="@string/login_title"
-                    android:textColor="#BDBDBD"
-                    android:textSize="15sp" />
+                    android:layout_marginBottom="20dp"
+                    android:text="@string/app_name"
+                    android:textColor="#FFFFFF"
+                    android:textSize="26sp"
+                    android:textStyle="bold" />
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="0.4" />
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="6dp"
+                    android:layout_marginBottom="4dp"
                     android:text="@string/login_label_email"
                     android:textColor="#BDBDBD"
-                    android:textSize="13sp" />
+                    android:textSize="12sp" />
 
                 <EditText
                     android:id="@+id/emailInput"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="14dp"
+                    android:layout_marginBottom="10dp"
                     android:autofillHints="emailAddress"
                     android:background="@drawable/input_field_bg"
                     android:hint="@string/email_hint"
                     android:inputType="textEmailAddress"
                     android:paddingStart="16dp"
                     android:paddingEnd="16dp"
-                    android:paddingTop="14dp"
-                    android:paddingBottom="14dp"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="10dp"
                     android:textColor="#FFFFFF"
                     android:textColorHint="#9E9E9E" />
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="6dp"
+                    android:layout_marginBottom="4dp"
                     android:text="@string/login_label_password"
                     android:textColor="#BDBDBD"
-                    android:textSize="13sp" />
+                    android:textSize="12sp" />
 
                 <EditText
                     android:id="@+id/passwordInput"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="14dp"
+                    android:layout_marginBottom="10dp"
                     android:autofillHints="password"
                     android:background="@drawable/input_field_bg"
                     android:hint="@string/password_hint"
                     android:inputType="textPassword"
                     android:paddingStart="16dp"
                     android:paddingEnd="16dp"
-                    android:paddingTop="14dp"
-                    android:paddingBottom="14dp"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="10dp"
                     android:textColor="#FFFFFF"
                     android:textColorHint="#9E9E9E" />
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="6dp"
+                    android:layout_marginBottom="4dp"
                     android:text="@string/login_label_server"
                     android:textColor="#BDBDBD"
-                    android:textSize="13sp" />
+                    android:textSize="12sp" />
 
                 <EditText
                     android:id="@+id/serverUrlInput"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="24dp"
+                    android:layout_marginBottom="18dp"
                     android:background="@drawable/input_field_bg"
                     android:hint="@string/server_url_hint"
                     android:inputType="textUri"
                     android:paddingStart="16dp"
                     android:paddingEnd="16dp"
-                    android:paddingTop="14dp"
-                    android:paddingBottom="14dp"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="10dp"
                     android:textColor="#FFFFFF"
                     android:textColorHint="#9E9E9E" />
 
@@ -349,7 +377,13 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:enabled="false"
+                    android:backgroundTint="#3D8BFD"
                     android:text="@string/login_button" />
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1.6" />
 
             </LinearLayout>
 
@@ -381,7 +415,7 @@
                     android:layout_margin="16dp"
                     android:src="@android:drawable/ic_menu_edit"
                     app:tint="#FFFFFF"
-                    app:backgroundTint="#1976D2"
+                    app:backgroundTint="#3D8BFD"
                     android:contentDescription="Compose Email" />
 
             </FrameLayout>
@@ -1051,6 +1085,11 @@
                         </LinearLayout>
                     </LinearLayout>
 
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="#33FFFFFF" />
+
                     <!-- Accounts accordion section -->
                     <LinearLayout
                         android:id="@+id/settingsAccountsContainer"
@@ -1169,13 +1208,13 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:background="#2A2A2A"
-            android:minHeight="44dp"
-            android:paddingStart="24dp"
-            android:paddingTop="8dp"
-            android:paddingEnd="24dp"
-            android:paddingBottom="12dp"
+            android:minHeight="32dp"
+            android:paddingStart="16dp"
+            android:paddingTop="4dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="6dp"
             android:textColor="#FFFFFF"
-            android:textSize="14sp" />
+            android:textSize="12sp" />
 
     </LinearLayout>
 

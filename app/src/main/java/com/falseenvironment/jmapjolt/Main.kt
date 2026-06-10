@@ -115,6 +115,7 @@ class MainActivity : AppCompatActivity() {
     internal lateinit var toolbar: Toolbar
     internal lateinit var drawerToggle: ActionBarDrawerToggle
     internal lateinit var onboardingContainer: LinearLayout
+    internal lateinit var onboardingBottomBar: android.widget.RelativeLayout
     internal lateinit var onboardingPager: androidx.viewpager2.widget.ViewPager2
     internal lateinit var onboardingNextFab: com.google.android.material.floatingactionbutton.FloatingActionButton
     internal lateinit var onboardingDots: LinearLayout
@@ -161,12 +162,25 @@ class MainActivity : AppCompatActivity() {
     internal lateinit var emailDetailContainer: EmailDetailContainer
     internal lateinit var detailFrom: TextView
     internal lateinit var detailHeaderRow: LinearLayout
+    internal lateinit var detailSubject: TextView
+    internal lateinit var detailDate: TextView
+    internal lateinit var detailToText: TextView
+    internal lateinit var detailMoreButton: ImageView
+    private lateinit var searchChipsScroll: android.widget.HorizontalScrollView
+    private lateinit var searchChipsRow: LinearLayout
+    private var searchScope: Int? = null
     internal lateinit var detailBody: LinearLayout
     private var detailBarHidden = false
     private var detailBarHeight = 0
     private var detailBarLastToggleMs = 0L
+    private var detailSwipeAnimating = false
     private val prefetchingIds = mutableSetOf<String>()
     private lateinit var detailWebView: android.webkit.WebView
+    // Preview panel that slides in with the finger during detail swipes,
+    // showing the adjacent email's content instead of an empty gap.
+    private var detailPreviewPanel: LinearLayout? = null
+    private var detailPreviewWebView: android.webkit.WebView? = null
+    private var detailPreviewKey: String? = null
     private lateinit var mailSwipeRefresh: SwipeRefreshLayout
     internal lateinit var unifiedPushSwitch: SwitchCompat
     internal lateinit var sseSwitch: SwitchCompat
@@ -243,7 +257,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var drawerAccountsList: LinearLayout
     internal lateinit var accentColorPreview: View
     private lateinit var accentColorRow: LinearLayout
-    internal var currentAccentColor: String = "#1976D2"
+    internal var currentAccentColor: String = "#3D8BFD"
 
     private val categoryOrder =
             mutableListOf(
@@ -312,6 +326,7 @@ class MainActivity : AppCompatActivity() {
         navigationView = findViewById(R.id.navigationView)
         toolbar = findViewById(R.id.toolbar)
         onboardingContainer = findViewById(R.id.onboardingContainer)
+        onboardingBottomBar = findViewById(R.id.onboardingBottomBar)
         onboardingPager = findViewById(R.id.onboardingPager)
         onboardingNextFab = findViewById(R.id.onboardingNextFab)
         onboardingDots = findViewById(R.id.onboardingDots)
@@ -415,6 +430,8 @@ class MainActivity : AppCompatActivity() {
         selectionReadBtn = findViewById(R.id.selectionReadBtn)
         selectionMoreBtn = findViewById(R.id.selectionMoreBtn)
         searchInput = findViewById(R.id.searchInput)
+        searchChipsScroll = findViewById(R.id.searchChipsScroll)
+        searchChipsRow = findViewById(R.id.searchChipsRow)
         searchClearBtn = findViewById(R.id.searchClearBtn)
         swipeRightDropdown = findViewById(R.id.swipeRightDropdown)
         swipeLeftDropdown = findViewById(R.id.swipeLeftDropdown)
@@ -500,8 +517,55 @@ class MainActivity : AppCompatActivity() {
         setupOnboardingPager()
         drawerAccountRow.setOnClickListener {
             val open = drawerAccountsList.visibility != View.VISIBLE
-            drawerAccountsList.visibility = if (open) View.VISIBLE else View.GONE
-            drawerAccountArrow.animate().rotation(if (open) 180f else 0f).setDuration(180).start()
+            drawerAccountArrow.animate().rotation(if (open) 180f else 0f).setDuration(200).start()
+            if (open) {
+                // Expand like the settings accordions: grow + fade.
+                drawerAccountsList.visibility = View.VISIBLE
+                drawerAccountsList.measure(
+                    View.MeasureSpec.makeMeasureSpec(navigationView.width, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+                )
+                val target = drawerAccountsList.measuredHeight
+                drawerAccountsList.layoutParams.height = 0
+                drawerAccountsList.alpha = 0f
+                android.animation.ValueAnimator.ofInt(0, target).apply {
+                    duration = 240
+                    interpolator = android.view.animation.DecelerateInterpolator(2f)
+                    addUpdateListener {
+                        drawerAccountsList.layoutParams.height = it.animatedValue as Int
+                        drawerAccountsList.alpha = it.animatedFraction
+                        drawerAccountsList.requestLayout()
+                    }
+                    addListener(object : android.animation.AnimatorListenerAdapter() {
+                        override fun onAnimationEnd(animation: android.animation.Animator) {
+                            drawerAccountsList.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                            drawerAccountsList.alpha = 1f
+                            drawerAccountsList.requestLayout()
+                        }
+                    })
+                    start()
+                }
+            } else {
+                val start = drawerAccountsList.height
+                android.animation.ValueAnimator.ofInt(start, 0).apply {
+                    duration = 200
+                    interpolator = android.view.animation.AccelerateInterpolator(1.5f)
+                    addUpdateListener {
+                        drawerAccountsList.layoutParams.height = it.animatedValue as Int
+                        drawerAccountsList.alpha = 1f - it.animatedFraction
+                        drawerAccountsList.requestLayout()
+                    }
+                    addListener(object : android.animation.AnimatorListenerAdapter() {
+                        override fun onAnimationEnd(animation: android.animation.Animator) {
+                            drawerAccountsList.visibility = View.GONE
+                            drawerAccountsList.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                            drawerAccountsList.alpha = 1f
+                            drawerAccountsList.requestLayout()
+                        }
+                    })
+                    start()
+                }
+            }
         }
         drawerLayout.addDrawerListener(object : androidx.drawerlayout.widget.DrawerLayout.SimpleDrawerListener() {
             override fun onDrawerClosed(drawerView: View) {
@@ -566,6 +630,7 @@ class MainActivity : AppCompatActivity() {
         loginBackBtn.setOnClickListener { showOnboarding() }
         mailboxContainer.visibility = View.GONE
         settingsContainer.visibility = View.GONE
+        status.visibility = View.VISIBLE
         emailDetailContainer.visibility = View.GONE
         fabCompose.visibility = View.GONE
         customTopBar.visibility = View.GONE
@@ -574,6 +639,7 @@ class MainActivity : AppCompatActivity() {
         passwordInput.text?.clear()
         serverUrlInput.text?.clear()
         updateFormState()
+        animateLoginEntrance()
     }
 
     private fun updateFormState() {
@@ -815,7 +881,8 @@ class MainActivity : AppCompatActivity() {
                     id = View.generateViewId()
                     visibility = View.GONE
                     topZoneHeight = barHeight
-                    onHorizontalSwipe = { forward -> navigateDetailEmail(forward) }
+                    onSwipeDrag = { dx -> onDetailSwipeDrag(dx) }
+                    onSwipeEnd = { dx, vx -> onDetailSwipeEnd(dx, vx) }
                     layoutParams =
                             FrameLayout.LayoutParams(
                                     ViewGroup.LayoutParams.MATCH_PARENT,
@@ -833,28 +900,28 @@ class MainActivity : AppCompatActivity() {
                     setPadding(0, barHeight, 0, 0)
                 }
         detailBarHeight = barHeight
-        // Pinned action row: sender + reply / forward / archive / trash / move / favorite.
+        // Pinned Gmail-style header: subject + star on top, then sender/date with
+        // "to me" expander, reply and an overflow menu for the remaining actions.
         val headerWrap =
                 LinearLayout(this).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    gravity = Gravity.CENTER_VERTICAL
+                    orientation = LinearLayout.VERTICAL
                     setBackgroundColor("#1F1F1F".toColorInt())
                     minimumHeight = barHeight
                     layoutParams = FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
                     )
-                    setPadding((12 * dp).toInt(), (6 * dp).toInt(), (4 * dp).toInt(), (6 * dp).toInt())
+                    setPadding((16 * dp).toInt(), (10 * dp).toInt(), (6 * dp).toInt(), (10 * dp).toInt())
                 }
         detailHeaderRow = headerWrap
         detailFrom =
                 TextView(this).apply {
-                    setTextColor("#BDBDBD".toColorInt())
+                    setTextColor("#FFFFFF".toColorInt())
                     textSize = 14f
+                    typeface = android.graphics.Typeface.DEFAULT_BOLD
                     maxLines = 1
                     ellipsize = android.text.TextUtils.TruncateAt.END
-                    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                    maxWidth = (resources.displayMetrics.widthPixels * 0.52f).toInt()
                 }
-        headerWrap.addView(detailFrom)
 
         fun detailActionIcon(iconRes: Int, desc: String, onClick: (DisplayEmail) -> Unit): ImageView =
                 ImageView(this).apply {
@@ -877,13 +944,71 @@ class MainActivity : AppCompatActivity() {
                 }
 
         detailReplyButton = detailActionIcon(R.drawable.ic_lucide_reply, "Reply") { startReply(it) }
+        // Legacy action icons now live in the overflow menu; views kept for the tinting code.
         detailForwardButton = detailActionIcon(R.drawable.ic_lucide_forward, "Forward") { startForward(it) }
         detailArchiveButton = detailActionIcon(R.drawable.ic_lucide_archive, "Archive") { archiveDetailEmail(it) }
         detailTrashButton = detailActionIcon(R.drawable.ic_lucide_trash, "Delete") { trashDetailEmail(it) }
         detailMoveButton = detailActionIcon(R.drawable.ic_lucide_folder_input, "Move to") { moveDetailEmail(it) }
         detailStarButton = detailActionIcon(R.drawable.ic_lucide_star, "Favorite") { toggleDetailFavorite(it) }
-        listOf(detailReplyButton, detailForwardButton, detailArchiveButton,
-               detailTrashButton, detailMoveButton, detailStarButton).forEach { headerWrap.addView(it) }
+        detailMoreButton = detailActionIcon(R.drawable.ic_lucide_more_vertical, "More") { showDetailOverflowMenu() }
+
+        // Row 1: subject + favorite star.
+        detailSubject = TextView(this).apply {
+            textSize = 18f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        headerWrap.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            addView(detailSubject)
+            addView(detailStarButton)
+        })
+
+        // Row 2: sender (bold) + relative date in gray, "to me" expander below;
+        // reply and overflow pinned at the right.
+        detailDate = TextView(this).apply {
+            textSize = 12f
+            setTextColor("#9E9E9E".toColorInt())
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).also { it.marginStart = (8 * dp).toInt() }
+        }
+        detailToText = TextView(this).apply {
+            textSize = 12f
+            setTextColor("#9E9E9E".toColorInt())
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            setOnClickListener { showDetailAddressDialog() }
+        }
+        val senderCol = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            addView(LinearLayout(this@MainActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(detailFrom)
+                addView(detailDate)
+            })
+            addView(detailToText)
+        }
+        headerWrap.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).also { it.topMargin = (6 * dp).toInt() }
+            addView(senderCol)
+            addView(detailReplyButton)
+            addView(detailTrashButton)
+            addView(detailMoreButton)
+        })
+
 
         detailWebView =
                 android.webkit.WebView(this).apply {
@@ -973,31 +1098,294 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun navigateDetailEmail(forward: Boolean) {
-        val current = currentDetailEmail ?: return
+    private fun detailSwipeTarget(forward: Boolean): DisplayEmail? {
+        val current = currentDetailEmail ?: return null
         val idx = emails.indexOfFirst { it.id == current.id }
-        if (idx < 0) return
-        val next = (if (forward) emails.getOrNull(idx + 1) else emails.getOrNull(idx - 1)) ?: return
-        val w = detailBody.width.toFloat().takeIf { it > 0 } ?: resources.displayMetrics.widthPixels.toFloat()
-        val exitX = if (forward) -w * 0.35f else w * 0.35f
-        val enterX = -exitX
+        if (idx < 0) return null
+        return if (forward) emails.getOrNull(idx + 1) else emails.getOrNull(idx - 1)
+    }
+
+    /** Lazily builds the sliding preview panel (a second WebView) used during detail swipes. */
+    private fun ensureDetailPreviewPanel(): LinearLayout {
+        detailPreviewPanel?.let { return it }
+        val wv = android.webkit.WebView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+            overScrollMode = View.OVER_SCROLL_NEVER
+            settings.javaScriptEnabled = false
+            settings.allowFileAccess = false
+            settings.allowContentAccess = false
+            @Suppress("DEPRECATION")
+            settings.allowUniversalAccessFromFileURLs = false
+            @Suppress("DEPRECATION")
+            settings.allowFileAccessFromFileURLs = false
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
+            }
+            settings.useWideViewPort = true
+            settings.loadWithOverviewMode = true
+        }
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            setPadding(0, detailBarHeight, 0, 0)
+            visibility = View.GONE
+            // The preview is display-only: swallow touches while it briefly overlays.
+            setOnTouchListener { _, _ -> true }
+            addView(wv)
+        }
+        // Above detailBody, below the pinned header row.
+        emailDetailContainer.addView(panel, 1)
+        detailPreviewPanel = panel
+        detailPreviewWebView = wv
+        return panel
+    }
+
+    /** Loads [target]'s content into the preview (cached body, or the shimmer skeleton). */
+    private fun prepareDetailPreview(target: DisplayEmail, forward: Boolean) {
+        val key = "${target.id}:$forward"
+        if (detailPreviewKey == key) return
+        detailPreviewKey = key
+        val panel = ensureDetailPreviewPanel()
+        val wv = detailPreviewWebView ?: return
+        val bg = when (currentTheme) {
+            "oled" -> "#000000"
+            "light" -> "#ffffff"
+            else -> "#1a1a1a"
+        }.toColorInt()
+        panel.setBackgroundColor(bg)
+        wv.setBackgroundColor(bg)
+        wv.settings.blockNetworkImage =
+            !getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getBoolean("load_images", false)
+        val html = if (target.fullBody.isNotBlank())
+            buildHtmlContent(target.fullBody)
+        else
+            buildSkeletonHtml()
+        wv.loadDataWithBaseURL("https://jmapjolt.invalid/email/", html, "text/html", "UTF-8", null)
+    }
+
+    /** Content follows the finger; the adjacent email slides in alongside it (no empty gap). */
+    private fun onDetailSwipeDrag(dx: Float) {
+        if (detailSwipeAnimating) return
+        val forward = dx < 0
+        val target = detailSwipeTarget(forward)
+        val resistance = if (target == null) 0.25f else 1f
+        detailBody.translationX = dx * resistance
+        val w = detailBody.width.toFloat().takeIf { it > 0 }
+            ?: resources.displayMetrics.widthPixels.toFloat()
+        if (target != null) {
+            prepareDetailPreview(target, forward)
+            detailPreviewPanel?.let {
+                it.visibility = View.VISIBLE
+                it.alpha = 1f
+                it.translationX = dx + if (forward) w else -w
+            }
+        } else {
+            detailPreviewPanel?.visibility = View.GONE
+            detailPreviewKey = null
+        }
+    }
+
+    private fun onDetailSwipeEnd(dx: Float, velocityX: Float) {
+        if (detailSwipeAnimating) return
+        val w = detailBody.width.toFloat().takeIf { it > 0 }
+            ?: resources.displayMetrics.widthPixels.toFloat()
+        val dp = resources.displayMetrics.density
+        val forward = dx < 0
+        val target = detailSwipeTarget(forward)
+        val flung = kotlin.math.abs(velocityX) > 800 * dp &&
+            (velocityX < 0) == forward  // fling must match the drag direction
+        val shouldComplete = target != null && (kotlin.math.abs(dx) > w * 0.30f || flung)
+
+        if (!shouldComplete) {
+            detailBody.animate()
+                .translationX(0f)
+                .setDuration(240)
+                .setInterpolator(android.view.animation.OvershootInterpolator(0.8f))
+                .start()
+            detailPreviewPanel?.let { p ->
+                if (p.visibility == View.VISIBLE) {
+                    p.animate()
+                        .translationX(if (forward) w else -w)
+                        .setStartDelay(0)
+                        .setDuration(240)
+                        .setInterpolator(android.view.animation.DecelerateInterpolator(2f))
+                        .withEndAction { p.visibility = View.GONE; detailPreviewKey = null }
+                        .start()
+                }
+            }
+            return
+        }
+
+        detailSwipeAnimating = true
+        val exitX = if (forward) -w else w
+        prepareDetailPreview(target!!, forward)
+        val panel = ensureDetailPreviewPanel().also {
+            it.visibility = View.VISIBLE
+            // Pure fling with no drag events yet: start from fully off-screen.
+            if (detailBody.translationX == 0f) it.translationX = if (forward) w else -w
+        }
+        // Continue at roughly the finger's speed: duration from remaining distance.
+        val remaining = kotlin.math.abs(exitX - detailBody.translationX)
+        val exitDuration = (remaining / w * 220).toLong().coerceIn(90, 220)
+        panel.animate()
+            .translationX(0f)
+            .setStartDelay(0)
+            .setDuration(exitDuration)
+            .setInterpolator(android.view.animation.LinearInterpolator())
+            .start()
         detailBody.animate()
             .translationX(exitX)
-            .alpha(0f)
-            .setDuration(180)
-            .setInterpolator(android.view.animation.AccelerateInterpolator(1.5f))
+            .setStartDelay(0)
+            .setDuration(exitDuration)
+            .setInterpolator(android.view.animation.LinearInterpolator())
             .withEndAction {
-                detailBody.translationX = enterX
-                detailBody.alpha = 0f
-                showEmailDetail(next, fromSwipe = true)
-                detailBody.animate()
-                    .translationX(0f)
-                    .alpha(1f)
-                    .setDuration(280)
-                    .setInterpolator(android.view.animation.DecelerateInterpolator(2f))
+                detailBody.translationX = 0f
+                showEmailDetail(target, fromSwipe = true)
+                // Keep the preview overlaid while the real WebView paints the same
+                // content underneath, then fade it away: no skeleton flash, no gap.
+                panel.animate()
+                    .alpha(0f)
+                    .setStartDelay(140)
+                    .setDuration(160)
+                    .withEndAction {
+                        panel.visibility = View.GONE
+                        panel.alpha = 1f
+                        detailPreviewKey = null
+                        detailSwipeAnimating = false
+                    }
                     .start()
             }
             .start()
+    }
+
+    /** Overflow menu (3 dots) on the detail header: actions that used to be inline icons. */
+    private fun showDetailOverflowMenu() {
+        val email = currentDetailEmail ?: return
+        val inArchive = selectedFolder == R.id.nav_archive
+        showSettingsDropdown(
+            detailMoreButton,
+            listOf(
+                if (inArchive) "Unarchive" else getString(R.string.swipe_action_archive),
+                "Forward",
+                "Move to"
+            ),
+            -1,
+            icons = listOf(
+                if (inArchive) R.drawable.ic_lucide_archive_restore else R.drawable.ic_lucide_archive,
+                R.drawable.ic_lucide_forward,
+                R.drawable.ic_lucide_folder_input
+            )
+        ) { idx ->
+            when (idx) {
+                0 -> if (inArchive) unarchiveDetailEmail(email) else archiveDetailEmail(email)
+                1 -> startForward(email)
+                2 -> moveDetailEmail(email)
+            }
+        }
+    }
+
+    /** Moves an archived email back to the inbox (detail-view counterpart of swipe unarchive). */
+    private fun unarchiveDetailEmail(email: DisplayEmail) {
+        val acc = resolveAccountFor(email) ?: connectedAccount ?: return
+        updateFolderCachesForInbox(email)
+        closeEmailDetail()
+        removeEmailsAnimated(listOf(email.id))
+        saveEmailCache()
+        Snackbar.make(drawerLayout, "Moved to Inbox", Snackbar.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            try {
+                val inboxId = resolveMailboxIdByRole(acc, "inbox")
+                if (inboxId != null) {
+                    jmapClient.setMailbox(acc, email.id, inboxId)
+                    BackgroundEmailSyncReceiver.addToBaseline(this@MainActivity, acc.email, listOf(email.id))
+                }
+            } catch (e: Exception) { Log.e(TAG, "detail unarchive failed", e) }
+        }
+    }
+
+    /** Re-syncs body inset and the swipe zone with the (content-dependent) header height. */
+    private fun syncDetailHeaderHeight() {
+        detailHeaderRow.post {
+            val h = detailHeaderRow.height
+            if (h > 0 && !detailBarHidden) {
+                detailBarHeight = h
+                detailBody.setPadding(0, h, 0, 0)
+                detailPreviewPanel?.setPadding(0, h, 0, 0)
+                emailDetailContainer.topZoneHeight = h
+            }
+        }
+    }
+
+    /** "to me ▾" tap: floating popup card with full addresses; tap anywhere outside to dismiss. */
+    private fun showDetailAddressDialog() {
+        val email = currentDetailEmail ?: return
+        val dp = resources.displayMetrics.density
+        val textColor = if (currentTheme == "light") "#212121".toColorInt() else Color.WHITE
+        val subColor = if (currentTheme == "light") "#757575".toColorInt() else "#BDBDBD".toColorInt()
+
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            val ph = (16 * dp).toInt()
+            val pv = (12 * dp).toInt()
+            setPadding(ph, pv, ph, pv)
+            minimumWidth = (220 * dp).toInt()
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 14 * dp
+                setColor(getDialogBackgroundColor())
+            }
+            elevation = 8 * dp
+        }
+        fun row(label: String, value: String) {
+            card.addView(TextView(this).apply {
+                text = label
+                textSize = 10f
+                letterSpacing = 0.08f
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                setTextColor(subColor)
+            })
+            card.addView(TextView(this).apply {
+                text = value
+                textSize = 13f
+                setTextColor(textColor)
+                setTextIsSelectable(true)
+                maxWidth = (resources.displayMetrics.widthPixels * 0.75f).toInt()
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                ).also { it.bottomMargin = (8 * dp).toInt() }
+            })
+        }
+        row("FROM", listOf(email.from, email.fromEmail).filter { it.isNotBlank() }.distinct().joinToString(" · "))
+        row("TO", email.toEmail.ifBlank { email.accountEmail.ifBlank { "me" } })
+        if (email.receivedAt > 0) {
+            row("DATE", java.text.DateFormat.getDateTimeInstance().format(java.util.Date(email.receivedAt)))
+        }
+
+        val pw = android.widget.PopupWindow(
+            card,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+            true
+        ).apply {
+            elevation = 10 * dp
+            isOutsideTouchable = true
+        }
+        pw.showAsDropDown(detailToText, 0, (4 * dp).toInt())
+        // MD3 menu motion: scale-in from the anchor corner with a fade.
+        card.alpha = 0f
+        card.scaleX = 0.86f
+        card.scaleY = 0.78f
+        card.post {
+            card.pivotX = card.width * 0.15f
+            card.pivotY = 0f
+            card.animate()
+                .alpha(1f).scaleX(1f).scaleY(1f)
+                .setDuration(200)
+                .setInterpolator(android.view.animation.DecelerateInterpolator(2.5f))
+                .start()
+        }
     }
 
     internal fun sanitizeEmailHtml(html: String): String {
@@ -1131,7 +1519,12 @@ body{background:$bg;padding:20px}
         optimisticFavorite[email.id] = newFav
         updateFolderCachesForFavorite(email.copy(), newFav)
         updateDetailStarIcon(newFav)
-        emailAdapter.notifyDataSetChanged()
+        detailStarButton.animateTap()
+        // Only one row changed: a targeted rebind avoids re-running favicon
+        // jobs and bind allocations for every visible row.
+        val changedPos = emails.indexOfFirst { it.id == email.id }
+        if (changedPos >= 0) emailAdapter.notifyItemChanged(changedPos)
+        else emailAdapter.notifyDataSetChanged()
         saveEmailCache()
         val acc = resolveAccountFor(email) ?: connectedAccount ?: return
         lifecycleScope.launch {
@@ -1182,12 +1575,15 @@ body{background:$bg;padding:20px}
         val excludedRoles = buildList {
             add("drafts"); add("trash")
             if (selectedFolder == R.id.nav_inbox || selectedFolder == R.id.nav_unified_inbox) add("inbox")
+            // Favorites live in the inbox already: moving there would be a no-op.
+            if (selectedFolder == R.id.nav_favourite) add("inbox")
         }
         fun present(mailboxes: List<JMapClient.MailboxInfo>) {
             val filtered = mailboxes.filter { it.role?.lowercase() !in excludedRoles }
-            if (filtered.isNotEmpty()) showMoveLabelPicker(filtered, ids, null, setOf("sent"))
+            // Stay on the email while picking; leave it only once a folder is chosen.
+            if (filtered.isNotEmpty())
+                showMoveLabelPicker(filtered, ids, null, setOf("sent"), onPicked = { closeEmailDetail() })
         }
-        closeEmailDetail()
         val cached = mailboxCache
         if (cached != null) {
             present(cached)
@@ -1218,6 +1614,7 @@ body{background:$bg;padding:20px}
         drawerToggle.syncState()
         applyNavIconTint(getOnAccentColor())
         updateCustomTopBar(getCurrentMailboxTitle(), inMailbox = true)
+        if (isSearchActive) searchChipsScroll.visibility = View.VISIBLE
     }
 
     internal fun showEmailDetail(email: DisplayEmail, fromSwipe: Boolean = false) {
@@ -1251,14 +1648,29 @@ body{background:$bg;padding:20px}
                 }
 
         detailHeaderRow.setBackgroundColor(toolbarColor.toColorInt())
-        detailFrom.setTextColor(currentAccentColor.toColorInt())
-        detailFrom.text = email.fromEmail.ifBlank { email.from }
+        detailSubject.text = email.subject.ifBlank { "(no subject)" }
+        detailSubject.setTextColor(textColor.toColorInt())
+        detailFrom.setTextColor(textColor.toColorInt())
+        detailFrom.text = email.from.ifBlank { email.fromEmail }
+        detailDate.text = if (email.receivedAt > 0) formatRelativeDate(email.receivedAt) else ""
+        detailDate.setTextColor(secondaryTextColor.toColorInt())
+        val toLabel = when {
+            email.toEmail.isBlank() -> "to me"
+            email.toEmail.equals(email.accountEmail, ignoreCase = true) -> "to me"
+            else -> "to ${email.toEmail}"
+        }
+        detailToText.text = "$toLabel  ▾"
+        detailToText.setTextColor(secondaryTextColor.toColorInt())
 
         // Tint the pinned action icons to contrast the header; star reflects favourite state.
         val actionTint = ColorStateList.valueOf(textColor.toColorInt())
         listOf(detailReplyButton, detailForwardButton, detailArchiveButton,
-               detailTrashButton, detailMoveButton).forEach { it.imageTintList = actionTint }
+               detailTrashButton, detailMoveButton, detailMoreButton).forEach { it.imageTintList = actionTint }
         updateDetailStarIcon(email.isFavorite)
+
+        // Header height is content-dependent now (subject wraps): sync the body
+        // inset and the swipe-from-header zone once it is laid out.
+        syncDetailHeaderHeight()
 
         // Remove previous attachment footer if present (detailBody: index 0=WebView, 1=attRow)
         if (detailBody.childCount > 1) detailBody.removeViewAt(1)
@@ -1278,7 +1690,7 @@ body{background:$bg;padding:20px}
         // Show cached body immediately (zero latency) or a shimmer skeleton while fetching.
         val bodyAvailableNow = email.fullBody.isNotBlank()
         if (bodyAvailableNow) {
-            detailWebView.loadDataWithBaseURL("https://jmapjolt.invalid/email/",buildHtmlContent(email.fullBody, email.subject), "text/html", "UTF-8", null)
+            detailWebView.loadDataWithBaseURL("https://jmapjolt.invalid/email/",buildHtmlContent(email.fullBody), "text/html", "UTF-8", null)
         } else {
             detailWebView.loadDataWithBaseURL("https://jmapjolt.invalid/email/",buildSkeletonHtml(), "text/html", "UTF-8", null)
         }
@@ -1318,7 +1730,7 @@ body{background:$bg;padding:20px}
                 currentDetailEmail = displayEmail
                 // Only render if body was skeleton (not already rendered synchronously above).
                 if (!bodyAvailableNow) {
-                    val htmlContent = buildHtmlContent(displayEmail.fullBody, displayEmail.subject)
+                    val htmlContent = buildHtmlContent(displayEmail.fullBody)
                     detailWebView.loadDataWithBaseURL("https://jmapjolt.invalid/email/",htmlContent, "text/html", "UTF-8", null)
                 }
             } catch (e: Exception) {
@@ -1326,7 +1738,9 @@ body{background:$bg;padding:20px}
             }
         }
 
-        updateCustomTopBar(email.from.ifBlank { email.fromEmail }, inMailbox = false)
+        // No sender label in the top bar: the pinned header already shows it.
+        updateCustomTopBar("", inMailbox = false)
+        searchChipsScroll.visibility = View.GONE
 
 
         if (!email.seen) {
@@ -1407,8 +1821,9 @@ body{background:$bg;padding:20px}
                 if (isChecked) detailWebView.reload()
             }
         }
-        loadFaviconsSwitch.setOnCheckedChangeListener { _, _ ->
+        loadFaviconsSwitch.setOnCheckedChangeListener { _, isChecked ->
             saveGeneralPreferences()
+            emailAdapter.loadFaviconsEnabled = isChecked
             emailAdapter.notifyDataSetChanged()
         }
 
@@ -1430,8 +1845,56 @@ body{background:$bg;padding:20px}
 
     private fun toggleSettingsSection(content: LinearLayout, chevron: ImageView) {
         val open = content.visibility != View.VISIBLE
-        content.visibility = if (open) View.VISIBLE else View.GONE
-        chevron.animate().rotation(if (open) 180f else 0f).setDuration(200).start()
+        chevron.animate().rotation(if (open) 180f else 0f).setDuration(220).start()
+        if (open) {
+            // Expand: measure target height, then grow from 0 with a fade.
+            content.visibility = View.VISIBLE
+            content.measure(
+                View.MeasureSpec.makeMeasureSpec(settingsContainer.width, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+            )
+            val target = content.measuredHeight
+            content.layoutParams.height = 0
+            content.alpha = 0f
+            android.animation.ValueAnimator.ofInt(0, target).apply {
+                duration = 260
+                interpolator = android.view.animation.DecelerateInterpolator(2f)
+                addUpdateListener {
+                    content.layoutParams.height = it.animatedValue as Int
+                    content.alpha = it.animatedFraction
+                    content.requestLayout()
+                }
+                addListener(object : android.animation.AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: android.animation.Animator) {
+                        content.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                        content.alpha = 1f
+                        content.requestLayout()
+                    }
+                })
+                start()
+            }
+        } else {
+            // Collapse: shrink from current height to 0 with a fade.
+            val start = content.height
+            android.animation.ValueAnimator.ofInt(start, 0).apply {
+                duration = 220
+                interpolator = android.view.animation.AccelerateInterpolator(1.5f)
+                addUpdateListener {
+                    content.layoutParams.height = it.animatedValue as Int
+                    content.alpha = 1f - it.animatedFraction
+                    content.requestLayout()
+                }
+                addListener(object : android.animation.AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: android.animation.Animator) {
+                        content.visibility = View.GONE
+                        content.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                        content.alpha = 1f
+                        content.requestLayout()
+                    }
+                })
+                start()
+            }
+        }
     }
 
     private fun showAboutDialog() {
@@ -1808,7 +2271,7 @@ body{background:$bg;padding:20px}
                             val (colorRes, iconRes) = when (action) {
                                 SwipeAction.DELETE -> Pair("#D32F2F".toColorInt(), R.drawable.ic_lucide_trash)
                                 SwipeAction.ARCHIVE -> Pair("#388E3C".toColorInt(), R.drawable.ic_lucide_archive)
-                                SwipeAction.MARK_READ -> Pair("#1976D2".toColorInt(), R.drawable.ic_lucide_eye)
+                                SwipeAction.MARK_READ -> Pair("#3D8BFD".toColorInt(), R.drawable.ic_lucide_eye)
                                 SwipeAction.MARK_SPAM -> Pair("#F57C00".toColorInt(), R.drawable.ic_lucide_ban)
                             }
                             paint.color = colorRes
@@ -2066,6 +2529,7 @@ body{background:$bg;padding:20px}
         anchor: View,
         options: List<String>,
         currentIdx: Int,
+        icons: List<Int>? = null,
         onSelected: (Int) -> Unit
     ) {
         val dp = resources.displayMetrics.density
@@ -2076,38 +2540,66 @@ body{background:$bg;padding:20px}
             orientation = LinearLayout.VERTICAL
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                cornerRadius = 10 * dp
+                cornerRadius = 16 * dp
                 setColor(popupBg)
             }
-            val vp = (4 * dp).toInt()
-            setPadding(0, vp, 0, vp)
+            val vp = (6 * dp).toInt()
+            setPadding(vp, vp, vp, vp)
             elevation = 8 * dp
         }
 
         var popupRef: android.widget.PopupWindow? = null
 
         options.forEachIndexed { idx, label ->
-            if (idx > 0) {
-                container.addView(View(this).apply {
-                    layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1)
-                    setBackgroundColor(0x22FFFFFF)
-                })
-            }
             container.addView(LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                val rowW = (200 * dp).toInt()
-                layoutParams = LinearLayout.LayoutParams(rowW, (48 * dp).toInt())
-                val hp = (16 * dp).toInt()
+                val rowW = (208 * dp).toInt()
+                layoutParams = LinearLayout.LayoutParams(rowW, (46 * dp).toInt()).also {
+                    if (idx > 0) it.topMargin = (2 * dp).toInt()
+                }
+                val hp = (14 * dp).toInt()
                 setPadding(hp, 0, hp, 0)
-                if (idx == currentIdx) setBackgroundColor(0x22FFFFFF)
+                // Selected row: rounded tonal pill with a check mark.
+                if (idx == currentIdx) {
+                    background = GradientDrawable().apply {
+                        shape = GradientDrawable.RECTANGLE
+                        cornerRadius = 11 * dp
+                        setColor(0x33FFFFFF)
+                    }
+                }
+                icons?.getOrNull(idx)?.let { iconRes ->
+                    addView(ImageView(this@MainActivity).apply {
+                        setImageResource(iconRes)
+                        imageTintList = ColorStateList.valueOf(Color.WHITE)
+                        val sz = (18 * dp).toInt()
+                        layoutParams = LinearLayout.LayoutParams(sz, sz).also {
+                            it.marginEnd = (12 * dp).toInt()
+                        }
+                    })
+                }
                 addView(TextView(this@MainActivity).apply {
                     text = label
                     textSize = 14f
                     setTextColor(Color.WHITE)
+                    if (idx == currentIdx) typeface = android.graphics.Typeface.DEFAULT_BOLD
                     layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
                 })
-                setOnClickListener { popupRef?.dismiss(); onSelected(idx) }
+                if (idx == currentIdx) {
+                    addView(ImageView(this@MainActivity).apply {
+                        setImageResource(R.drawable.ic_lucide_check)
+                        imageTintList = ColorStateList.valueOf(Color.WHITE)
+                        val sz = (18 * dp).toInt()
+                        layoutParams = LinearLayout.LayoutParams(sz, sz).also {
+                            it.marginStart = (8 * dp).toInt()
+                        }
+                    })
+                }
+                setOnClickListener {
+                    // Quick tap pulse, then dismiss and apply.
+                    animateTap()
+                    postDelayed({ popupRef?.dismiss(); onSelected(idx) }, 120)
+                }
             })
         }
 
@@ -2121,7 +2613,20 @@ body{background:$bg;padding:20px}
             isOutsideTouchable = true
         }
         popupRef = pw
-        pw.showAsDropDown(anchor, 0, 0)
+        pw.showAsDropDown(anchor, 0, (4 * dp).toInt())
+        // Entrance: scale-in from the anchor corner with a fade (MD3 menu motion).
+        container.alpha = 0f
+        container.scaleX = 0.86f
+        container.scaleY = 0.78f
+        container.post {
+            container.pivotX = container.width * 0.85f
+            container.pivotY = 0f
+            container.animate()
+                .alpha(1f).scaleX(1f).scaleY(1f)
+                .setDuration(200)
+                .setInterpolator(android.view.animation.DecelerateInterpolator(2.5f))
+                .start()
+        }
     }
 
     private fun saveSwipePreferences() {
@@ -2277,16 +2782,7 @@ body{background:$bg;padding:20px}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 val query = s?.toString() ?: ""
                 searchClearBtn.visibility = if (query.isNotEmpty()) View.VISIBLE else View.GONE
-                val filtered = if (query.isBlank()) baseEmails else baseEmails.filter {
-                    it.subject.contains(query, ignoreCase = true) ||
-                    it.from.contains(query, ignoreCase = true) ||
-                    it.preview.contains(query, ignoreCase = true)
-                }
-                emails.clear()
-                emails.addAll(filtered)
-                emailAdapter.notifyDataSetChanged()
-                emptyStateView.visibility = if (emails.isEmpty()) View.VISIBLE else View.GONE
-                emailsRecyclerView.visibility = if (emails.isEmpty()) View.GONE else View.VISIBLE
+                applySearchFilter(query)
             }
             override fun afterTextChanged(s: android.text.Editable?) {}
         })
@@ -2299,6 +2795,12 @@ body{background:$bg;padding:20px}
         searchBarTitle.visibility = View.GONE
         searchInput.visibility = View.VISIBLE
         searchClearBtn.visibility = View.GONE
+        // Scope chips: default to the current folder when it maps to a chip, else All.
+        searchScope = searchScopes.firstOrNull { it.second == selectedFolder }?.second
+        refreshSearchChips()
+        searchChipsScroll.visibility = View.VISIBLE
+        searchChipsScroll.alpha = 0f
+        searchChipsScroll.animate().alpha(1f).setDuration(200).start()
         searchInput.requestFocus()
         val imm = getSystemService(InputMethodManager::class.java)
         imm?.showSoftInput(searchInput, InputMethodManager.SHOW_IMPLICIT)
@@ -2310,9 +2812,86 @@ body{background:$bg;padding:20px}
         searchInput.visibility = View.GONE
         searchBarTitle.visibility = View.VISIBLE
         searchClearBtn.visibility = View.GONE
+        searchChipsScroll.visibility = View.GONE
+        searchScope = null
         hideKeyboard()
         emails.clear()
         emails.addAll(baseEmails)
+        emailAdapter.notifyDataSetChanged()
+        emptyStateView.visibility = if (emails.isEmpty()) View.VISIBLE else View.GONE
+        emailsRecyclerView.visibility = if (emails.isEmpty()) View.GONE else View.VISIBLE
+    }
+
+    // Search scope chips: label -> drawer folder id (null = search everywhere).
+    private val searchScopes = listOf<Pair<String, Int?>>(
+        "All" to null,
+        "Inbox" to R.id.nav_inbox,
+        "Favorite" to R.id.nav_favourite,
+        "Archive" to R.id.nav_archive,
+        "Sent" to R.id.nav_sent,
+        "Trash" to R.id.nav_trash
+    )
+
+    private fun refreshSearchChips() {
+        val dp = resources.displayMetrics.density
+        searchChipsRow.removeAllViews()
+        val accent = currentAccentColor.toColorInt()
+        val isLight = currentTheme == "light"
+        val tonalBg = if (isLight) "#E8E8EC".toColorInt() else "#2A2A2A".toColorInt()
+        val tonalText = if (isLight) "#1A1A1A".toColorInt() else "#EBEBF0".toColorInt()
+        searchScopes.forEach { (label, scope) ->
+            val selected = scope == searchScope
+            searchChipsRow.addView(TextView(this).apply {
+                text = label
+                textSize = 13f
+                typeface = if (selected) android.graphics.Typeface.DEFAULT_BOLD
+                           else android.graphics.Typeface.DEFAULT
+                setTextColor(if (selected) getOnAccentColor() else tonalText)
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = 10 * dp
+                    setColor(if (selected) accent else tonalBg)
+                }
+                setPadding((14 * dp).toInt(), (8 * dp).toInt(), (14 * dp).toInt(), (8 * dp).toInt())
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                ).also { it.marginEnd = (8 * dp).toInt() }
+                setOnClickListener {
+                    if (searchScope != scope) {
+                        searchScope = scope
+                        refreshSearchChips()
+                        applySearchFilter(searchInput.text?.toString() ?: "")
+                    }
+                }
+            })
+        }
+    }
+
+    /** Emails to search through, based on the selected scope chip. */
+    private fun searchSourceEmails(): List<DisplayEmail> {
+        val scope = searchScope
+        return when {
+            scope == null -> {
+                // All: union of every cached folder plus the current list, newest first.
+                val seen = HashSet<String>()
+                (folderCache.values.flatten() + baseEmails)
+                    .filter { seen.add(it.id) }
+                    .sortedByDescending { it.receivedAt }
+            }
+            scope == selectedFolder -> baseEmails.toList()
+            else -> folderCache[scope] ?: emptyList()
+        }
+    }
+
+    private fun applySearchFilter(query: String) {
+        val source = if (isSearchActive) searchSourceEmails() else baseEmails.toList()
+        val filtered = if (query.isBlank()) source else source.filter {
+            it.subject.contains(query, ignoreCase = true) ||
+            it.from.contains(query, ignoreCase = true) ||
+            it.preview.contains(query, ignoreCase = true)
+        }
+        emails.clear()
+        emails.addAll(filtered)
         emailAdapter.notifyDataSetChanged()
         emptyStateView.visibility = if (emails.isEmpty()) View.VISIBLE else View.GONE
         emailsRecyclerView.visibility = if (emails.isEmpty()) View.GONE else View.VISIBLE
@@ -3519,9 +4098,18 @@ body{background:$bg;padding:20px}
         private const val KEY_ACCOUNTS_JSON = "accounts_json"
         private const val KEY_LAST_SYNC_APP_VERSION = "last_sync_app_version"
         internal const val KEY_ACCENT_COLOR = "accent_color"
+        // Refined accents: same hue families as before, shifted to brighter,
+        // slightly desaturated tones that read well on dark and light surfaces.
         val ACCENT_COLORS = listOf(
-            "#1976D2", "#2E7D32", "#7B1FA2",
-            "#D84315", "#00838F", "#AD1457", "#F57F17"
+            "#3D8BFD", "#3FA65C", "#9C5BD1",
+            "#E8593C", "#0FA3B1", "#D84A7F", "#F2A33C"
+        )
+
+        // Old palette -> refined palette, for migrating saved preferences.
+        val LEGACY_ACCENT_MAP = mapOf(
+            "#1976D2" to "#3D8BFD", "#2E7D32" to "#3FA65C", "#7B1FA2" to "#9C5BD1",
+            "#D84315" to "#E8593C", "#00838F" to "#0FA3B1", "#AD1457" to "#D84A7F",
+            "#F57F17" to "#F2A33C"
         )
     }
 
@@ -3696,7 +4284,8 @@ body{background:$bg;padding:20px}
         mailboxes: List<JMapClient.MailboxInfo>,
         ids: List<String>,
         mode: androidx.appcompat.view.ActionMode?,
-        disabledRoles: Set<String> = emptySet()
+        disabledRoles: Set<String> = emptySet(),
+        onPicked: (() -> Unit)? = null
     ) {
         val account = connectedAccount ?: return
         val dp = resources.displayMetrics.density
@@ -3781,6 +4370,7 @@ body{background:$bg;padding:20px}
                             .associate { it.id to (resolveAccountFor(it) ?: account) }
                         mode?.finish()
                         clearSelection()
+                        onPicked?.invoke()
                         removeEmailsAnimated(ids)
                         saveEmailCache()
                         lifecycleScope.launch {

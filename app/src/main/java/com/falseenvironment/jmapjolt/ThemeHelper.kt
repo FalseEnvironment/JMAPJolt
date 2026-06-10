@@ -19,7 +19,9 @@ import androidx.core.widget.CompoundButtonCompat
 internal fun MainActivity.loadThemePreference() {
     val prefs = getSharedPreferences(MainActivity.PREFS_NAME, android.content.Context.MODE_PRIVATE)
     currentTheme = prefs.getString("app_theme", "gray") ?: "gray"
-    currentAccentColor = prefs.getString(MainActivity.KEY_ACCENT_COLOR, "#1976D2") ?: "#1976D2"
+    val storedAccent = prefs.getString(MainActivity.KEY_ACCENT_COLOR, "#3D8BFD") ?: "#3D8BFD"
+    // Migrate accents saved with the pre-refinement palette to their new tones.
+    currentAccentColor = MainActivity.LEGACY_ACCENT_MAP[storedAccent.uppercase()] ?: storedAccent
     themeIdx = when (currentTheme) {
         "light" -> 1
         "oled" -> 2
@@ -37,9 +39,9 @@ internal fun MainActivity.saveThemePreference() {
 internal fun MainActivity.applyTheme() {
     val themeColors =
             when (currentTheme) {
-                "light" -> arrayOf("#FFFBFE", "#FFFFFF", "#1C1B1F", "#49454F")
-                "oled"  -> arrayOf("#000000", "#000000", "#FFFFFF", "#BDBDBD")
-                else    -> arrayOf("#1F1F1F", "#2A2A2A", "#FFFFFF", "#BDBDBD")
+                "light" -> arrayOf("#F6F6F8", "#FFFFFF", "#1B1B1F", "#5F5F66")
+                "oled"  -> arrayOf("#000000", "#0B0B0D", "#ECECF1", "#90909A")
+                else    -> arrayOf("#151518", "#1F1F23", "#ECECF1", "#90909A")
             }
     val bgColor = themeColors[0]
     val toolbarColor = themeColors[1]
@@ -82,6 +84,7 @@ internal fun MainActivity.applyTheme() {
 
     // Update all main containers
     updateContainerTextColors(onboardingContainer, textInt, secondaryTextInt)
+    onboardingBottomBar.setBackgroundColor(bgInt)
     updateContainerTextColors(loginContainer, textInt, secondaryTextInt)
     updateContainerTextColors(mailboxContainer, textInt, secondaryTextInt)
     updateContainerTextColors(settingsContainer, textInt, secondaryTextInt)
@@ -91,6 +94,14 @@ internal fun MainActivity.applyTheme() {
     loginContainer.setBackgroundColor(bgInt)
     styleLoginInputs()
     mailboxContainer.setBackgroundColor(bgInt)
+    composeContainer.setBackgroundColor(bgInt)
+    updateContainerTextColors(composeContainer, textInt, secondaryTextInt)
+    val fmtBg = when (currentTheme) {
+        "light" -> "#E8E8EC".toColorInt()
+        "oled"  -> "#080808".toColorInt()
+        else    -> "#181818".toColorInt()
+    }
+    formatToolbarRow.setBackgroundColor(fmtBg)
 
     // Recursively update text colors in settings container
     updateContainerTextColors(settingsContainer, textInt, secondaryTextInt)
@@ -107,7 +118,10 @@ internal fun MainActivity.applyTheme() {
     // Update detail view header if visible
     if (isShowingEmailDetail) {
         emailDetailContainer.getChildAt(0).setBackgroundColor(toolbarInt)
-        detailFrom.setTextColor(currentAccentColor.toColorInt())
+        detailFrom.setTextColor(textInt)
+        detailSubject.setTextColor(textInt)
+        detailDate.setTextColor(secondaryTextInt)
+        detailToText.setTextColor(secondaryTextInt)
     }
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -132,7 +146,7 @@ internal fun MainActivity.getOnAccentColor(): Int {
 internal fun MainActivity.styleLoginInputs() {
     val d = resources.displayMetrics.density
     val padH = (16 * d).toInt()
-    val padV = (14 * d).toInt()
+    val padV = (10 * d).toInt()
     val hintColor = "#9E9E9E".toColorInt()
     listOf(emailInput, passwordInput, serverUrlInput).forEach {
         it.backgroundTintList = null
@@ -180,17 +194,14 @@ internal fun MainActivity.applyAccentColor() {
     val d = resources.displayMetrics.density
     searchBarContainer.background = android.graphics.drawable.GradientDrawable().apply {
         shape = android.graphics.drawable.GradientDrawable.RECTANGLE
-        cornerRadius = 28 * d
+        cornerRadius = 12 * d
         setColor(darkenColor(accentInt, 0.78f))
     }
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
         window.statusBarColor = accentInt
     }
-    if (isShowingEmailDetail) {
-        detailFrom.setTextColor(accentInt)
-    }
     // Switch tint: accent when ON, gray when OFF
-    val offColor = if (currentTheme == "light") "#BDBDBD".toColorInt() else "#555555".toColorInt()
+    val offColor = if (currentTheme == "light") "#C7C7CC".toColorInt() else "#48484A".toColorInt()
     val switchTint = ColorStateList(
         arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
         intArrayOf(accentInt, offColor)
@@ -211,13 +222,13 @@ internal fun MainActivity.applyAccentColor() {
     // Top-bar send button (shown during compose) — always white on the accent bar
     topBarSendButton.imageTintList = ColorStateList.valueOf(Color.WHITE)
     // Settings dropdown backgrounds
-    val dropdownBg = darkenColor(accentInt, 0.82f)
-    val dropdownStroke = darkenColor(accentInt, 0.55f)
-    val dropdownCorner = d * 18
+    // MD3-style tonal pill for the dropdown triggers.
+    val dropdownBg = darkenColor(accentInt, 0.78f)
+    val dropdownStroke = darkenColor(accentInt, 1.15f)
     for (dropdown in listOf(swipeLeftDropdown, swipeRightDropdown, themeDropdown)) {
         dropdown.background = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
-            cornerRadius = dropdownCorner
+            cornerRadius = 999 * d
             setColor(dropdownBg)
             setStroke(d.toInt(), dropdownStroke)
         }
@@ -268,7 +279,7 @@ internal fun MainActivity.showAccentColorDialog() {
             setColor(color)
         }
     }
-    refreshPreview(runCatching { pendingColor.toColorInt() }.getOrDefault("#1976D2".toColorInt()))
+    refreshPreview(runCatching { pendingColor.toColorInt() }.getOrDefault("#3D8BFD".toColorInt()))
 
     // Swatches row
     val swatchRow = LinearLayout(this).apply {
@@ -488,9 +499,9 @@ internal fun MainActivity.darkenColor(color: Int, factor: Float = 0.72f): Int = 
 )
 
 internal fun MainActivity.getDialogBackgroundColor(): Int = when (currentTheme) {
-    "light" -> "#F4EFF4".toColorInt()
-    "oled"  -> "#0D0D0D".toColorInt()
-    else    -> "#252525".toColorInt()
+    "light" -> "#F0EEEE".toColorInt()
+    "oled"  -> "#0A0A0A".toColorInt()
+    else    -> "#1E1E1E".toColorInt()
 }
 
 // ---------------------------------------------------------------------------

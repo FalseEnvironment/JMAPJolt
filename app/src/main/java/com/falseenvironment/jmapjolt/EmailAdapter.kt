@@ -24,6 +24,21 @@ import java.util.Locale
 
 internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.Adapter<EmailAdapter.EmailHolder>() {
 
+    init {
+        // Stable ids let RecyclerView match rows across full rebinds
+        // (notifyDataSetChanged), avoiding flicker and needless rebinds.
+        setHasStableIds(true)
+    }
+
+    override fun getItemId(position: Int): Long =
+        activity.emails[position].id.hashCode().toLong()
+
+    // Cached preference: reading SharedPreferences on every onBindViewHolder
+    // costs a map lookup + potential lock per row while scrolling.
+    var loadFaviconsEnabled: Boolean = activity
+        .getSharedPreferences(MainActivity.PREFS_NAME, android.content.Context.MODE_PRIVATE)
+        .getBoolean("load_favicons", false)
+
     @android.annotation.SuppressLint("ResourceType")
     inner class EmailHolder(root: LinearLayout) : RecyclerView.ViewHolder(root) {
         val colorStrip: android.view.View = root.findViewById(20)
@@ -45,7 +60,7 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
             gravity = Gravity.TOP
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-            setPadding((12 * dp).toInt(), (10 * dp).toInt(), (12 * dp).toInt(), (10 * dp).toInt())
+            setPadding((12 * dp).toInt(), (12 * dp).toInt(), (12 * dp).toInt(), (12 * dp).toInt())
             // Ripple feedback on tap (MD3 state layer)
             background = android.graphics.drawable.RippleDrawable(
                 android.content.res.ColorStateList.valueOf(0x1AFFFFFF),
@@ -99,7 +114,7 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
         }
         val senderTv = TextView(activity).apply {
             id = 11
-            textSize = 12f
+            textSize = 13f
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
             layoutParams = LinearLayout.LayoutParams(
@@ -108,22 +123,22 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
         }
         val subjectTv = TextView(activity).apply {
             id = 1
-            textSize = 14f
+            textSize = 15f
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-                .apply { topMargin = (1 * dp).toInt() }
+                .apply { topMargin = (2 * dp).toInt() }
             letterSpacing = 0.005f
         }
         val previewTv = TextView(activity).apply {
             id = 2
-            textSize = 12f
+            textSize = 13f
             maxLines = 2
             ellipsize = android.text.TextUtils.TruncateAt.END
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-                .apply { topMargin = (1 * dp).toInt() }
+                .apply { topMargin = (2 * dp).toInt() }
         }
         textWrap.addView(senderTv)
         textWrap.addView(subjectTv)
@@ -138,7 +153,7 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
         }
         val dText = TextView(activity).apply {
             id = 6
-            textSize = 11f
+            textSize = 12f
             maxLines = 1
             setSingleLine()
             gravity = Gravity.END
@@ -216,7 +231,7 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
             holder.title.setTypeface(null, Typeface.BOLD)
             holder.title.setTextColor(primaryColor)
             holder.subtitle.setTextColor(if (isLight) "#424242".toColorInt() else "#E0E0E0".toColorInt())
-            holder.dateText.setTextColor(if (isLight) "#616161".toColorInt() else "#BDBDBD".toColorInt())
+            holder.dateText.setTextColor(activity.currentAccentColor.toColorInt())
         } else {
             holder.senderText.setTypeface(null, Typeface.NORMAL)
             holder.title.setTypeface(null, Typeface.NORMAL)
@@ -297,13 +312,11 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
             val hashColor = android.graphics.Color.HSVToColor(floatArrayOf(hue, 0.6f, 0.6f))
             holder.itemView.setBackgroundColor(Color.TRANSPARENT)
 
-            val prefs = activity.getSharedPreferences(MainActivity.PREFS_NAME, android.content.Context.MODE_PRIVATE)
-            val loadFavicons = prefs.getBoolean("load_favicons", false)
+            val loadFavicons = loadFaviconsEnabled
 
             val domain =
                     item.fromEmail.substringAfter("@", "").ifEmpty {
-                        "[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}"
-                                .toRegex()
+                        EMAIL_IN_TEXT_REGEX
                                 .find(item.from)
                                 ?.value
                                 ?.substringAfter("@")
@@ -381,9 +394,14 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
  *  - 1-5 days       -> "Nd ago"
  *  - older          -> absolute date ("MMM dd")
  */
-private fun formatRelativeDate(timestamp: Long): String {
+// Hoisted from onBindViewHolder: compiling a regex / date formatter per bound row
+// is measurable jank while scrolling.
+private val EMAIL_IN_TEXT_REGEX = "[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}".toRegex()
+private val MONTH_DAY_FORMAT = SimpleDateFormat("MMM dd", Locale.getDefault())
+
+internal fun formatRelativeDate(timestamp: Long): String {
     val diff = System.currentTimeMillis() - timestamp
-    if (diff < 0) return SimpleDateFormat("MMM dd", Locale.getDefault()).format(Date(timestamp))
+    if (diff < 0) return MONTH_DAY_FORMAT.format(Date(timestamp))
     val minutes = diff / 60_000
     val hours = diff / 3_600_000
     val days = diff / 86_400_000
@@ -392,6 +410,6 @@ private fun formatRelativeDate(timestamp: Long): String {
         minutes < 60 -> "${minutes}m ago"
         hours < 24 -> "${hours}h ago"
         days <= 5 -> "${days}d ago"
-        else -> SimpleDateFormat("MMM dd", Locale.getDefault()).format(Date(timestamp))
+        else -> MONTH_DAY_FORMAT.format(Date(timestamp))
     }
 }
