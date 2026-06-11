@@ -1,9 +1,13 @@
 package com.falseenvironment.jmapjolt
 
 import android.content.res.ColorStateList
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.SweepGradient
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
@@ -23,9 +27,10 @@ internal fun MainActivity.loadThemePreference() {
     // Migrate accents saved with the pre-refinement palette to their new tones.
     currentAccentColor = MainActivity.LEGACY_ACCENT_MAP[storedAccent.uppercase()] ?: storedAccent
     themeIdx = when (currentTheme) {
-        "light" -> 1
-        "oled" -> 2
-        else -> 0
+        "light"  -> 1
+        "oled"   -> 2
+        "violet" -> 3
+        else     -> 0
     }
 }
 
@@ -39,9 +44,10 @@ internal fun MainActivity.saveThemePreference() {
 internal fun MainActivity.applyTheme() {
     val themeColors =
             when (currentTheme) {
-                "light" -> arrayOf("#F6F6F8", "#FFFFFF", "#1B1B1F", "#5F5F66")
-                "oled"  -> arrayOf("#000000", "#0B0B0D", "#ECECF1", "#90909A")
-                else    -> arrayOf("#151518", "#1F1F23", "#ECECF1", "#90909A")
+                "light"  -> arrayOf("#F6F6F8", "#FFFFFF",  "#1B1B1F", "#5F5F66")
+                "oled"   -> arrayOf("#000000", "#0B0B0D",  "#ECECF1", "#90909A")
+                "violet" -> arrayOf("#160E24", "#1E1430",  "#ECECF1", "#9B7DC8")
+                else     -> arrayOf("#212126", "#2A2A30",  "#ECECF1", "#90909A")
             }
     val bgColor = themeColors[0]
     val toolbarColor = themeColors[1]
@@ -97,9 +103,10 @@ internal fun MainActivity.applyTheme() {
     composeContainer.setBackgroundColor(bgInt)
     updateContainerTextColors(composeContainer, textInt, secondaryTextInt)
     val fmtBg = when (currentTheme) {
-        "light" -> "#E8E8EC".toColorInt()
-        "oled"  -> "#080808".toColorInt()
-        else    -> "#181818".toColorInt()
+        "light"  -> "#E8E8EC".toColorInt()
+        "oled"   -> "#080808".toColorInt()
+        "violet" -> "#0E0A1A".toColorInt()
+        else     -> "#1C1C22".toColorInt()
     }
     formatToolbarRow.setBackgroundColor(fmtBg)
 
@@ -258,74 +265,138 @@ internal fun MainActivity.updateAccentColorPreview() {
 
 internal fun MainActivity.showAccentColorDialog() {
     val dp = resources.displayMetrics.density
-    var pendingColor = currentAccentColor
+
+    // Parse current accent into HSV; ensure vibrant defaults
+    val pendingHsv = FloatArray(3).also { hsv ->
+        Color.colorToHSV(
+            runCatching { currentAccentColor.toColorInt() }.getOrDefault("#3D8BFD".toColorInt()),
+            hsv
+        )
+        if (hsv[1] < 0.4f) hsv[1] = 0.85f
+        if (hsv[2] < 0.4f) hsv[2] = 0.95f
+    }
+    fun pendingColorHex() = "#%06X".format(0xFFFFFF and Color.HSVToColor(pendingHsv))
+
+    // Mutable callback so wheelView can trigger swatch refresh before swatchViews is populated
+    var onSwatchRefresh: ((String) -> Unit) = {}
 
     val root = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
+        gravity = android.view.Gravity.CENTER_HORIZONTAL
         val p = (16 * dp).toInt()
-        setPadding(p, (14 * dp).toInt(), p, (8 * dp).toInt())
+        setPadding(p, (14 * dp).toInt(), p, (12 * dp).toInt())
     }
 
-    // Full-width color preview bar
-    val previewBar = View(this).apply {
-        layoutParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, (44 * dp).toInt()
-        ).also { it.bottomMargin = (16 * dp).toInt() }
-    }
-    fun refreshPreview(color: Int) {
-        previewBar.background = android.graphics.drawable.GradientDrawable().apply {
-            shape = android.graphics.drawable.GradientDrawable.RECTANGLE
-            cornerRadius = 8 * dp
-            setColor(color)
+    // --- Circular hue wheel ---
+    val wheelDiameter = (224 * dp).toInt()
+    val wheelView = object : View(this) {
+        private val ringPaint   = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+        private val fillPaint   = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+        private val dotFill     = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+        private val dotBorder   = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE; color = Color.WHITE
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            val cx = width / 2f; val cy = height / 2f
+            val outerR = minOf(cx, cy) - 6 * dp
+            val innerR = outerR * 0.60f
+            val ringR  = (outerR + innerR) / 2f
+            val ringW  = outerR - innerR
+
+            // Rotate so hue 0 (red) sits at 12-o-clock
+            canvas.save()
+            canvas.rotate(-90f, cx, cy)
+            val hueColors = IntArray(361) { i -> Color.HSVToColor(floatArrayOf(i.toFloat() % 360f, 1f, 1f)) }
+            ringPaint.shader = SweepGradient(cx, cy, hueColors, null)
+            ringPaint.strokeWidth = ringW
+            canvas.drawCircle(cx, cy, ringR, ringPaint)
+            canvas.restore()
+
+            // Center circle — current pending color
+            fillPaint.color = Color.HSVToColor(pendingHsv)
+            canvas.drawCircle(cx, cy, innerR - 4 * dp, fillPaint)
+
+            // Indicator dot on ring at selected hue
+            val rad = Math.toRadians((pendingHsv[0] - 90.0))
+            val ix  = cx + ringR * kotlin.math.cos(rad).toFloat()
+            val iy  = cy + ringR * kotlin.math.sin(rad).toFloat()
+            dotFill.color = Color.WHITE
+            canvas.drawCircle(ix, iy, ringW / 2f + 2.5f * dp, dotFill)
+            dotFill.color = Color.HSVToColor(floatArrayOf(pendingHsv[0], 1f, 0.85f))
+            canvas.drawCircle(ix, iy, ringW / 2f - 0.5f * dp, dotFill)
+            dotBorder.strokeWidth = 2f * dp
+            canvas.drawCircle(ix, iy, ringW / 2f + 2.5f * dp, dotBorder)
+        }
+
+        override fun onTouchEvent(ev: MotionEvent): Boolean {
+            if (ev.action == MotionEvent.ACTION_DOWN || ev.action == MotionEvent.ACTION_MOVE) {
+                val cx = width / 2f; val cy = height / 2f
+                val dx = ev.x - cx;  val dy = ev.y - cy
+                var hue = Math.toDegrees(kotlin.math.atan2(dy.toDouble(), dx.toDouble())).toFloat() + 90f
+                if (hue < 0f) hue += 360f
+                if (hue >= 360f) hue -= 360f
+                pendingHsv[0] = hue
+                invalidate()
+                onSwatchRefresh(pendingColorHex())
+                return true
+            }
+            return super.onTouchEvent(ev)
         }
     }
-    refreshPreview(runCatching { pendingColor.toColorInt() }.getOrDefault("#3D8BFD".toColorInt()))
+    wheelView.layoutParams = LinearLayout.LayoutParams(wheelDiameter, wheelDiameter).also {
+        it.bottomMargin = (20 * dp).toInt()
+    }
 
-    // Swatches row
+    // --- Preset swatches ---
     val swatchRow = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = android.view.Gravity.CENTER
     }
     val swatchViews = mutableListOf<View>()
 
-    fun refreshSwatches(selected: String) {
+    onSwatchRefresh = { selected ->
         swatchViews.forEach { v ->
             val col = v.tag as String
-            v.background = android.graphics.drawable.GradientDrawable().apply {
-                shape = android.graphics.drawable.GradientDrawable.OVAL
+            val sel = col.equals(selected, ignoreCase = true)
+            v.background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
                 setColor(col.toColorInt())
-                if (col.equals(selected, ignoreCase = true))
-                    setStroke((2.5 * dp).toInt(), Color.WHITE)
+                if (sel) setStroke((3 * dp).toInt(), Color.WHITE)
             }
         }
     }
 
     MainActivity.ACCENT_COLORS.forEach { color ->
-        val sz = (32 * dp).toInt()
+        val sz = (34 * dp).toInt()
         val swatch = View(this).apply {
             tag = color
             layoutParams = LinearLayout.LayoutParams(sz, sz).also {
-                it.setMargins((6 * dp).toInt(), 0, (6 * dp).toInt(), 0)
+                it.setMargins((5 * dp).toInt(), 0, (5 * dp).toInt(), 0)
             }
             setOnClickListener {
-                pendingColor = color
-                refreshPreview(color.toColorInt())
-                refreshSwatches(color)
+                val hsv = FloatArray(3)
+                Color.colorToHSV(color.toColorInt(), hsv)
+                pendingHsv[0] = hsv[0]
+                pendingHsv[1] = maxOf(hsv[1], 0.7f)
+                pendingHsv[2] = maxOf(hsv[2], 0.8f)
+                wheelView.invalidate()
+                onSwatchRefresh(color)
             }
         }
         swatchViews.add(swatch)
         swatchRow.addView(swatch)
     }
-    refreshSwatches(pendingColor)
+    onSwatchRefresh(pendingColorHex())
 
-    root.addView(previewBar)
+    root.addView(wheelView)
     root.addView(swatchRow)
 
     AlertDialog.Builder(this)
         .setTitle("Accent color")
         .setView(root)
         .setPositiveButton("Apply") { _, _ ->
-            currentAccentColor = pendingColor
+            currentAccentColor = pendingColorHex()
             saveAccentColorPreference()
             applyAccentColor()
             emailAdapter.notifyDataSetChanged()
@@ -499,9 +570,10 @@ internal fun MainActivity.darkenColor(color: Int, factor: Float = 0.72f): Int = 
 )
 
 internal fun MainActivity.getDialogBackgroundColor(): Int = when (currentTheme) {
-    "light" -> "#F0EEEE".toColorInt()
-    "oled"  -> "#0A0A0A".toColorInt()
-    else    -> "#1E1E1E".toColorInt()
+    "light"  -> "#F0EEEE".toColorInt()
+    "oled"   -> "#0A0A0A".toColorInt()
+    "violet" -> "#140B22".toColorInt()
+    else     -> "#242429".toColorInt()
 }
 
 // ---------------------------------------------------------------------------

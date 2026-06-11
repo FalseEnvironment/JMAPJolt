@@ -1229,11 +1229,13 @@
             android:layout_height="match_parent"
             android:background="#2A2A2A"
             app:headerLayout="@layout/drawer_header"
-            app:itemBackground="@drawable/drawer_item_background"
+            app:itemRippleColor="@android:color/transparent"
             app:itemIconTint="#E0E0E0"
             app:itemTextColor="#E0E0E0"
             app:itemTextAppearanceActive="@style/NavItemActive"
             app:itemTextAppearanceInactive="@style/NavItemInactive"
+            app:itemIconSize="26dp"
+            app:itemMinHeight="56dp"
             app:menu="@menu/drawer_menu" />
 
         <TextView

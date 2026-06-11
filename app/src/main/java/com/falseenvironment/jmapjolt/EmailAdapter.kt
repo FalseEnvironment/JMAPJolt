@@ -144,12 +144,12 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
         textWrap.addView(subjectTv)
         textWrap.addView(previewTv)
 
-        // Right column: date + star
+        // Right column: date (top) + star (bottom, larger hitbox)
         val rightWrap = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.END or Gravity.CENTER_HORIZONTAL
+            gravity = Gravity.END
             layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT)
         }
         val dText = TextView(activity).apply {
             id = 6
@@ -162,15 +162,20 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
                 .apply { topMargin = (4 * dp).toInt() }
         }
+        val starSpacer = android.widget.Space(activity).apply {
+            layoutParams = LinearLayout.LayoutParams(1, 0, 1f)
+        }
+        val starPad = (5 * dp).toInt()
         val starBtn = ImageView(activity).apply {
             id = 7
             setImageResource(R.drawable.ic_lucide_star)
-            val starSize = (20 * dp).toInt()
+            val starSize = (30 * dp).toInt()
             layoutParams = LinearLayout.LayoutParams(starSize, starSize)
-                .apply { topMargin = (8 * dp).toInt() }
+            setPadding(starPad, starPad, starPad, starPad)
             scaleType = ImageView.ScaleType.FIT_CENTER
         }
         rightWrap.addView(dText)
+        rightWrap.addView(starSpacer)
         rightWrap.addView(starBtn)
 
         root.addView(avatarContainer)

@@ -28,12 +28,12 @@
     <!-- Navigation drawer items -->
     <style name="NavItemActive">
         <item name="android:textStyle">bold</item>
-        <item name="android:textSize">14sp</item>
+        <item name="android:textSize">15sp</item>
         <item name="android:letterSpacing">0.01</item>
     </style>
     <style name="NavItemInactive">
         <item name="android:textStyle">normal</item>
-        <item name="android:textSize">14sp</item>
+        <item name="android:textSize">15sp</item>
         <item name="android:letterSpacing">0.01</item>
     </style>
 

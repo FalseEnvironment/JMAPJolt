@@ -1409,7 +1409,7 @@ class MainActivity : AppCompatActivity() {
     private fun looksLikeHtml(body: String): Boolean = HTML_MARKUP_REGEX.containsMatchIn(body)
 
     private fun buildSkeletonHtml(): String {
-        val isDark = currentTheme == "gray" || currentTheme == "oled"
+        val isDark = currentTheme == "gray" || currentTheme == "oled" || currentTheme == "violet"
         val bg = if (currentTheme == "oled") "#000000" else if (isDark) "#1a1a1a" else "#f5f5f5"
         val base = if (currentTheme == "oled") "#111111" else if (isDark) "#2a2a2a" else "#e0e0e0"
         val shine = if (currentTheme == "oled") "#1e1e1e" else if (isDark) "#3a3a3a" else "#f0f0f0"
@@ -1440,7 +1440,7 @@ body{background:$bg;padding:20px}
     }
 
     internal fun buildHtmlContent(rawBody: String, subject: String = ""): String {
-        val isDark = currentTheme == "gray" || currentTheme == "oled"
+        val isDark = currentTheme == "gray" || currentTheme == "oled" || currentTheme == "violet"
         val bgColor = if (currentTheme == "oled") "#000000" else if (isDark) "#1a1a1a" else "#ffffff"
         val textColor = if (isDark) "#e0e0e0" else "#212121"
         val linkColor = currentAccentColor
@@ -2200,6 +2200,7 @@ body{background:$bg;padding:20px}
             }
             val item = menu.add(0, id, menuIndex + index, title)
             item.setIcon(getCategoryIcon(id))
+            item.isCheckable = true
         }
 
         val settingsItem =
@@ -2212,6 +2213,31 @@ body{background:$bg;padding:20px}
         settingsItem.setIcon(R.drawable.ic_lucide_settings)
 
         menu.findItem(selectedFolder)?.isChecked = true
+
+        val dp = resources.displayMetrics.density
+        val accentInt = currentAccentColor.toColorInt()
+        val r = android.graphics.Color.red(accentInt)
+        val g = android.graphics.Color.green(accentInt)
+        val b = android.graphics.Color.blue(accentInt)
+        val cornerR = 999 * dp
+        // Round only the trailing (right) corners; flat at the left screen edge -> tab/arrow shape.
+        // Inset on the right so the accent bar does not run the full item width.
+        val rightInset = (40 * dp).toInt()
+        fun accentShape(alpha: Int): android.graphics.drawable.Drawable {
+            val shape = android.graphics.drawable.GradientDrawable().apply {
+                this.shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                setColor(android.graphics.Color.argb(alpha, r, g, b))
+                cornerRadii = floatArrayOf(0f, 0f, cornerR, cornerR, cornerR, cornerR, 0f, 0f)
+            }
+            return android.graphics.drawable.InsetDrawable(shape, 0, 0, rightInset, 0)
+        }
+        val stateList = android.graphics.drawable.StateListDrawable().apply {
+            addState(intArrayOf(android.R.attr.state_checked), accentShape(255))
+            addState(intArrayOf(android.R.attr.state_activated), accentShape(255))
+            addState(intArrayOf(android.R.attr.state_pressed), accentShape(110))
+            addState(intArrayOf(), android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+        }
+        navigationView.post { navigationView.itemBackground = stateList }
     }
 
     private fun setupAdapters() {
@@ -2493,12 +2519,13 @@ body{background:$bg;padding:20px}
         val themeOptions = listOf(
             getString(R.string.settings_theme_gray),
             getString(R.string.settings_theme_light),
-            getString(R.string.settings_theme_oled)
+            getString(R.string.settings_theme_oled),
+            getString(R.string.settings_theme_violet)
         )
         themeDropdown.setOnClickListener {
             showSettingsDropdown(themeDropdown, themeOptions, themeIdx) { idx ->
                 themeIdx = idx
-                val newTheme = when (idx) { 1 -> "light"; 2 -> "oled"; else -> "gray" }
+                val newTheme = when (idx) { 1 -> "light"; 2 -> "oled"; 3 -> "violet"; else -> "gray" }
                 if (newTheme != currentTheme) {
                     currentTheme = newTheme
                     saveThemePreference()
@@ -2520,7 +2547,8 @@ body{background:$bg;padding:20px}
         val themeLabels = listOf(
             getString(R.string.settings_theme_gray),
             getString(R.string.settings_theme_light),
-            getString(R.string.settings_theme_oled)
+            getString(R.string.settings_theme_oled),
+            getString(R.string.settings_theme_violet)
         )
         themeDropdownText.text = themeLabels.getOrElse(themeIdx) { "" }
     }
@@ -2533,8 +2561,10 @@ body{background:$bg;padding:20px}
         onSelected: (Int) -> Unit
     ) {
         val dp = resources.displayMetrics.density
-        val accentInt = currentAccentColor.toColorInt()
-        val popupBg = darkenColor(accentInt, 0.82f)
+        val popupBg = getDialogBackgroundColor()
+        val isLight = currentTheme == "light"
+        val contentColor = if (isLight) "#212121".toColorInt() else Color.WHITE
+        val selectedTint = if (isLight) 0x14000000 else 0x33FFFFFF
 
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -2565,13 +2595,13 @@ body{background:$bg;padding:20px}
                     background = GradientDrawable().apply {
                         shape = GradientDrawable.RECTANGLE
                         cornerRadius = 11 * dp
-                        setColor(0x33FFFFFF)
+                        setColor(selectedTint)
                     }
                 }
                 icons?.getOrNull(idx)?.let { iconRes ->
                     addView(ImageView(this@MainActivity).apply {
                         setImageResource(iconRes)
-                        imageTintList = ColorStateList.valueOf(Color.WHITE)
+                        imageTintList = ColorStateList.valueOf(contentColor)
                         val sz = (18 * dp).toInt()
                         layoutParams = LinearLayout.LayoutParams(sz, sz).also {
                             it.marginEnd = (12 * dp).toInt()
@@ -2581,14 +2611,14 @@ body{background:$bg;padding:20px}
                 addView(TextView(this@MainActivity).apply {
                     text = label
                     textSize = 14f
-                    setTextColor(Color.WHITE)
+                    setTextColor(contentColor)
                     if (idx == currentIdx) typeface = android.graphics.Typeface.DEFAULT_BOLD
                     layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
                 })
                 if (idx == currentIdx) {
                     addView(ImageView(this@MainActivity).apply {
                         setImageResource(R.drawable.ic_lucide_check)
-                        imageTintList = ColorStateList.valueOf(Color.WHITE)
+                        imageTintList = ColorStateList.valueOf(contentColor)
                         val sz = (18 * dp).toInt()
                         layoutParams = LinearLayout.LayoutParams(sz, sz).also {
                             it.marginStart = (8 * dp).toInt()
@@ -3953,6 +3983,9 @@ body{background:$bg;padding:20px}
             prefs.edit().putLong(KEY_LAST_SYNC_APP_VERSION, currentVersion).apply()
         }
     }
+
+    internal fun getCategoryDisplayName(id: Int): String =
+        categoryNames[id]?.takeIf { it.isNotBlank() } ?: getDefaultCategoryTitle(id)
 
     private fun getDefaultCategoryTitle(id: Int): String {
         return when (id) {
