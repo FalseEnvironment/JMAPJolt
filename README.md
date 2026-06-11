@@ -29,11 +29,12 @@ JMAPJolt was born from a simple thought: there are far too few mobile apps with 
 
 | | |
 |---|---|
-| **Multiple accounts** | Switch between accounts from the drawer |
-| **Custom themes** | Gray, light, and OLED dark, plus an accent color picker |
+| **Multiple accounts** | Unified inbox and switch between accounts from the drawer |
+| **Custom themes** | Legacy gray, light snow, purple iris, and dark OLED, plus an accent color picker |
 | **Swipe actions** | Configurable per direction (delete, archive, mark read, spam) |
 | **Compose** | Rich text editor with a formatting toolbar and attachments |
-| **UnifiedPush** | Push notifications without Google services, with automatic distributor discovery |
+| **Labels** | Custom color-coded labels stored as JMAP keywords, with drawer filtering |
+| **Notification** | Push notifications with JMAP JSON meta or UnifiedPush |
 
 ## Download
 
