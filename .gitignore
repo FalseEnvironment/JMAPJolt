@@ -1,5 +1,6 @@
 # AI tools
 .ai/
+.claude-global/
 CLAUDE.md
 .code-review-graph/
 graphify-out/
@@ -28,6 +29,7 @@ keystore.properties
 *.ap_
 *.dex
 *.class
+*.swp
 
 # Kotlin
 .kotlin/
@@ -39,6 +41,7 @@ keystore.properties
 .vscode/
 bin/
 /nbproject/private/
+*.swp
 
 # OS files
 .DS_Store
@@ -46,3 +49,4 @@ Thumbs.db
 
 # Claude Code local settings (machine-specific)
 .claude/
+.claude-global/

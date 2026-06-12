@@ -94,8 +94,10 @@
     <string name="settings_theme_light">Snow</string>
     <string name="settings_theme_oled">Dark OLED</string>
     <string name="settings_theme_violet">Iris</string>
-    <string name="settings_general">General</string>
-    <string name="settings_general_header">General:</string>
+    <string name="settings_general">Behavior</string>
+    <string name="settings_general_header">Behavior:</string>
+    <string name="settings_edit_labels">Label</string>
+    <string name="settings_edit_labels_button">Edit</string>
     <string name="settings_appearance_header">Appearance:</string>
     <string name="settings_unifiedpush_header">Unified push:</string>
     <string name="settings_load_images">Auto-load images</string>

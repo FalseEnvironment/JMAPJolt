@@ -732,155 +732,6 @@
                         android:layout_height="0dp"
                         android:visibility="gone" />
 
-                    <!-- General accordion section -->
-                    <LinearLayout
-                        android:id="@+id/settingsGeneralContainer"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical">
-
-                        <LinearLayout
-                            android:id="@+id/settingsGeneralHeader"
-                            android:layout_width="match_parent"
-                            android:layout_height="52dp"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal"
-                            android:paddingStart="20dp"
-                            android:paddingEnd="16dp"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:background="?attr/selectableItemBackground">
-
-                            <TextView
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:text="@string/settings_general"
-                                android:textSize="15sp"
-                                android:textStyle="bold" />
-
-                            <ImageView
-                                android:id="@+id/settingsGeneralChevron"
-                                android:layout_width="20dp"
-                                android:layout_height="20dp"
-                                android:src="@drawable/ic_lucide_chevron_down"
-                                android:scaleType="fitCenter"
-                                app:tint="#FFFFFF" />
-
-                        </LinearLayout>
-
-                        <LinearLayout
-                            android:id="@+id/settingsGeneralContent"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="vertical"
-                            android:paddingStart="20dp"
-                            android:paddingEnd="20dp"
-                            android:paddingBottom="12dp"
-                            android:visibility="gone">
-
-                            <androidx.appcompat.widget.SwitchCompat
-                                android:id="@+id/loadImagesSwitch"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="4dp"
-                                android:text="@string/settings_load_images"
-                                android:textOn=""
-                                android:textOff=""
-                                android:textSize="15sp" />
-
-                            <androidx.appcompat.widget.SwitchCompat
-                                android:id="@+id/loadFaviconsSwitch"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="4dp"
-                                android:text="@string/settings_load_favicons"
-                                android:textOn=""
-                                android:textOff=""
-                                android:textSize="15sp" />
-
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="48dp"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal">
-
-                                <TextView
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:text="@string/settings_swipe_left"
-                                    android:textSize="15sp" />
-
-                                <LinearLayout
-                                    android:id="@+id/swipeLeftDropdown"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="40dp"
-                                    android:gravity="center_vertical"
-                                    android:paddingStart="14dp"
-                                    android:paddingEnd="10dp"
-                                    android:orientation="horizontal"
-                                    android:clickable="true"
-                                    android:focusable="true">
-                                    <TextView
-                                        android:id="@+id/swipeLeftDropdownText"
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:textSize="13sp" />
-                                    <ImageView
-                                        android:layout_width="14dp"
-                                        android:layout_height="14dp"
-                                        android:layout_marginStart="6dp"
-                                        android:src="@drawable/ic_lucide_chevron_down"
-                                        android:scaleType="fitCenter" />
-                                </LinearLayout>
-                            </LinearLayout>
-
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="48dp"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal">
-
-                                <TextView
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:text="@string/settings_swipe_right"
-                                    android:textSize="15sp" />
-
-                                <LinearLayout
-                                    android:id="@+id/swipeRightDropdown"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="40dp"
-                                    android:gravity="center_vertical"
-                                    android:paddingStart="14dp"
-                                    android:paddingEnd="10dp"
-                                    android:orientation="horizontal"
-                                    android:clickable="true"
-                                    android:focusable="true">
-                                    <TextView
-                                        android:id="@+id/swipeRightDropdownText"
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:textSize="13sp" />
-                                    <ImageView
-                                        android:layout_width="14dp"
-                                        android:layout_height="14dp"
-                                        android:layout_marginStart="6dp"
-                                        android:src="@drawable/ic_lucide_chevron_down"
-                                        android:scaleType="fitCenter" />
-                                </LinearLayout>
-                            </LinearLayout>
-
-                        </LinearLayout>
-                    </LinearLayout>
-
-                    <View
-                        android:layout_width="match_parent"
-                        android:layout_height="1dp"
-                        android:background="#33FFFFFF" />
-
                     <!-- Appearance accordion section -->
                     <LinearLayout
                         android:id="@+id/settingsThemeContainer"
@@ -987,6 +838,182 @@
                                     android:layout_width="28dp"
                                     android:layout_height="28dp" />
 
+                            </LinearLayout>
+
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="#33FFFFFF" />
+
+                    <!-- General accordion section -->
+                    <LinearLayout
+                        android:id="@+id/settingsGeneralContainer"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <LinearLayout
+                            android:id="@+id/settingsGeneralHeader"
+                            android:layout_width="match_parent"
+                            android:layout_height="52dp"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingStart="20dp"
+                            android:paddingEnd="16dp"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:background="?attr/selectableItemBackground">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="@string/settings_general"
+                                android:textSize="15sp"
+                                android:textStyle="bold" />
+
+                            <ImageView
+                                android:id="@+id/settingsGeneralChevron"
+                                android:layout_width="20dp"
+                                android:layout_height="20dp"
+                                android:src="@drawable/ic_lucide_chevron_down"
+                                android:scaleType="fitCenter"
+                                app:tint="#FFFFFF" />
+
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/settingsGeneralContent"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:paddingStart="20dp"
+                            android:paddingEnd="20dp"
+                            android:paddingBottom="12dp"
+                            android:visibility="gone">
+
+                            <androidx.appcompat.widget.SwitchCompat
+                                android:id="@+id/loadImagesSwitch"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:text="@string/settings_load_images"
+                                android:textOn=""
+                                android:textOff=""
+                                android:textSize="15sp" />
+
+                            <androidx.appcompat.widget.SwitchCompat
+                                android:id="@+id/loadFaviconsSwitch"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:text="@string/settings_load_favicons"
+                                android:textOn=""
+                                android:textOff=""
+                                android:textSize="15sp" />
+
+                            <LinearLayout
+                                android:id="@+id/settingsEditLabelsRow"
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:background="?attr/selectableItemBackground">
+
+                                <TextView
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="@string/settings_edit_labels"
+                                    android:textSize="15sp" />
+
+                                <TextView
+                                    android:id="@+id/settingsEditLabelsButton"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="@string/settings_edit_labels_button"
+                                    android:textSize="14sp"
+                                    android:paddingStart="12dp"
+                                    android:paddingEnd="4dp" />
+                            </LinearLayout>
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal">
+
+                                <TextView
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="@string/settings_swipe_left"
+                                    android:textSize="15sp" />
+
+                                <LinearLayout
+                                    android:id="@+id/swipeLeftDropdown"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="40dp"
+                                    android:gravity="center_vertical"
+                                    android:paddingStart="14dp"
+                                    android:paddingEnd="10dp"
+                                    android:orientation="horizontal"
+                                    android:clickable="true"
+                                    android:focusable="true">
+                                    <TextView
+                                        android:id="@+id/swipeLeftDropdownText"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:textSize="13sp" />
+                                    <ImageView
+                                        android:layout_width="14dp"
+                                        android:layout_height="14dp"
+                                        android:layout_marginStart="6dp"
+                                        android:src="@drawable/ic_lucide_chevron_down"
+                                        android:scaleType="fitCenter" />
+                                </LinearLayout>
+                            </LinearLayout>
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal">
+
+                                <TextView
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="@string/settings_swipe_right"
+                                    android:textSize="15sp" />
+
+                                <LinearLayout
+                                    android:id="@+id/swipeRightDropdown"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="40dp"
+                                    android:gravity="center_vertical"
+                                    android:paddingStart="14dp"
+                                    android:paddingEnd="10dp"
+                                    android:orientation="horizontal"
+                                    android:clickable="true"
+                                    android:focusable="true">
+                                    <TextView
+                                        android:id="@+id/swipeRightDropdownText"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:textSize="13sp" />
+                                    <ImageView
+                                        android:layout_width="14dp"
+                                        android:layout_height="14dp"
+                                        android:layout_marginStart="6dp"
+                                        android:src="@drawable/ic_lucide_chevron_down"
+                                        android:scaleType="fitCenter" />
+                                </LinearLayout>
                             </LinearLayout>
 
                         </LinearLayout>
@@ -1228,6 +1255,8 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:background="#2A2A2A"
+            android:paddingBottom="36dp"
+            android:clipToPadding="false"
             app:headerLayout="@layout/drawer_header"
             app:itemRippleColor="@android:color/transparent"
             app:itemIconTint="#E0E0E0"
@@ -1245,8 +1274,8 @@
             android:layout_gravity="bottom"
             android:elevation="24dp"
             android:gravity="center"
-            android:padding="16dp"
-            android:text="JMAPJolt v0.11"
+            android:padding="8dp"
+            android:text="JMAPJolt v0.13"
             android:textColor="#616161"
             android:textSize="11sp" />
 

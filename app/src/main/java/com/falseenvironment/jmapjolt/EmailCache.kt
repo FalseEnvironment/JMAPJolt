@@ -47,6 +47,9 @@ class EmailCache(private val filesDir: File) {
                         put("seen", e.seen)
                         put("isFavorite", e.isFavorite)
                         put("receivedAt", e.receivedAt)
+                        if (e.labels.isNotEmpty()) {
+                            put("labels", JSONArray().also { l -> e.labels.forEach { l.put(it) } })
+                        }
                         if (e.attachments.isNotEmpty()) {
                             put("attachments", JSONArray().also { atts ->
                                 e.attachments.forEach { att ->
@@ -137,7 +140,10 @@ class EmailCache(private val filesDir: File) {
                 seen = o.optBoolean("seen"),
                 isFavorite = o.optBoolean("isFavorite"),
                 receivedAt = o.optLong("receivedAt"),
-                attachments = atts
+                attachments = atts,
+                labels = o.optJSONArray("labels")?.let { arr2 ->
+                    buildList { for (j in 0 until arr2.length()) arr2.optString(j).takeIf { it.isNotBlank() }?.let { add(it) } }
+                } ?: emptyList()
             ))
         }
     }

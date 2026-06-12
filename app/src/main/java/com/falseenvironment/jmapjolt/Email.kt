@@ -19,5 +19,7 @@ data class DisplayEmail(
     val receivedAt: Long = 0L,
     val toEmail: String = "",
     val attachments: List<EmailAttachmentInfo> = emptyList(),
-    val accountEmail: String = ""
+    val accountEmail: String = "",
+    // Custom JMAP keywords representing user labels (system "$..." keywords excluded).
+    var labels: List<String> = emptyList()
 )

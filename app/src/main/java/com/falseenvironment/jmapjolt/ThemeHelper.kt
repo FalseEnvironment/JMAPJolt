@@ -86,7 +86,10 @@ internal fun MainActivity.applyTheme() {
     val header = navigationView.getHeaderView(0)
     header.setBackgroundColor(bgInt)
     header.findViewById<TextView>(R.id.drawerAccountName)?.setTextColor(textInt)
-    findViewById<TextView>(R.id.drawerVersionText)?.setTextColor(secondaryTextInt)
+    findViewById<TextView>(R.id.drawerVersionText)?.apply {
+        setTextColor(secondaryTextInt)
+        setBackgroundColor(bgInt)
+    }
 
     // Update all main containers
     updateContainerTextColors(onboardingContainer, textInt, secondaryTextInt)
@@ -245,6 +248,15 @@ internal fun MainActivity.applyAccentColor() {
             if (child is TextView) child.setTextColor(Color.WHITE)
         }
     }
+    settingsEditLabelsButton.background = GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        cornerRadius = 999 * d
+        setColor(dropdownBg)
+        setStroke(d.toInt(), dropdownStroke)
+    }
+    settingsEditLabelsButton.setTextColor(Color.WHITE)
+    settingsEditLabelsButton.gravity = android.view.Gravity.CENTER
+    settingsEditLabelsButton.setPadding((14 * d).toInt(), (8 * d).toInt(), (14 * d).toInt(), (8 * d).toInt())
     updateSettingsDropdownDisplays()
 }
 
@@ -275,211 +287,53 @@ internal fun MainActivity.showAccentColorDialog() {
         if (hsv[1] < 0.4f) hsv[1] = 0.85f
         if (hsv[2] < 0.4f) hsv[2] = 0.95f
     }
-    fun pendingColorHex() = "#%06X".format(0xFFFFFF and Color.HSVToColor(pendingHsv))
 
-    // Mutable callback so wheelView can trigger swatch refresh before swatchViews is populated
-    var onSwatchRefresh: ((String) -> Unit) = {}
-
+    val wheel = buildHueWheel(pendingHsv, 224)
     val root = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         gravity = android.view.Gravity.CENTER_HORIZONTAL
         val p = (16 * dp).toInt()
-        setPadding(p, (14 * dp).toInt(), p, (12 * dp).toInt())
+        setPadding(p, (14 * dp).toInt(), p, (4 * dp).toInt())
+        addView(wheel.also { (it.layoutParams as LinearLayout.LayoutParams).bottomMargin = (20 * dp).toInt() })
+        addView(buildPresetSwatchRow(pendingHsv, wheel))
     }
 
-    // --- Circular hue wheel ---
-    val wheelDiameter = (224 * dp).toInt()
-    val wheelView = object : View(this) {
-        private val ringPaint   = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
-        private val fillPaint   = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-        private val dotFill     = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-        private val dotBorder   = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE; color = Color.WHITE
-        }
-
-        override fun onDraw(canvas: Canvas) {
-            val cx = width / 2f; val cy = height / 2f
-            val outerR = minOf(cx, cy) - 6 * dp
-            val innerR = outerR * 0.60f
-            val ringR  = (outerR + innerR) / 2f
-            val ringW  = outerR - innerR
-
-            // Rotate so hue 0 (red) sits at 12-o-clock
-            canvas.save()
-            canvas.rotate(-90f, cx, cy)
-            val hueColors = IntArray(361) { i -> Color.HSVToColor(floatArrayOf(i.toFloat() % 360f, 1f, 1f)) }
-            ringPaint.shader = SweepGradient(cx, cy, hueColors, null)
-            ringPaint.strokeWidth = ringW
-            canvas.drawCircle(cx, cy, ringR, ringPaint)
-            canvas.restore()
-
-            // Center circle — current pending color
-            fillPaint.color = Color.HSVToColor(pendingHsv)
-            canvas.drawCircle(cx, cy, innerR - 4 * dp, fillPaint)
-
-            // Indicator dot on ring at selected hue
-            val rad = Math.toRadians((pendingHsv[0] - 90.0))
-            val ix  = cx + ringR * kotlin.math.cos(rad).toFloat()
-            val iy  = cy + ringR * kotlin.math.sin(rad).toFloat()
-            dotFill.color = Color.WHITE
-            canvas.drawCircle(ix, iy, ringW / 2f + 2.5f * dp, dotFill)
-            dotFill.color = Color.HSVToColor(floatArrayOf(pendingHsv[0], 1f, 0.85f))
-            canvas.drawCircle(ix, iy, ringW / 2f - 0.5f * dp, dotFill)
-            dotBorder.strokeWidth = 2f * dp
-            canvas.drawCircle(ix, iy, ringW / 2f + 2.5f * dp, dotBorder)
-        }
-
-        override fun onTouchEvent(ev: MotionEvent): Boolean {
-            if (ev.action == MotionEvent.ACTION_DOWN || ev.action == MotionEvent.ACTION_MOVE) {
-                val cx = width / 2f; val cy = height / 2f
-                val dx = ev.x - cx;  val dy = ev.y - cy
-                var hue = Math.toDegrees(kotlin.math.atan2(dy.toDouble(), dx.toDouble())).toFloat() + 90f
-                if (hue < 0f) hue += 360f
-                if (hue >= 360f) hue -= 360f
-                pendingHsv[0] = hue
-                invalidate()
-                onSwatchRefresh(pendingColorHex())
-                return true
-            }
-            return super.onTouchEvent(ev)
-        }
+    showCardDialog("Accent color", root, "Apply") {
+        currentAccentColor = hsvHex(pendingHsv)
+        saveAccentColorPreference()
+        applyAccentColor()
+        emailAdapter.notifyDataSetChanged()
+        true
     }
-    wheelView.layoutParams = LinearLayout.LayoutParams(wheelDiameter, wheelDiameter).also {
-        it.bottomMargin = (20 * dp).toInt()
-    }
-
-    // --- Preset swatches ---
-    val swatchRow = LinearLayout(this).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = android.view.Gravity.CENTER
-    }
-    val swatchViews = mutableListOf<View>()
-
-    onSwatchRefresh = { selected ->
-        swatchViews.forEach { v ->
-            val col = v.tag as String
-            val sel = col.equals(selected, ignoreCase = true)
-            v.background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(col.toColorInt())
-                if (sel) setStroke((3 * dp).toInt(), Color.WHITE)
-            }
-        }
-    }
-
-    MainActivity.ACCENT_COLORS.forEach { color ->
-        val sz = (34 * dp).toInt()
-        val swatch = View(this).apply {
-            tag = color
-            layoutParams = LinearLayout.LayoutParams(sz, sz).also {
-                it.setMargins((5 * dp).toInt(), 0, (5 * dp).toInt(), 0)
-            }
-            setOnClickListener {
-                val hsv = FloatArray(3)
-                Color.colorToHSV(color.toColorInt(), hsv)
-                pendingHsv[0] = hsv[0]
-                pendingHsv[1] = maxOf(hsv[1], 0.7f)
-                pendingHsv[2] = maxOf(hsv[2], 0.8f)
-                wheelView.invalidate()
-                onSwatchRefresh(color)
-            }
-        }
-        swatchViews.add(swatch)
-        swatchRow.addView(swatch)
-    }
-    onSwatchRefresh(pendingColorHex())
-
-    root.addView(wheelView)
-    root.addView(swatchRow)
-
-    AlertDialog.Builder(this)
-        .setTitle("Accent color")
-        .setView(root)
-        .setPositiveButton("Apply") { _, _ ->
-            currentAccentColor = pendingColorHex()
-            saveAccentColorPreference()
-            applyAccentColor()
-            emailAdapter.notifyDataSetChanged()
-        }
-        .setNegativeButton("Cancel", null)
-        .show()
 }
 
 internal fun MainActivity.showAccountColorDialog(email: String, onColorSet: () -> Unit) {
     val dp = resources.displayMetrics.density
-    var pendingColor = getAccountColor(email)
 
+    val pendingHsv = FloatArray(3).also { hsv ->
+        Color.colorToHSV(getAccountColor(email), hsv)
+        if (hsv[1] < 0.4f) hsv[1] = 0.85f
+        if (hsv[2] < 0.4f) hsv[2] = 0.95f
+    }
+
+    val wheel = buildHueWheel(pendingHsv, 224)
     val root = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
+        gravity = android.view.Gravity.CENTER_HORIZONTAL
         val p = (16 * dp).toInt()
-        setPadding(p, (14 * dp).toInt(), p, (8 * dp).toInt())
+        setPadding(p, (14 * dp).toInt(), p, (4 * dp).toInt())
+        addView(wheel.also { (it.layoutParams as LinearLayout.LayoutParams).bottomMargin = (20 * dp).toInt() })
+        addView(buildPresetSwatchRow(pendingHsv, wheel))
     }
 
-    val previewBar = View(this).apply {
-        layoutParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, (44 * dp).toInt()
-        ).also { it.bottomMargin = (16 * dp).toInt() }
+    showCardDialog(email.substringBefore("@"), root, "Apply") {
+        val prefs = getSharedPreferences(MainActivity.PREFS_NAME, android.content.Context.MODE_PRIVATE)
+        prefs.edit().putInt("account_color_$email", Color.HSVToColor(pendingHsv)).apply()
+        emailAdapter.notifyDataSetChanged()
+        renderAccountHeader()
+        onColorSet()
+        true
     }
-    fun refreshPreview(color: Int) {
-        previewBar.background = android.graphics.drawable.GradientDrawable().apply {
-            shape = android.graphics.drawable.GradientDrawable.RECTANGLE
-            cornerRadius = 8 * dp
-            setColor(color)
-        }
-    }
-    refreshPreview(pendingColor)
-
-    val swatchRow = LinearLayout(this).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = android.view.Gravity.CENTER
-    }
-    val swatchViews = mutableListOf<View>()
-
-    fun refreshSwatches(selected: Int) {
-        swatchViews.forEach { v ->
-            val col = v.tag as Int
-            v.background = android.graphics.drawable.GradientDrawable().apply {
-                shape = android.graphics.drawable.GradientDrawable.OVAL
-                setColor(col)
-                if (col == selected) setStroke((2.5 * dp).toInt(), Color.WHITE)
-            }
-        }
-    }
-
-    MainActivity.ACCENT_COLORS.forEach { colorHex ->
-        val colorInt = colorHex.toColorInt()
-        val sz = (32 * dp).toInt()
-        val swatch = View(this).apply {
-            tag = colorInt
-            layoutParams = LinearLayout.LayoutParams(sz, sz).also {
-                it.setMargins((6 * dp).toInt(), 0, (6 * dp).toInt(), 0)
-            }
-            setOnClickListener {
-                pendingColor = colorInt
-                refreshPreview(colorInt)
-                refreshSwatches(colorInt)
-            }
-        }
-        swatchViews.add(swatch)
-        swatchRow.addView(swatch)
-    }
-    refreshSwatches(pendingColor)
-
-    root.addView(previewBar)
-    root.addView(swatchRow)
-
-    AlertDialog.Builder(this)
-        .setTitle(email.substringBefore("@"))
-        .setView(root)
-        .setPositiveButton("Apply") { _, _ ->
-            val prefs = getSharedPreferences(MainActivity.PREFS_NAME, android.content.Context.MODE_PRIVATE)
-            prefs.edit().putInt("account_color_$email", pendingColor).apply()
-            emailAdapter.notifyDataSetChanged()
-            renderAccountHeader()
-            onColorSet()
-        }
-        .setNegativeButton("Cancel", null)
-        .show()
 }
 
 /** Re-tints the toolbar navigation icon (hamburger or back-arrow) to [color]. */

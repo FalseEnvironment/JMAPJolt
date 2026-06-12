@@ -40,12 +40,13 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
         .getBoolean("load_favicons", false)
 
     @android.annotation.SuppressLint("ResourceType")
-    inner class EmailHolder(root: LinearLayout) : RecyclerView.ViewHolder(root) {
+    inner class EmailHolder(root: ViewGroup) : RecyclerView.ViewHolder(root) {
         val colorStrip: android.view.View = root.findViewById(20)
         val starButton: ImageView = root.findViewById(7)
         val avatarContainer: FrameLayout = root.findViewById(9)
         val avatar: TextView = root.findViewById(5)
         val avatarImage: ImageView = root.findViewById(8)
+        val labelRow: LinearLayout = root.findViewById(21)
         val senderText: TextView = root.findViewById(11)
         val title: TextView = root.findViewById(1)   // subject
         val subtitle: TextView = root.findViewById(2) // preview
@@ -55,12 +56,9 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
     @android.annotation.SuppressLint("ResourceType")
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): EmailHolder {
         val dp = parent.context.resources.displayMetrics.density
-        val root = LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.TOP
+        val root = FrameLayout(activity).apply {
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-            setPadding((12 * dp).toInt(), (12 * dp).toInt(), (12 * dp).toInt(), (12 * dp).toInt())
             // Ripple feedback on tap (MD3 state layer)
             background = android.graphics.drawable.RippleDrawable(
                 android.content.res.ColorStateList.valueOf(0x1AFFFFFF),
@@ -69,17 +67,30 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
             )
         }
 
-        // Account color strip (left edge, 3dp wide, slightly rounded)
+        val contentLayout = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.TOP
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            setPadding((12 * dp).toInt(), (12 * dp).toInt(), (12 * dp).toInt(), (12 * dp).toInt())
+        }
+
+        // Account color strip (left edge, 3dp wide, slightly rounded) - positioned overlay start
         val colorStrip = android.view.View(activity).apply {
             id = 20
-            layoutParams = LinearLayout.LayoutParams((3 * dp).toInt(), ViewGroup.LayoutParams.MATCH_PARENT)
-                .apply { marginEnd = (8 * dp).toInt(); topMargin = (4 * dp).toInt(); bottomMargin = (4 * dp).toInt() }
+            layoutParams = FrameLayout.LayoutParams((3 * dp).toInt(), ViewGroup.LayoutParams.MATCH_PARENT).apply {
+                gravity = Gravity.START
+                topMargin = (12 * dp).toInt()
+                bottomMargin = (12 * dp).toInt()
+                marginStart = (4 * dp).toInt()
+            }
             background = android.graphics.drawable.GradientDrawable().apply {
                 shape = android.graphics.drawable.GradientDrawable.RECTANGLE
                 cornerRadius = 999 * dp
             }
             visibility = android.view.View.GONE
         }
+        root.addView(contentLayout)
         root.addView(colorStrip)
 
         // Avatar circle — 44dp (meets 44pt touch target)
@@ -160,7 +171,40 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
             letterSpacing = 0.01f
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
+        // Up to 3 label tag icons (plus a "+" overflow marker) left of the time.
+        val labelRowView = LinearLayout(activity).apply {
+            id = 21
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        repeat(3) {
+            labelRowView.addView(ImageView(activity).apply {
+                setImageResource(R.drawable.ic_lucide_tag)
+                val sz = (14 * dp).toInt()
+                layoutParams = LinearLayout.LayoutParams(sz, sz)
+                    .apply { marginEnd = (4 * dp).toInt() }
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                visibility = android.view.View.GONE
+            })
+        }
+        labelRowView.addView(TextView(activity).apply {
+            text = "+"
+            textSize = 12f
+            setTypeface(null, Typeface.BOLD)
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                .apply { marginEnd = (4 * dp).toInt() }
+            visibility = android.view.View.GONE
+        })
+        val dateRow = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL or Gravity.END
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
                 .apply { topMargin = (4 * dp).toInt() }
+            addView(labelRowView)
+            addView(dText)
         }
         val starSpacer = android.widget.Space(activity).apply {
             layoutParams = LinearLayout.LayoutParams(1, 0, 1f)
@@ -174,13 +218,13 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
             setPadding(starPad, starPad, starPad, starPad)
             scaleType = ImageView.ScaleType.FIT_CENTER
         }
-        rightWrap.addView(dText)
+        rightWrap.addView(dateRow)
         rightWrap.addView(starSpacer)
         rightWrap.addView(starBtn)
 
-        root.addView(avatarContainer)
-        root.addView(textWrap)
-        root.addView(rightWrap)
+        contentLayout.addView(avatarContainer)
+        contentLayout.addView(textWrap)
+        contentLayout.addView(rightWrap)
         return EmailHolder(root)
     }
 
@@ -249,6 +293,22 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
             formatRelativeDate(item.receivedAt)
         } else {
             ""
+        }
+
+        val rowLabels = activity.labelsOf(item)
+        for (i in 0..2) {
+            val iv = holder.labelRow.getChildAt(i) as ImageView
+            val l = rowLabels.getOrNull(i)
+            if (l != null) {
+                iv.visibility = android.view.View.VISIBLE
+                iv.imageTintList = ColorStateList.valueOf(l.colorHex.toColorInt())
+            } else {
+                iv.visibility = android.view.View.GONE
+            }
+        }
+        (holder.labelRow.getChildAt(3) as TextView).apply {
+            visibility = if (rowLabels.size > 3) android.view.View.VISIBLE else android.view.View.GONE
+            setTextColor(secondaryColor)
         }
 
         holder.starButton.imageTintList = ColorStateList.valueOf(

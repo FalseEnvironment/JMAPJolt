@@ -47,7 +47,8 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
         val fullBody: String = "",
         val receivedAt: Long = 0L,
         val toEmail: String = "",
-        val attachments: List<EmailAttachmentInfo> = emptyList()
+        val attachments: List<EmailAttachmentInfo> = emptyList(),
+        val keywords: Set<String> = emptySet()
     )
 
     data class ConnectResult(
@@ -172,7 +173,8 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
                     fromEmail = fromEmail, preview = email.preview ?: "",
                     seen = isSeen, isStarred = isStarred, fullBody = body,
                     receivedAt = email.receivedAt?.toEpochMilli() ?: 0L,
-                    toEmail = email.to?.firstOrNull()?.email ?: "", attachments = atts)
+                    toEmail = email.to?.firstOrNull()?.email ?: "", attachments = atts,
+                    keywords = customKeywords(email.keywords))
             }
         }
     }
@@ -241,7 +243,8 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
                     seen = isSeen,
                     isStarred = isStarred,
                     receivedAt = email.receivedAt?.toEpochMilli() ?: 0L,
-                    attachments = atts
+                    attachments = atts,
+                    keywords = customKeywords(email.keywords)
                 )
             }
         }
@@ -303,10 +306,15 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
                 isStarred = isStarred,
                 receivedAt = email.receivedAt?.toEpochMilli() ?: 0L,
                 toEmail = toEmail,
-                attachments = atts
+                attachments = atts,
+                keywords = customKeywords(email.keywords)
             )
         }
     }
+
+    /** Non-system keywords ("$seen", "$flagged", ... excluded) = user labels. */
+    private fun customKeywords(keywords: Map<String, Boolean>?): Set<String> =
+        keywords?.keys?.filter { !it.startsWith("$") }?.toSet() ?: emptySet()
 
     data class MailboxInfo(val id: String, val name: String, val role: String?)
 
@@ -443,6 +451,119 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
             } catch (e: Exception) {
                 Log.e(TAG, "setFavorite failed", e)
                 false
+            }
+        }
+    }
+
+    /** Adds or removes an arbitrary (label) keyword on an email. */
+    suspend fun setKeyword(
+        connectedAccount: ConnectedAccount,
+        emailId: String,
+        keyword: String,
+        value: Boolean
+    ): Boolean = withContext(Dispatchers.IO) {
+        val client = JmapClient(connectedAccount.email, connectedAccount.password, connectedAccount.sessionUrl.toHttpUrlOrNull()!!)
+        client.use { jmapClient ->
+            val session = jmapClient.getSession().get(12, TimeUnit.SECONDS)
+            val accountId = session.getPrimaryAccount(MailAccountCapability::class.java)
+                ?: return@withContext false
+
+            val patch: Map<String, Any> = if (value) {
+                mapOf("keywords/$keyword" to true)
+            } else {
+                val getCall = rs.ltt.jmap.common.method.call.email.GetEmailMethodCall.builder()
+                    .accountId(accountId)
+                    .ids(arrayOf(emailId))
+                    .properties(arrayOf("id", "keywords"))
+                    .build()
+                val getResponse = jmapClient.call(getCall).get()
+                    .getMain(rs.ltt.jmap.common.method.response.email.GetEmailMethodResponse::class.java)
+                val current = getResponse.list.firstOrNull()?.keywords ?: emptyMap()
+                val newKeywords = current.filterKeys { it != keyword }
+                mapOf("keywords" to newKeywords)
+            }
+            val update = mapOf(emailId to patch)
+
+            val setCall = rs.ltt.jmap.common.method.call.email.SetEmailMethodCall.builder()
+                .accountId(accountId)
+                .update(update as Map<String, Map<String, Any>>)
+                .build()
+
+            try {
+                jmapClient.call(setCall).get()
+                true
+            } catch (e: Exception) {
+                Log.e(TAG, "setKeyword failed", e)
+                false
+            }
+        }
+    }
+
+    /** Emails carrying a given (label) keyword, excluding trash and junk. */
+    suspend fun fetchEmailsByKeyword(
+        connectedAccount: ConnectedAccount,
+        keyword: String
+    ): List<EmailSummary> = withContext(Dispatchers.IO) {
+        val client = JmapClient(connectedAccount.email, connectedAccount.password, connectedAccount.sessionUrl.toHttpUrlOrNull()!!)
+        client.use { jmapClient ->
+            val session = jmapClient.getSession().get(12, TimeUnit.SECONDS)
+            val accountId = session.getPrimaryAccount(MailAccountCapability::class.java)
+                ?: return@withContext emptyList()
+
+            val excludeIds = (
+                queryMailboxIds(jmapClient, accountId, JSONObject().put("role", "trash")) +
+                queryMailboxIds(jmapClient, accountId, JSONObject().put("role", "junk"))
+            ).distinct().toTypedArray()
+
+            val filter = rs.ltt.jmap.common.entity.filter.EmailFilterCondition.builder()
+                .hasKeyword(keyword)
+                .also { if (excludeIds.isNotEmpty()) it.inMailboxOtherThan(excludeIds) }
+                .build()
+
+            val queryCall = rs.ltt.jmap.common.method.call.email.QueryEmailMethodCall.builder()
+                .accountId(accountId)
+                .filter(filter)
+                .sort(arrayOf(rs.ltt.jmap.common.entity.Comparator("receivedAt", false)))
+                .limit(50L)
+                .build()
+
+            val queryResponse = jmapClient.call(queryCall).get().getMain(rs.ltt.jmap.common.method.response.email.QueryEmailMethodResponse::class.java)
+            val ids = queryResponse.ids
+            if (ids.isNullOrEmpty()) return@withContext emptyList()
+
+            val getCall = rs.ltt.jmap.common.method.call.email.GetEmailMethodCall.builder()
+                .accountId(accountId)
+                .ids(ids)
+                .properties(arrayOf("id", "subject", "from", "to", "preview", "keywords", "receivedAt", "attachments"))
+                .build()
+
+            val getResponse = jmapClient.call(getCall).get().getMain(rs.ltt.jmap.common.method.response.email.GetEmailMethodResponse::class.java)
+
+            return@withContext getResponse.list.map { email ->
+                val fromEmail = email.from?.firstOrNull()?.email ?: ""
+                val fromName = email.from?.firstOrNull()?.name ?: ""
+                val atts = email.attachments?.mapNotNull { part ->
+                    val blobId = part.blobId ?: return@mapNotNull null
+                    EmailAttachmentInfo(
+                        blobId = blobId,
+                        name = part.name ?: "attachment",
+                        mimeType = part.type ?: "application/octet-stream",
+                        size = part.size ?: 0L
+                    )
+                } ?: emptyList()
+                EmailSummary(
+                    id = email.id,
+                    subject = email.subject ?: "(No Subject)",
+                    from = if (fromName.isNotBlank()) fromName else fromEmail,
+                    fromEmail = fromEmail,
+                    preview = email.preview ?: "",
+                    seen = email.keywords?.containsKey("\$seen") == true,
+                    isStarred = email.keywords?.containsKey("\$flagged") == true,
+                    receivedAt = email.receivedAt?.toEpochMilli() ?: 0L,
+                    toEmail = email.to?.firstOrNull()?.email ?: "",
+                    attachments = atts,
+                    keywords = customKeywords(email.keywords)
+                )
             }
         }
     }

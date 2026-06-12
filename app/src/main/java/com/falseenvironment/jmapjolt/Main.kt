@@ -188,6 +188,7 @@ class MainActivity : AppCompatActivity() {
     internal lateinit var status: TextView
     internal lateinit var customTopBar: LinearLayout
     internal lateinit var topBarAccentArea: LinearLayout
+    internal lateinit var settingsEditLabelsButton: TextView
     internal lateinit var folderLabel: TextView
     internal lateinit var searchBarMenuIcon: ImageView
     internal lateinit var searchBarTitle: TextView
@@ -259,6 +260,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var accentColorRow: LinearLayout
     internal var currentAccentColor: String = "#3D8BFD"
 
+    /** User labels (ordered) + drawer menu ids assigned to each label keyword. */
+    internal val labels = mutableListOf<EmailLabel>()
+    internal val accountLabelsCache = mutableMapOf<String, List<EmailLabel>>()
+    internal val labelNavIds = linkedMapOf<Int, String>()
+    internal lateinit var detailLabelRowView: LinearLayout
+    private var labelDragHelper: ItemTouchHelper? = null
+
     private val categoryOrder =
             mutableListOf(
                     R.id.nav_inbox,
@@ -286,6 +294,7 @@ class MainActivity : AppCompatActivity() {
     internal val selectedEmails = mutableSetOf<String>()
     internal val baseEmails = mutableListOf<DisplayEmail>() // unfiltered list for search
     private var isSearchActive = false
+    private var wasImeVisible = false
     private lateinit var selectionBarContainer: LinearLayout
     internal lateinit var selectionCountText: TextView
     internal lateinit var selectionCloseBtn: ImageView
@@ -442,6 +451,7 @@ class MainActivity : AppCompatActivity() {
         quoteIndicatorLabel = findViewById(R.id.quoteIndicatorLabel)
         quoteIndicatorRemove = findViewById(R.id.quoteIndicatorRemove)
         quoteIndicatorDivider = findViewById(R.id.quoteIndicatorDivider)
+        settingsEditLabelsButton = findViewById(R.id.settingsEditLabelsButton)
         quoteIndicatorRemove.setOnClickListener { clearPendingQuote() }
         val drawerHeader = navigationView.getHeaderView(0)
         drawerAccountName = drawerHeader.findViewById(R.id.drawerAccountName)
@@ -475,6 +485,7 @@ class MainActivity : AppCompatActivity() {
         setupEmailDetailView()
         setupComposeView()
         loadCategoryPreferences()
+        loadLabels()
         setupAdapters()
         setupSwipeSpinners()
         setupThemeSpinner()
@@ -513,6 +524,18 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         })
+
+        // Closing the keyboard (single back press) also exits search: chips and
+        // input disappear without needing a second back press.
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(drawerLayout) { _, insets ->
+            val imeVisible = insets.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime())
+            if (wasImeVisible && !imeVisible && isSearchActive &&
+                searchInput.text.isNullOrEmpty()) {
+                deactivateSearch()
+            }
+            wasImeVisible = imeVisible
+            insets
+        }
 
         setupOnboardingPager()
         drawerAccountRow.setOnClickListener {
@@ -677,6 +700,7 @@ class MainActivity : AppCompatActivity() {
             if (result.success && result.connectedAccount != null) {
                 connectedAccount = result.connectedAccount
                 currentAccountEmail = email
+                loadLabels()
                 persistConnectedAccount(result.connectedAccount, server)
                 renderAccountHeader()
                 drawerAccountName.text = email
@@ -851,6 +875,7 @@ class MainActivity : AppCompatActivity() {
                     val idx = savedAccounts.indexOfFirst { it.email.equals(newAccount.email, ignoreCase = true) }
                     if (idx >= 0) savedAccounts[idx] = entry else savedAccounts.add(entry)
                     currentAccountEmail = newAccount.email
+                    loadLabels()
                     saveAccounts()
                     connectedAccount = newAccount
                     refreshInboxNow()
@@ -951,6 +976,42 @@ class MainActivity : AppCompatActivity() {
         detailMoveButton = detailActionIcon(R.drawable.ic_lucide_folder_input, "Move to") { moveDetailEmail(it) }
         detailStarButton = detailActionIcon(R.drawable.ic_lucide_star, "Favorite") { toggleDetailFavorite(it) }
         detailMoreButton = detailActionIcon(R.drawable.ic_lucide_more_vertical, "More") { showDetailOverflowMenu() }
+        // Row of labels next to the star button
+        detailLabelRowView = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            isClickable = true
+            isFocusable = true
+            background = ContextCompat.getDrawable(
+                this@MainActivity,
+                android.util.TypedValue().also {
+                    theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, it, true)
+                }.resourceId
+            )
+            setOnClickListener { currentDetailEmail?.let { showLabelPicker(listOf(it.id)) } }
+            val p = (4 * dp).toInt()
+            setPadding(p, p, p, p)
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).also {
+                it.marginStart = (4 * dp).toInt()
+            }
+            repeat(3) {
+                addView(ImageView(this@MainActivity).apply {
+                    setImageResource(R.drawable.ic_lucide_tag)
+                    val sz = (20 * dp).toInt()
+                    layoutParams = LinearLayout.LayoutParams(sz, sz).also { it.marginEnd = (2 * dp).toInt() }
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                })
+            }
+            addView(TextView(this@MainActivity).apply {
+                text = "+"
+                textSize = 14f
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).also {
+                    it.marginEnd = (2 * dp).toInt()
+                }
+            })
+            visibility = View.GONE
+        }
 
         // Row 1: subject + favorite star.
         detailSubject = TextView(this).apply {
@@ -967,6 +1028,7 @@ class MainActivity : AppCompatActivity() {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
             )
             addView(detailSubject)
+            addView(detailLabelRowView)
             addView(detailStarButton)
         })
 
@@ -1269,20 +1331,49 @@ class MainActivity : AppCompatActivity() {
             listOf(
                 if (inArchive) "Unarchive" else getString(R.string.swipe_action_archive),
                 "Forward",
-                "Move to"
+                "Move to",
+                "Label"
             ),
             -1,
             icons = listOf(
                 if (inArchive) R.drawable.ic_lucide_archive_restore else R.drawable.ic_lucide_archive,
                 R.drawable.ic_lucide_forward,
-                R.drawable.ic_lucide_folder_input
+                R.drawable.ic_lucide_folder_input,
+                R.drawable.ic_lucide_tag
             )
         ) { idx ->
             when (idx) {
                 0 -> if (inArchive) unarchiveDetailEmail(email) else archiveDetailEmail(email)
                 1 -> startForward(email)
                 2 -> moveDetailEmail(email)
+                3 -> showLabelPicker(listOf(email.id))
             }
+        }
+    }
+
+    internal fun updateDetailLabelIcon() {
+        if (!::detailLabelRowView.isInitialized) return
+        val email = currentDetailEmail ?: return
+        val rowLabels = labelsOf(email)
+        if (rowLabels.isEmpty()) {
+            detailLabelRowView.visibility = View.GONE
+            return
+        }
+        detailLabelRowView.visibility = View.VISIBLE
+        for (i in 0..2) {
+            val iv = detailLabelRowView.getChildAt(i) as ImageView
+            val l = rowLabels.getOrNull(i)
+            if (l != null) {
+                iv.visibility = View.VISIBLE
+                iv.imageTintList = ColorStateList.valueOf(l.colorHex.toColorInt())
+            } else {
+                iv.visibility = View.GONE
+            }
+        }
+        (detailLabelRowView.getChildAt(3) as TextView).apply {
+            visibility = if (rowLabels.size > 3) View.VISIBLE else View.GONE
+            val isLight = currentTheme == "light"
+            setTextColor(if (isLight) "#757575".toColorInt() else "#9E9E9E".toColorInt())
         }
     }
 
@@ -1667,6 +1758,7 @@ body{background:$bg;padding:20px}
         listOf(detailReplyButton, detailForwardButton, detailArchiveButton,
                detailTrashButton, detailMoveButton, detailMoreButton).forEach { it.imageTintList = actionTint }
         updateDetailStarIcon(email.isFavorite)
+        updateDetailLabelIcon()
 
         // Header height is content-dependent now (subject wraps): sync the body
         // inset and the swipe-from-header zone once it is laid out.
@@ -2064,6 +2156,12 @@ body{background:$bg;padding:20px}
 
     private fun bindSettingsActions() {
         accentColorRow.setOnClickListener { showAccentColorDialog() }
+        findViewById<LinearLayout>(R.id.settingsEditLabelsRow).setOnClickListener {
+            showLabelEditorDialog()
+        }
+        settingsEditLabelsButton.apply {
+            setOnClickListener { showLabelEditorDialog() }
+        }
 
         unifiedPushSwitch.setOnCheckedChangeListener { _: CompoundButton, enabled: Boolean ->
             saveUnifiedPushEnabled(enabled)
@@ -2172,9 +2270,15 @@ body{background:$bg;padding:20px}
         }
     }
 
+    /** Extension-visible wrapper (label helpers live in LabelHelper.kt). */
+    internal fun rebuildDrawerMenuPublic() = rebuildDrawerMenu()
+
     private fun rebuildDrawerMenu() {
         val menu = navigationView.menu
         menu.clear()
+        // Per-item icon colors (labels): disable the global tint and tint manually.
+        navigationView.itemIconTintList = null
+        val defaultIconTint = "#E0E0E0".toColorInt()
 
         var menuIndex = 0
         if (savedAccounts.size > 1) {
@@ -2187,6 +2291,7 @@ body{background:$bg;padding:20px}
             }
             menu.add(0, R.id.nav_unified_inbox, menuIndex++, unifiedTitle)
                 .setIcon(R.drawable.ic_lucide_inbox)
+                .icon?.mutate()?.setTint(defaultIconTint)
         }
 
         categoryOrder.forEachIndexed { index, id ->
@@ -2200,6 +2305,27 @@ body{background:$bg;padding:20px}
             }
             val item = menu.add(0, id, menuIndex + index, title)
             item.setIcon(getCategoryIcon(id))
+            item.icon?.mutate()?.setTint(defaultIconTint)
+            item.isCheckable = true
+        }
+
+        // User labels: colored tag icons, ordered; long-press drag reorders them.
+        var orderIdx = menuIndex + categoryOrder.size
+        val knownKeywords = labels.map { it.keyword }.toSet()
+        labelNavIds.keys.retainAll { labelNavIds[it] in knownKeywords }
+        labels.forEach { label ->
+            val navId = labelNavIds.entries.find { it.value == label.keyword }?.key
+                ?: View.generateViewId().also { labelNavIds[it] = label.keyword }
+            val title: CharSequence = if (navId == selectedFolder) {
+                android.text.SpannableString(label.name).apply {
+                    setSpan(android.text.style.StyleSpan(Typeface.BOLD), 0, length, 0)
+                }
+            } else {
+                label.name
+            }
+            val item = menu.add(0, navId, orderIdx++, title)
+            item.setIcon(R.drawable.ic_lucide_tag)
+            item.icon?.mutate()?.setTint(label.colorHex.toColorInt())
             item.isCheckable = true
         }
 
@@ -2207,12 +2333,14 @@ body{background:$bg;padding:20px}
                 menu.add(
                         0,
                         R.id.nav_settings,
-                        categoryOrder.size + 1,
+                        orderIdx + 1,
                         getString(R.string.settings_title)
                 )
         settingsItem.setIcon(R.drawable.ic_lucide_settings)
+        settingsItem.icon?.mutate()?.setTint(defaultIconTint)
 
         menu.findItem(selectedFolder)?.isChecked = true
+        attachLabelDrag()
 
         val dp = resources.displayMetrics.density
         val accentInt = currentAccentColor.toColorInt()
@@ -2249,6 +2377,81 @@ body{background:$bg;padding:20px}
     }
 
     private fun attachCategoryDrag() {}
+
+    /** Long-press drag to reorder label rows inside the drawer's internal RecyclerView. */
+    private fun attachLabelDrag() {
+        if (labelDragHelper != null) return
+        val rv = navigationView.getChildAt(0) as? RecyclerView ?: return
+
+        fun itemIdOf(vh: RecyclerView.ViewHolder): Int? {
+            val itemView = vh.itemView as? androidx.appcompat.view.menu.MenuView.ItemView ?: return null
+            return (itemView.itemData as? MenuItem)?.itemId
+        }
+
+        val callback = object : ItemTouchHelper.Callback() {
+            override fun isLongPressDragEnabled() = true
+            override fun isItemViewSwipeEnabled() = false
+
+            override fun getMovementFlags(
+                recyclerView: RecyclerView,
+                viewHolder: RecyclerView.ViewHolder
+            ): Int {
+                val id = itemIdOf(viewHolder) ?: return 0
+                return if (labelNavIds.containsKey(id))
+                    makeMovementFlags(ItemTouchHelper.UP or ItemTouchHelper.DOWN, 0)
+                else 0
+            }
+
+            override fun canDropOver(
+                recyclerView: RecyclerView,
+                current: RecyclerView.ViewHolder,
+                target: RecyclerView.ViewHolder
+            ): Boolean {
+                val id = itemIdOf(target) ?: return false
+                return labelNavIds.containsKey(id)
+            }
+
+            override fun onMove(
+                recyclerView: RecyclerView,
+                viewHolder: RecyclerView.ViewHolder,
+                target: RecyclerView.ViewHolder
+            ): Boolean {
+                val fromKw = itemIdOf(viewHolder)?.let { labelNavIds[it] } ?: return false
+                val toKw = itemIdOf(target)?.let { labelNavIds[it] } ?: return false
+                val from = labels.indexOfFirst { it.keyword == fromKw }
+                val to = labels.indexOfFirst { it.keyword == toKw }
+                if (from < 0 || to < 0 || from == to) return false
+                labels.add(to, labels.removeAt(from))
+                // Don't save on every step – only on drop (clearView).
+                recyclerView.adapter?.notifyItemMoved(
+                    viewHolder.bindingAdapterPosition, target.bindingAdapterPosition
+                )
+                return true
+            }
+
+            override fun onSelectedChanged(viewHolder: RecyclerView.ViewHolder?, actionState: Int) {
+                super.onSelectedChanged(viewHolder, actionState)
+                if (actionState == ItemTouchHelper.ACTION_STATE_DRAG) {
+                    viewHolder?.itemView?.performHapticFeedback(
+                        android.view.HapticFeedbackConstants.LONG_PRESS
+                    )
+                    viewHolder?.itemView?.alpha = 0.7f
+                }
+            }
+
+            override fun clearView(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder) {
+                super.clearView(recyclerView, viewHolder)
+                viewHolder.itemView.alpha = 1f
+                // Persist new order and immediately re-sync the drawer menu (no post{}
+                // so there is no visible delay between releasing the drag and the menu updating).
+                saveLabels()
+                rebuildDrawerMenu()
+            }
+
+            override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {}
+        }
+        labelDragHelper = ItemTouchHelper(callback).also { it.attachToRecyclerView(rv) }
+    }
 
     private fun attachMailSwipe() {
         val callback =
@@ -2918,7 +3121,8 @@ body{background:$bg;padding:20px}
         val filtered = if (query.isBlank()) source else source.filter {
             it.subject.contains(query, ignoreCase = true) ||
             it.from.contains(query, ignoreCase = true) ||
-            it.preview.contains(query, ignoreCase = true)
+            it.preview.contains(query, ignoreCase = true) ||
+            labelsOf(it).any { label -> label.name.contains(query, ignoreCase = true) }
         }
         emails.clear()
         emails.addAll(filtered)
@@ -3415,6 +3619,7 @@ body{background:$bg;padding:20px}
         val isFav = selectedFolder == R.id.nav_favourite
         val isInbox = selectedFolder == R.id.nav_inbox
         val isUnifiedInbox = selectedFolder == R.id.nav_unified_inbox
+        val labelKeyword = labelNavIds[selectedFolder]
         val folderTitle = getCurrentMailboxTitle()
 
         syncJob =
@@ -3440,7 +3645,8 @@ body{background:$bg;padding:20px}
                                                 e.preview, e.fullBody, e.seen, e.isStarred,
                                                 e.receivedAt, e.toEmail,
                                                 attachments = e.attachments,
-                                                accountEmail = acc.email
+                                                accountEmail = acc.email,
+                                                labels = e.keywords.toList()
                                             )
                                         }
                                     } catch (e: kotlinx.coroutines.CancellationException) {
@@ -3462,7 +3668,9 @@ body{background:$bg;padding:20px}
                                     if (role != null) resolveMailboxIdByRole(account, role)
                                     else null
                             val fresh =
-                                    if (isFav) {
+                                    if (labelKeyword != null) {
+                                        jmapClient.fetchEmailsByKeyword(account, labelKeyword)
+                                    } else if (isFav) {
                                         jmapClient.fetchStarredEmails(account)
                                     } else if (isInbox) {
                                         jmapClient.fetchEmails(account)
@@ -3486,7 +3694,8 @@ body{background:$bg;padding:20px}
                                                 it.receivedAt,
                                                 it.toEmail,
                                                 attachments = it.attachments,
-                                                accountEmail = account.email
+                                                accountEmail = account.email,
+                                                labels = it.keywords.toList()
                                         )
                                     }
                             val mergedList = applyOptimisticFavorite(newEmailsList, isFav)
@@ -3699,6 +3908,20 @@ body{background:$bg;padding:20px}
         drawerAccountsList.removeAllViews()
 
         val dp = resources.displayMetrics.density
+
+        // Colored dot next to the account name, matching the account color.
+        if (label.isNotBlank()) {
+            val dotSz = (10 * dp).toInt()
+            val dot = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setColor(getAccountColor(label))
+                setBounds(0, 0, dotSz, dotSz)
+            }
+            drawerAccountName.setCompoundDrawablesRelative(dot, null, null, null)
+            drawerAccountName.compoundDrawablePadding = (8 * dp).toInt()
+        } else {
+            drawerAccountName.setCompoundDrawablesRelative(null, null, null, null)
+        }
         val textInt = if (currentTheme == "light") "#212121".toColorInt() else Color.WHITE
         val secondaryTextInt =
                 if (currentTheme == "light") "#757575".toColorInt() else "#BDBDBD".toColorInt()
@@ -3838,7 +4061,7 @@ body{background:$bg;padding:20px}
         )
     }
 
-    private fun resolveAccountForId(emailId: String): JMapClient.ConnectedAccount? {
+    internal fun resolveAccountForId(emailId: String): JMapClient.ConnectedAccount? {
         val email = baseEmails.find { it.id == emailId } ?: return connectedAccount
         return resolveAccountFor(email)
     }
@@ -3929,6 +4152,7 @@ body{background:$bg;padding:20px}
             accountId = account.accountId
         )
         currentAccountEmail = account.email
+        loadLabels()
         saveAccounts()
         renderAccountHeader()
 
@@ -4088,6 +4312,9 @@ body{background:$bg;padding:20px}
     }
 
     internal fun getCurrentMailboxTitle(): String {
+        labelNavIds[selectedFolder]?.let { kw ->
+            labelByKeyword(kw)?.let { return it.name }
+        }
         return categoryNames[selectedFolder]?.takeIf { it.isNotBlank() }
                 ?: getDefaultCategoryTitle(selectedFolder)
     }
@@ -4131,6 +4358,7 @@ body{background:$bg;padding:20px}
         private const val KEY_ACCOUNTS_JSON = "accounts_json"
         private const val KEY_LAST_SYNC_APP_VERSION = "last_sync_app_version"
         internal const val KEY_ACCENT_COLOR = "accent_color"
+        internal const val KEY_LABELS_JSON = "labels_json"
         // Refined accents: same hue families as before, shifted to brighter,
         // slightly desaturated tones that read well on dark and light surfaces.
         val ACCENT_COLORS = listOf(
@@ -4146,7 +4374,7 @@ body{background:$bg;padding:20px}
         )
     }
 
-    private fun showThemedConfirmDialog(
+    internal fun showThemedConfirmDialog(
         title: String,
         message: String,
         confirmLabel: String,
@@ -4542,6 +4770,17 @@ body{background:$bg;padding:20px}
             setBackgroundColor(0x22FFFFFF)
         })
 
+        container.addView(row("Label", R.drawable.ic_lucide_tag) {
+            mode?.finish()
+            clearSelection()
+            showLabelPicker(ids)
+        })
+
+        container.addView(View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1)
+            setBackgroundColor(0x22FFFFFF)
+        })
+
         container.addView(row(
             if (allFavorites) "Remove from Favorites" else "Add to Favorites",
             R.drawable.ic_lucide_star
@@ -4619,7 +4858,7 @@ body{background:$bg;padding:20px}
                     }
 
                     val newEmailsList = fresh.map {
-                        DisplayEmail(it.id, it.subject, it.from, it.fromEmail, it.preview, it.fullBody, it.seen, it.isStarred, it.receivedAt, attachments = it.attachments)
+                        DisplayEmail(it.id, it.subject, it.from, it.fromEmail, it.preview, it.fullBody, it.seen, it.isStarred, it.receivedAt, attachments = it.attachments, labels = it.keywords.toList())
                     }
                     folderCache[navId] = newEmailsList
 
