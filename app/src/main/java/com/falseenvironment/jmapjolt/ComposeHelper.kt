@@ -48,6 +48,30 @@ internal fun MainActivity.setupComposeView() {
 
     composeBodyInput.addTextChangedListener(FormatTextWatcher(this))
     buildFormatToolbar()
+
+    // Auto-commit a recipient when the user types a separator (space / comma / ;),
+    // so they don't have to press Enter to add someone to the list.
+    composeToInput.addTextChangedListener(object : TextWatcher {
+        override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+        override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+        override fun afterTextChanged(s: Editable?) {
+            val str = s?.toString() ?: return
+            if (str.isEmpty()) return
+            when (str.last()) {
+                ' ', ',', ';', '\n' -> {
+                    val token = str.dropLast(1).trim()
+                    if (token.isNotBlank()) addRecipientChip(token) else composeToInput.text.clear()
+                }
+            }
+        }
+    })
+    // Also commit whatever is typed when the field loses focus.
+    composeToInput.setOnFocusChangeListener { _, hasFocus ->
+        if (!hasFocus) {
+            val token = composeToInput.text.toString().trim()
+            if (token.isNotBlank()) addRecipientChip(token)
+        }
+    }
 }
 
 internal fun MainActivity.performSend() {
@@ -55,6 +79,8 @@ internal fun MainActivity.performSend() {
     val currentToText = composeToInput.text.toString().trim()
     if (currentToText.isNotBlank()) addRecipientChip(currentToText)
     val to = recipientEmails.joinToString(", ")
+    val cc = ccEmails.joinToString(", ")
+    val bcc = bccEmails.joinToString(", ")
     val subject = composeSubjectInput.text.toString()
     @Suppress("DEPRECATION")
     val userHtml = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N)
@@ -95,7 +121,7 @@ internal fun MainActivity.performSend() {
 
     lifecycleScope.launch(Dispatchers.Main) {
         topBarSendButton.isEnabled = false
-        val success = jmapClient.sendEmail(accountToUse, to, subject, body, "text/html", jmapAttachments)
+        val success = jmapClient.sendEmail(accountToUse, to, subject, body, "text/html", jmapAttachments, cc, bcc)
         topBarSendButton.isEnabled = true
         if (success) {
             if (oldDraftId != null) jmapClient.destroyEmail(accountToUse, oldDraftId)
@@ -226,16 +252,16 @@ internal fun MainActivity.showComposeView() {
     selectedFromEmail = currentAccountEmail.takeIf { !it.isNullOrBlank() && it in emails }
         ?: emails.firstOrNull() ?: ""
     composeFromText.text = selectedFromEmail
-    composeFromText.setTextColor(textColor)
+    val onAccent = getOnAccentColor()
+    composeFromText.setTextColor(onAccent)
+    composeFromText.setTypeface(null, Typeface.BOLD)
+    // Recolor the trailing ▾ chevron (second child) to match the on-accent text.
+    (composeFromLabel.getChildAt(1) as? TextView)?.setTextColor(onAccent)
     val dp = resources.displayMetrics.density
     composeFromLabel.background = GradientDrawable().apply {
         shape = GradientDrawable.RECTANGLE
         cornerRadius = 10 * dp
-        setColor(when (currentTheme) {
-            "light" -> 0xFFE0E0E0.toInt()
-            "oled"  -> 0xFF1A1A1A.toInt()
-            else    -> 0xFF2A2A2A.toInt()
-        })
+        setColor(currentAccentColor.toColorInt())
     }
     composeFromLabel.setOnClickListener {
         val idx = emails.indexOf(selectedFromEmail).let { if (it >= 0) it else 0 }
@@ -245,10 +271,13 @@ internal fun MainActivity.showComposeView() {
         }
     }
 
-    // Reset chip group and wire Enter key for multi-recipient input
-    composeToChipsGroup.removeAllViews()
-    composeToChipsGroup.visibility = View.GONE
-    recipientEmails.clear()
+    // Reset recipient categories and wire Enter key for multi-recipient input
+    listOf(composeToChipsGroup, composeCcChipsGroup, composeBccChipsGroup).forEach {
+        it.removeAllViews(); it.visibility = View.GONE
+    }
+    recipientEmails.clear(); ccEmails.clear(); bccEmails.clear()
+    composeCategory = 0
+    buildComposeCategoryTabs()
     composeToInput.setOnEditorActionListener { _, actionId, _ ->
         if (actionId == EditorInfo.IME_ACTION_DONE) {
             val addr = composeToInput.text.toString().trim()
@@ -302,25 +331,44 @@ internal fun MainActivity.hideCompose() {
 }
 
 internal fun MainActivity.composeIsEmpty(): Boolean =
-    recipientEmails.isEmpty() &&
+    recipientEmails.isEmpty() && ccEmails.isEmpty() && bccEmails.isEmpty() &&
         composeToInput.text.isNullOrBlank() &&
         composeSubjectInput.text.isNullOrBlank() &&
         composeBodyInput.text.isNullOrBlank() &&
         pendingAttachments.isEmpty()
 
 internal fun MainActivity.clearComposeFields() {
-    composeToChipsGroup.removeAllViews()
-    composeToChipsGroup.visibility = View.GONE
-    recipientEmails.clear()
+    listOf(composeToChipsGroup, composeCcChipsGroup, composeBccChipsGroup).forEach {
+        it.removeAllViews(); it.visibility = View.GONE
+    }
+    recipientEmails.clear(); ccEmails.clear(); bccEmails.clear()
+    composeCategory = 0
+    refreshComposeCategoryTabs()
     composeToInput.text.clear()
     composeSubjectInput.text.clear()
     composeBodyInput.text.clear()
 }
 
-internal fun MainActivity.addRecipientChip(email: String) {
+/** Recipient list backing the given category (0 = To, 1 = Cc, 2 = Bcc). */
+internal fun MainActivity.recipientListFor(category: Int) = when (category) {
+    1 -> ccEmails
+    2 -> bccEmails
+    else -> recipientEmails
+}
+
+/** Chip group rendering the given category. */
+internal fun MainActivity.chipGroupFor(category: Int) = when (category) {
+    1 -> composeCcChipsGroup
+    2 -> composeBccChipsGroup
+    else -> composeToChipsGroup
+}
+
+internal fun MainActivity.addRecipientChip(email: String, category: Int = composeCategory) {
     val trimmed = email.trim()
-    if (trimmed.isBlank() || trimmed in recipientEmails) return
-    recipientEmails.add(trimmed)
+    val list = recipientListFor(category)
+    val group = chipGroupFor(category)
+    if (trimmed.isBlank() || trimmed in list) { composeToInput.text.clear(); return }
+    list.add(trimmed)
     val dp = resources.displayMetrics.density
     val chip = Chip(this).apply {
         text = trimmed
@@ -339,14 +387,71 @@ internal fun MainActivity.addRecipientChip(email: String) {
         chipStrokeWidth = 1f * dp
         chipStrokeColor = ColorStateList.valueOf(currentAccentColor.toColorInt())
         setOnCloseIconClickListener {
-            recipientEmails.remove(trimmed)
-            composeToChipsGroup.removeView(this)
-            if (composeToChipsGroup.childCount == 0) composeToChipsGroup.visibility = View.GONE
+            list.remove(trimmed)
+            group.removeView(this)
+            if (group.childCount == 0) group.visibility = View.GONE
+            refreshComposeCategoryTabs()
         }
     }
-    composeToChipsGroup.addView(chip)
-    composeToChipsGroup.visibility = View.VISIBLE
+    group.addView(chip)
+    group.visibility = View.VISIBLE
     composeToInput.text.clear()
+    refreshComposeCategoryTabs()
+}
+
+private val COMPOSE_CATEGORY_LABELS = listOf("To", "Cc", "Bcc")
+private val COMPOSE_CATEGORY_HINTS = listOf("Add recipient", "Add Cc", "Add Bcc")
+
+/** Builds the single accent-styled category selector (dropdown To / Cc / Bcc). */
+internal fun MainActivity.buildComposeCategoryTabs() {
+    composeCategoryTabs.removeAllViews()
+    val dp = resources.displayMetrics.density
+    val pill = TextView(this).apply {
+        textSize = 13f
+        setPadding((14 * dp).toInt(), (6 * dp).toInt(), (12 * dp).toInt(), (6 * dp).toInt())
+        isClickable = true; isFocusable = true
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ).also { it.marginEnd = (10 * dp).toInt() }
+        setOnClickListener {
+            showSettingsDropdown(this, COMPOSE_CATEGORY_LABELS, composeCategory) { i ->
+                selectComposeCategory(i)
+            }
+        }
+    }
+    composeCategoryTabs.addView(pill)
+    refreshComposeCategoryTabs()
+}
+
+/** Repaints the category selector to show the active category + a count of all recipients. */
+internal fun MainActivity.refreshComposeCategoryTabs() {
+    val dp = resources.displayMetrics.density
+    val accent = currentAccentColor.toColorInt()
+    val pill = composeCategoryTabs.getChildAt(0) as? TextView ?: return
+    val count = recipientListFor(composeCategory).size
+    val label = COMPOSE_CATEGORY_LABELS[composeCategory]
+    pill.text = if (count > 0) "$label $count  ▾" else "$label  ▾"
+    pill.setTypeface(null, Typeface.BOLD)
+    pill.setTextColor(getOnAccentColor())
+    pill.background = GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        cornerRadius = 10 * dp
+        setColor(accent)
+    }
+}
+
+/**
+ * Switches the active recipient category. Any address typed in the input is
+ * committed to the current category first, so the user does not have to press
+ * Enter before changing category.
+ */
+internal fun MainActivity.selectComposeCategory(category: Int) {
+    val typed = composeToInput.text.toString().trim()
+    if (typed.isNotBlank()) addRecipientChip(typed, composeCategory)
+    composeCategory = category
+    composeToInput.hint = COMPOSE_CATEGORY_HINTS.getOrElse(category) { "Add recipient" }
+    refreshComposeCategoryTabs()
+    composeToInput.requestFocus()
 }
 
 /**
@@ -440,6 +545,8 @@ internal fun MainActivity.saveDraftFromCompose() {
     val currentToText = composeToInput.text.toString().trim()
     if (currentToText.isNotBlank()) addRecipientChip(currentToText)
     val to = recipientEmails.joinToString(", ")
+    val cc = ccEmails.joinToString(", ")
+    val bcc = bccEmails.joinToString(", ")
     val subject = composeSubjectInput.text.toString()
     @Suppress("DEPRECATION")
     val userHtml = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N)
@@ -481,7 +588,7 @@ internal fun MainActivity.saveDraftFromCompose() {
     hideCompose()
 
     lifecycleScope.launch(Dispatchers.Main) {
-        val ok = jmapClient.saveDraft(accountToUse, to, subject, body, "text/html", jmapAttachments)
+        val ok = jmapClient.saveDraft(accountToUse, to, subject, body, "text/html", jmapAttachments, cc, bcc)
         if (ok && oldDraftId != null) {
             jmapClient.destroyEmail(accountToUse, oldDraftId)
         }

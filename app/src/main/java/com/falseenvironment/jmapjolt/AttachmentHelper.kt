@@ -2,15 +2,22 @@ package com.falseenvironment.jmapjolt
 
 import android.content.ContentValues
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.graphics.Outline
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.util.Log
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
+import android.view.ViewOutlineProvider
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -153,14 +160,212 @@ internal fun MainActivity.refreshAttachmentChips() {
             }
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
-                setColor("#757575".toColorInt())
+                setColor("#E53935".toColorInt())
             }
             setOnClickListener { removeAttachment(index) }
         }
 
         card.addView(body)
+
+        // Edit-name badge (top-left): rename the file before sending.
+        val editBtn = TextView(this).apply {
+            text = "✎"
+            textSize = 10f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            val sz = (18 * dp).toInt()
+            layoutParams = FrameLayout.LayoutParams(sz, sz, Gravity.TOP or Gravity.START).also {
+                it.topMargin = (2 * dp).toInt()
+                it.marginStart = (2 * dp).toInt()
+            }
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(currentAccentColor.toColorInt())
+            }
+            setOnClickListener { renameAttachmentDialog(index) }
+        }
+
+        // For images/videos, overlay a real thumbnail (decoded off the main thread).
+        val isImage = att.mimeType.startsWith("image/")
+        val isVideo = att.mimeType.startsWith("video/")
+        if (isImage || isVideo) {
+            val radius = 10 * dp
+            val thumb = ImageView(this).apply {
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                layoutParams = FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+                )
+                clipToOutline = true
+                outlineProvider = object : ViewOutlineProvider() {
+                    override fun getOutline(v: View, o: Outline) =
+                        o.setRoundRect(0, 0, v.width, v.height, radius)
+                }
+                visibility = android.view.View.GONE
+            }
+            card.addView(thumb)
+            if (isVideo) {
+                card.addView(TextView(this).apply {
+                    text = "▶"
+                    textSize = 16f
+                    setTextColor(Color.WHITE)
+                    gravity = Gravity.CENTER
+                    layoutParams = FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                        Gravity.CENTER
+                    )
+                })
+            }
+            val targetPx = (88 * dp).toInt()
+            lifecycleScope.launch {
+                val bmp = withContext(Dispatchers.IO) { decodeAttachmentThumbnail(att, targetPx) }
+                if (bmp != null) {
+                    thumb.setImageBitmap(bmp)
+                    thumb.visibility = android.view.View.VISIBLE
+                    body.visibility = android.view.View.GONE
+                }
+            }
+        }
+
         card.addView(removeBtn)
+        card.addView(editBtn)
         attachmentChipContainer.addView(card)
+    }
+}
+
+/** Renames a pending attachment, keeping its original extension if the user drops it. */
+internal fun MainActivity.renameAttachmentDialog(index: Int) {
+    if (index !in pendingAttachments.indices) return
+    val att = pendingAttachments[index]
+    val dp = resources.displayMetrics.density
+    val textColor = if (currentTheme == "light") "#212121".toColorInt() else Color.WHITE
+    val secondaryColor = if (currentTheme == "light") "#757575".toColorInt() else "#9E9E9E".toColorInt()
+    val accentInt = currentAccentColor.toColorInt()
+
+    val input = android.widget.EditText(this).apply {
+        setText(att.name)
+        setSelection(att.name.length)
+        setTextColor(textColor)
+        setHintTextColor(secondaryColor)
+        backgroundTintList = android.content.res.ColorStateList.valueOf(secondaryColor)
+        textSize = 15f
+        maxLines = 1
+    }
+    val root = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        val p = (22 * dp).toInt()
+        setPadding(p, p, p, (14 * dp).toInt())
+        background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = 20 * dp
+            setColor(getDialogBackgroundColor())
+        }
+        addView(TextView(this@renameAttachmentDialog).apply {
+            text = "Rename file"
+            textSize = 18f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(textColor)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).also { it.bottomMargin = (16 * dp).toInt() }
+        })
+        addView(input)
+    }
+    val dialog = androidx.appcompat.app.AlertDialog.Builder(this).setView(root).create()
+    val btnRow = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.END
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ).also { it.topMargin = (8 * dp).toInt() }
+    }
+    fun btn(label: String, color: Int, bold: Boolean, onClick: () -> Unit) = TextView(this).apply {
+        text = label; textSize = 14f; setTextColor(color)
+        if (bold) setTypeface(null, Typeface.BOLD)
+        setPadding((14 * dp).toInt(), (10 * dp).toInt(), (14 * dp).toInt(), (8 * dp).toInt())
+        isClickable = true; isFocusable = true
+        setOnClickListener { onClick() }
+    }
+    btnRow.addView(btn("Cancel", secondaryColor, false) { dialog.dismiss() })
+    btnRow.addView(btn("Rename", accentInt, true) {
+        var newName = input.text.toString().trim()
+        if (newName.isBlank()) { dialog.dismiss(); return@btn }
+        // Preserve the original extension if the user removed it.
+        val origExt = att.name.substringAfterLast('.', "")
+        if (origExt.isNotBlank() && !newName.contains('.')) newName = "$newName.$origExt"
+        pendingAttachments[index] = att.copy(name = newName)
+        refreshAttachmentChips()
+        dialog.dismiss()
+    })
+    root.addView(btnRow)
+    dialog.show()
+    dialog.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+    dialog.window?.attributes?.let { lp ->
+        lp.width = (resources.displayMetrics.widthPixels * 0.88f).toInt()
+        dialog.window?.attributes = lp
+    }
+}
+
+/** Decodes a downsampled thumbnail for image/video attachments, or null on failure. */
+private fun MainActivity.decodeAttachmentThumbnail(att: MainActivity.AttachmentData, targetPx: Int): Bitmap? {
+    return try {
+        if (att.mimeType.startsWith("video/")) {
+            val r = MediaMetadataRetriever()
+            try {
+                r.setDataSource(this, att.uri)
+                r.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+            } finally {
+                r.release()
+            }
+        } else {
+            // Bounds pass first, then decode with an inSampleSize that fits the target.
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            contentResolver.openInputStream(att.uri)?.use {
+                BitmapFactory.decodeStream(it, null, bounds)
+            }
+            var sample = 1
+            val maxDim = maxOf(bounds.outWidth, bounds.outHeight)
+            while (maxDim / sample > targetPx * 2) sample *= 2
+            val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+            contentResolver.openInputStream(att.uri)?.use {
+                BitmapFactory.decodeStream(it, null, opts)
+            }
+        }
+    } catch (e: Exception) {
+        null
+    }
+}
+
+/** Decodes a downsampled thumbnail from in-memory image bytes, or null on failure. */
+private fun decodeBytesThumbnail(bytes: ByteArray, targetPx: Int): Bitmap? {
+    return try {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        var sample = 1
+        val maxDim = maxOf(bounds.outWidth, bounds.outHeight)
+        while (maxDim / sample > targetPx * 2) sample *= 2
+        val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
+    } catch (e: Exception) {
+        null
+    }
+}
+
+/**
+ * Decodes the first frame of a remote video via its authenticated URL. MediaMetadataRetriever
+ * issues its own ranged HTTP reads, so only the metadata + one frame are fetched, not the whole file.
+ */
+private fun decodeVideoUrlThumbnail(url: String, headers: Map<String, String>): Bitmap? {
+    return try {
+        val r = MediaMetadataRetriever()
+        try {
+            r.setDataSource(url, headers)
+            r.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+        } finally {
+            r.release()
+        }
+    } catch (e: Exception) {
+        null
     }
 }
 
@@ -233,6 +438,68 @@ internal fun MainActivity.buildEmailAttachmentRow(
             setTextColor(if (isLight) "#555555".toColorInt() else "#BDBDBD".toColorInt())
         })
         card.addView(body)
+
+        // Image/video attachments: download + decode a thumbnail in the background.
+        val isImage = att.mimeType.startsWith("image/")
+        val isVideo = att.mimeType.startsWith("video/")
+        if (isImage || isVideo) {
+            val radius = 10 * dp
+            val thumb = ImageView(this).apply {
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                layoutParams = FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+                )
+                clipToOutline = true
+                outlineProvider = object : ViewOutlineProvider() {
+                    override fun getOutline(v: View, o: Outline) =
+                        o.setRoundRect(0, 0, v.width, v.height, radius)
+                }
+                visibility = View.GONE
+            }
+            card.addView(thumb)
+            val play = if (isVideo) TextView(this).apply {
+                text = "▶"
+                textSize = 16f
+                setTextColor(Color.WHITE)
+                gravity = Gravity.CENTER
+                layoutParams = FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                    Gravity.CENTER
+                )
+                visibility = View.GONE
+            }.also { card.addView(it) } else null
+            val targetPx = (80 * dp).toInt()
+            lifecycleScope.launch {
+                val bmp = withContext(Dispatchers.IO) {
+                    if (isVideo) {
+                        // Stream ranged reads via the download URL instead of pulling the whole file.
+                        val req = jmapClient.blobDownloadRequest(account, att.blobId, att.name, att.mimeType)
+                        if (req == null) {
+                            Log.w("AttachmentThumb", "url null for ${att.name} (${att.mimeType})")
+                            return@withContext null
+                        }
+                        val out = decodeVideoUrlThumbnail(req.first, req.second)
+                        if (out == null) Log.w("AttachmentThumb", "decode null for ${att.name} (${att.mimeType})")
+                        out
+                    } else {
+                        val bytes = jmapClient.downloadBlob(account, att.blobId, att.name, att.mimeType)
+                        if (bytes == null) {
+                            Log.w("AttachmentThumb", "download null for ${att.name} (${att.mimeType})")
+                            return@withContext null
+                        }
+                        val out = decodeBytesThumbnail(bytes, targetPx)
+                        if (out == null) Log.w("AttachmentThumb", "decode null for ${att.name} (${att.mimeType})")
+                        out
+                    }
+                }
+                if (bmp != null) {
+                    thumb.setImageBitmap(bmp)
+                    thumb.visibility = View.VISIBLE
+                    play?.visibility = View.VISIBLE
+                    body.visibility = View.GONE
+                }
+            }
+        }
 
         card.setOnClickListener { showAttachmentOptions(att, account) }
 

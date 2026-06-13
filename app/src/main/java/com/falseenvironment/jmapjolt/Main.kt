@@ -219,7 +219,14 @@ class MainActivity : AppCompatActivity() {
     internal lateinit var composeFromLabel: LinearLayout
     internal lateinit var composeFromText: TextView
     internal lateinit var composeToChipsGroup: com.google.android.material.chip.ChipGroup
+    internal lateinit var composeCcChipsGroup: com.google.android.material.chip.ChipGroup
+    internal lateinit var composeBccChipsGroup: com.google.android.material.chip.ChipGroup
+    internal lateinit var composeCategoryTabs: LinearLayout
     internal val recipientEmails = mutableListOf<String>()
+    internal val ccEmails = mutableListOf<String>()
+    internal val bccEmails = mutableListOf<String>()
+    // Active recipient category: 0 = To, 1 = Cc, 2 = Bcc.
+    internal var composeCategory = 0
     internal var selectedFromEmail = ""
     internal lateinit var composeToInput: EditText
     internal lateinit var composeSubjectInput: EditText
@@ -382,6 +389,9 @@ class MainActivity : AppCompatActivity() {
         composeFromLabel = findViewById(R.id.composeFromLabel)
         composeFromText = findViewById(R.id.composeFromText)
         composeToChipsGroup = findViewById(R.id.composeToChipsGroup)
+        composeCcChipsGroup = findViewById(R.id.composeCcChipsGroup)
+        composeBccChipsGroup = findViewById(R.id.composeBccChipsGroup)
+        composeCategoryTabs = findViewById(R.id.composeCategoryTabs)
         composeToInput = findViewById(R.id.composeToInput)
         composeSubjectInput = findViewById(R.id.composeSubjectInput)
         composeBodyInput = findViewById(R.id.composeBodyInput)
@@ -3045,6 +3055,8 @@ body{background:$bg;padding:20px}
     }
 
     private fun activateSearch() {
+        // If an email is open, leave it first so the search results are actually visible.
+        if (isShowingEmailDetail) closeEmailDetail()
         isSearchActive = true
         searchBarTitle.visibility = View.GONE
         searchInput.visibility = View.VISIBLE
@@ -3052,8 +3064,13 @@ body{background:$bg;padding:20px}
         // Scope chips: default to the current folder when it maps to a chip, else All.
         searchScope = searchScopes.firstOrNull { it.second == selectedFolder }?.second
         refreshSearchChips()
+        searchChipsScroll.animate().cancel()
+        searchChipsScroll.layoutParams = searchChipsScroll.layoutParams.also {
+            it.height = ViewGroup.LayoutParams.WRAP_CONTENT
+        }
         searchChipsScroll.visibility = View.VISIBLE
         searchChipsScroll.alpha = 0f
+        searchChipsScroll.translationY = 0f
         searchChipsScroll.animate().alpha(1f).setDuration(200).start()
         searchInput.requestFocus()
         val imm = getSystemService(InputMethodManager::class.java)
@@ -3066,7 +3083,7 @@ body{background:$bg;padding:20px}
         searchInput.visibility = View.GONE
         searchBarTitle.visibility = View.VISIBLE
         searchClearBtn.visibility = View.GONE
-        searchChipsScroll.visibility = View.GONE
+        animateChipsBarOut()
         searchScope = null
         hideKeyboard()
         emails.clear()
@@ -3074,6 +3091,34 @@ body{background:$bg;padding:20px}
         emailAdapter.notifyDataSetChanged()
         emptyStateView.visibility = if (emails.isEmpty()) View.VISIBLE else View.GONE
         emailsRecyclerView.visibility = if (emails.isEmpty()) View.GONE else View.VISIBLE
+    }
+
+    /** Collapses the scope chips bar height + fades it, so it retracts up behind the top bar. */
+    private fun animateChipsBarOut() {
+        val bar = searchChipsScroll
+        bar.animate().cancel()
+        val startH = bar.height
+        if (bar.visibility != View.VISIBLE || startH == 0) {
+            bar.visibility = View.GONE
+            return
+        }
+        val anim = android.animation.ValueAnimator.ofInt(startH, 0).setDuration(200)
+        anim.interpolator = android.view.animation.AccelerateInterpolator()
+        anim.addUpdateListener { va ->
+            val h = va.animatedValue as Int
+            bar.layoutParams = bar.layoutParams.also { it.height = h }
+            bar.alpha = h.toFloat() / startH
+        }
+        anim.addListener(object : android.animation.AnimatorListenerAdapter() {
+            override fun onAnimationEnd(a: android.animation.Animator) {
+                bar.visibility = View.GONE
+                bar.alpha = 1f
+                bar.layoutParams = bar.layoutParams.also {
+                    it.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                }
+            }
+        })
+        anim.start()
     }
 
     // Search scope chips: label -> drawer folder id (null = search everywhere).

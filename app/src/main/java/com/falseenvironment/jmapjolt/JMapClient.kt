@@ -715,7 +715,9 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
         subjectText: String,
         bodyText: String,
         bodyContentType: String = "text/plain",
-        attachments: List<Attachment> = emptyList()
+        attachments: List<Attachment> = emptyList(),
+        ccEmailAddress: String = "",
+        bccEmailAddress: String = ""
     ): Boolean = withContext(Dispatchers.IO) {
         val client = newClient(connectedAccount)
         client.use { jmapClient ->
@@ -753,6 +755,12 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
                     .filter { it.isNotBlank() }
                     .map { EmailAddress.builder().email(it).build() }
                 if (toAddresses.isEmpty()) return@withContext false
+                val ccAddresses = ccEmailAddress.split(",")
+                    .map { it.trim() }.filter { it.isNotBlank() }
+                    .map { EmailAddress.builder().email(it).build() }
+                val bccAddresses = bccEmailAddress.split(",")
+                    .map { it.trim() }.filter { it.isNotBlank() }
+                    .map { EmailAddress.builder().email(it).build() }
                 val fromAddress = EmailAddress.builder().email(identity.email).name(identity.name).build()
 
                 val bodyPartId = "body1"
@@ -767,6 +775,8 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
                     .from(fromAddress)
                     .subject(subjectText)
                     .also { b -> toAddresses.forEach { b.to(it) } }
+                    .also { b -> ccAddresses.forEach { b.cc(it) } }
+                    .also { b -> bccAddresses.forEach { b.bcc(it) } }
                     .mailboxIds(mailboxIds)
                     .bodyValues(bodyValues)
                 if (bodyContentType.equals("text/html", ignoreCase = true)) {
@@ -819,7 +829,9 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
         subjectText: String,
         bodyText: String,
         bodyContentType: String = "text/html",
-        attachments: List<Attachment> = emptyList()
+        attachments: List<Attachment> = emptyList(),
+        ccEmailAddress: String = "",
+        bccEmailAddress: String = ""
     ): Boolean = withContext(Dispatchers.IO) {
         val client = newClient(connectedAccount)
         client.use { jmapClient ->
@@ -868,6 +880,14 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
                     .map { it.trim() }
                     .filter { it.isNotBlank() }
                     .forEach { emailBuilder.to(EmailAddress.builder().email(it).build()) }
+                ccEmailAddress.split(",")
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .forEach { emailBuilder.cc(EmailAddress.builder().email(it).build()) }
+                bccEmailAddress.split(",")
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .forEach { emailBuilder.bcc(EmailAddress.builder().email(it).build()) }
                 if (bodyContentType.equals("text/html", ignoreCase = true)) {
                     emailBuilder.htmlBody(textBodyPart)
                 } else {
@@ -963,6 +983,39 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "registerPushSubscription failed: ${e.message}")
             false
+        }
+    }
+
+    /**
+     * Resolves an authenticated download URL + headers for a blob without downloading it,
+     * so MediaMetadataRetriever can stream ranged reads (e.g. video thumbnails) instead of
+     * pulling the whole file. Returns null if the URL can't be resolved or isn't trusted.
+     */
+    suspend fun blobDownloadRequest(
+        connectedAccount: ConnectedAccount,
+        blobId: String,
+        filename: String,
+        mimeType: String
+    ): Pair<String, Map<String, String>>? = withContext(Dispatchers.IO) {
+        try {
+            val client = newClient(connectedAccount)
+            client.use { jmapClient ->
+                val session = jmapClient.getSession().get(12, TimeUnit.SECONDS)
+                val accountId = session.getPrimaryAccount(MailAccountCapability::class.java)
+                    ?: return@withContext null
+                val downloadUrl = session.getDownloadUrl(accountId, blobId, filename, mimeType)
+                    ?: return@withContext null
+                val urlStr = downloadUrl.toString()
+                if (!isTrustedServerUrl(urlStr, connectedAccount.sessionUrl)) {
+                    Log.w(TAG, "blobDownloadRequest: refusing URL outside session origin")
+                    return@withContext null
+                }
+                val auth = Credentials.basic(connectedAccount.email, connectedAccount.password)
+                urlStr to mapOf("Authorization" to auth)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "blobDownloadRequest failed for $filename", e)
+            null
         }
     }
 
