@@ -1289,7 +1289,7 @@
             android:elevation="24dp"
             android:gravity="center"
             android:padding="8dp"
-            android:text="JMAPJolt v0.13"
+            android:text="JMAPJolt v0.14"
             android:textColor="#616161"
             android:textSize="11sp" />
 

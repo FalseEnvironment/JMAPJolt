@@ -32,7 +32,6 @@
     <string name="settings_title">Settings</string>
     <string name="settings_categories">Category</string>
     <string name="settings_saved">Settings saved.</string>
-    <string name="settings_saved_short">Setting saved</string>
     <string name="settings_default_category">Default category: %1$s</string>
     <string name="settings_category_name_hint">Custom category name</string>
     <string name="settings_swipe_actions">Swipe behavior</string>

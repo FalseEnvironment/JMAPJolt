@@ -170,6 +170,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var searchChipsRow: LinearLayout
     private var searchScope: Int? = null
     internal lateinit var detailBody: LinearLayout
+    private lateinit var detailScroll: androidx.core.widget.NestedScrollView
     private var detailBarHidden = false
     private var detailBarHeight = 0
     private var detailBarLastToggleMs = 0L
@@ -780,6 +781,7 @@ class MainActivity : AppCompatActivity() {
         drawerToggle.syncState()
         applyNavIconTint(getOnAccentColor())
         updateTopBarState()
+        rebuildDrawerMenu()
         if (!skipRefresh) applyFolderFilterAndRefresh()
 
     }
@@ -936,7 +938,7 @@ class MainActivity : AppCompatActivity() {
                 LinearLayout(this).apply {
                     orientation = LinearLayout.VERTICAL
                     layoutParams = FrameLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
                     )
                     setPadding(0, barHeight, 0, 0)
                 }
@@ -1091,9 +1093,13 @@ class MainActivity : AppCompatActivity() {
         detailWebView =
                 android.webkit.WebView(this).apply {
                     layoutParams =
-                            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+                            LinearLayout.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.WRAP_CONTENT
+                            )
                     setBackgroundColor(Color.WHITE)
                     overScrollMode = View.OVER_SCROLL_NEVER
+                    isNestedScrollingEnabled = false
                     settings.javaScriptEnabled = false
                     settings.allowFileAccess = false
                     settings.allowContentAccess = false
@@ -1130,17 +1136,33 @@ class MainActivity : AppCompatActivity() {
                 super.onPageFinished(view, url)
             }
         }
+        detailBody.addView(detailWebView)
+        // Weighted spacer: when the body is shorter than the viewport (fillViewport stretches
+        // detailBody to viewport height) this absorbs the slack and pushes the attachment
+        // footer to the bottom. For tall bodies there is no slack, so attachments follow content.
+        detailBody.addView(View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
+            )
+        })
+        detailScroll = androidx.core.widget.NestedScrollView(this).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            isFillViewport = true
+            overScrollMode = View.OVER_SCROLL_NEVER
+            addView(detailBody)
+        }
         // Auto-hide the action row when scrolling down, reveal it when scrolling up.
         val scrollThreshold = (24 * dp).toInt()
-        detailWebView.setOnScrollChangeListener { _, _, scrollY, _, oldScrollY ->
+        detailScroll.setOnScrollChangeListener { _, _, scrollY, _, oldScrollY ->
             val dy = scrollY - oldScrollY
             when {
                 dy > 4 && scrollY > scrollThreshold && !detailBarHidden -> setDetailBarHidden(true)
                 dy < -4 && detailBarHidden -> setDetailBarHidden(false)
             }
         }
-        detailBody.addView(detailWebView)
-        emailDetailContainer.addView(detailBody)
+        emailDetailContainer.addView(detailScroll)
         emailDetailContainer.addView(headerWrap)
         mailboxContainer.addView(emailDetailContainer)
     }
@@ -1517,7 +1539,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun buildSkeletonHtml(): String {
         val isDark = currentTheme == "gray" || currentTheme == "oled" || currentTheme == "violet"
-        val bg = if (currentTheme == "oled") "#000000" else if (isDark) "#1a1a1a" else "#f5f5f5"
+        val bg = when (currentTheme) {
+            "light"  -> "#F6F6F8"
+            "oled"   -> "#000000"
+            "violet" -> "#160E24"
+            else     -> "#212126"
+        }
         val base = if (currentTheme == "oled") "#111111" else if (isDark) "#2a2a2a" else "#e0e0e0"
         val shine = if (currentTheme == "oled") "#1e1e1e" else if (isDark) "#3a3a3a" else "#f0f0f0"
         return """<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>
@@ -1546,9 +1573,19 @@ body{background:$bg;padding:20px}
 </body></html>"""
     }
 
-    internal fun buildHtmlContent(rawBody: String, subject: String = ""): String {
+    internal fun buildHtmlContent(rawBodyIn: String, subject: String = ""): String {
+        // Inline cid: images are shown as attachment cards below the body; strip the in-body
+        // <img src="cid:..."> tags so a broken-image placeholder is not rendered in the content.
+        val rawBody = rawBodyIn.replace(
+            Regex("<img\\b[^>]*\\bsrc\\s*=\\s*[\"']cid:[^>]*>", RegexOption.IGNORE_CASE), ""
+        )
         val isDark = currentTheme == "gray" || currentTheme == "oled" || currentTheme == "violet"
-        val bgColor = if (currentTheme == "oled") "#000000" else if (isDark) "#1a1a1a" else "#ffffff"
+        val bgColor = when (currentTheme) {
+            "light"  -> "#F6F6F8"
+            "oled"   -> "#000000"
+            "violet" -> "#160E24"
+            else     -> "#212126"
+        }
         val textColor = if (isDark) "#e0e0e0" else "#212121"
         val linkColor = currentAccentColor
 
@@ -1751,6 +1788,7 @@ body{background:$bg;padding:20px}
                 when (currentTheme) {
                     "light" -> Triple("#F5F5F5", "#212121", "#757575")
                     "oled" -> Triple("#000000", "#FFFFFF", "#BDBDBD")
+                    "violet" -> Triple("#140B22", "#FFFFFF", "#BDBDBD")
                     else -> Triple("#2A2A2A", "#FFFFFF", "#BDBDBD")
                 }
 
@@ -1780,8 +1818,8 @@ body{background:$bg;padding:20px}
         // inset and the swipe-from-header zone once it is laid out.
         syncDetailHeaderHeight()
 
-        // Remove previous attachment footer if present (detailBody: index 0=WebView, 1=attRow)
-        if (detailBody.childCount > 1) detailBody.removeViewAt(1)
+        // Remove previous attachment footer if present (detailBody: 0=WebView, 1=spacer, 2=attRow)
+        if (detailBody.childCount > 2) detailBody.removeViewAt(2)
 
         val account = resolveAccountFor(email)
         if (email.attachments.isNotEmpty() && account != null) {
@@ -1789,12 +1827,20 @@ body{background:$bg;padding:20px}
             detailBody.addView(attRow)
         }
 
+        // Email view background = the home/inbox background per theme, so the whole screen matches.
         val wvBgHex = when (currentTheme) {
-            "oled" -> "#000000"
-            "light" -> "#ffffff"
-            else -> "#1a1a1a"
+            "light"  -> "#F6F6F8"
+            "oled"   -> "#000000"
+            "violet" -> "#160E24"
+            else     -> "#212126"
         }
-        detailWebView.setBackgroundColor(android.graphics.Color.parseColor(wvBgHex))
+        val wvBgInt = android.graphics.Color.parseColor(wvBgHex)
+        // Paint the whole scroll area (webview + spacer + attachment footer) with one colour so
+        // the screen reads as a single email view. The webview itself is transparent so its own
+        // (possibly skeleton) backdrop never shows a different shade.
+        detailWebView.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+        detailScroll.setBackgroundColor(wvBgInt)
+        detailBody.setBackgroundColor(wvBgInt)
         // Show cached body immediately (zero latency) or a shimmer skeleton while fetching.
         val bodyAvailableNow = email.fullBody.isNotBlank()
         if (bodyAvailableNow) {
@@ -1828,7 +1874,7 @@ body{background:$bg;padding:20px}
                             saveEmailCache()
                         }
                         // Refresh attachment footer
-                        if (detailBody.childCount > 1) detailBody.removeViewAt(1)
+                        if (detailBody.childCount > 2) detailBody.removeViewAt(2)
                         if (updated.attachments.isNotEmpty()) {
                             val attRow = buildEmailAttachmentRow(updated.attachments, account)
                             detailBody.addView(attRow)
@@ -1919,6 +1965,7 @@ body{background:$bg;padding:20px}
         updateTopBarState()
         showSettingsMenuRoot()
         loadUnifiedPushPreferences()
+        rebuildDrawerMenu()
     }
 
     private fun bindSettingsMenuNavigation() {
@@ -2092,10 +2139,6 @@ body{background:$bg;padding:20px}
         dialog.show()
     }
 
-    private fun showGeneralSettings() {
-        currentSettingsSection = SettingsSection.ROOT
-    }
-
     private fun loadGeneralPreferences() {
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         loadImagesSwitch.isChecked = prefs.getBoolean("load_images", false)
@@ -2108,10 +2151,6 @@ body{background:$bg;padding:20px}
             .putBoolean("load_images", loadImagesSwitch.isChecked)
             .putBoolean("load_favicons", loadFaviconsSwitch.isChecked)
             .apply()
-        Snackbar.make(drawerLayout, getString(R.string.settings_saved_short), Snackbar.LENGTH_SHORT)
-                .setBackgroundTint("#2E7D32".toColorInt())
-                .setTextColor(Color.WHITE)
-                .show()
     }
 
     private fun showSettingsMenuRoot() {
@@ -2129,11 +2168,6 @@ body{background:$bg;padding:20px}
         applyNavIconTint(getOnAccentColor())
         invalidateOptionsMenu()
         updateTopBarState()
-    }
-
-    private fun showSettingsSection(@Suppress("UNUSED_PARAMETER") section: SettingsSection) {
-        currentSettingsSection = SettingsSection.ROOT
-        showSettingsMenuRoot()
     }
 
     private fun bindDrawerNavigation() {
@@ -2187,14 +2221,7 @@ body{background:$bg;padding:20px}
             } else {
                 UnifiedPush.unregisterApp(this, INSTANCE_DEFAULT)
                 EmailSyncWorker.cancel(this)
-                Snackbar.make(
-                                drawerLayout,
-                                getString(R.string.settings_unifiedpush_disabled),
-                                Snackbar.LENGTH_SHORT
-                        )
-                        .setBackgroundTint("#616161".toColorInt())
-                        .setTextColor(Color.WHITE)
-                        .show()
+                showThemedSnackbar(getString(R.string.settings_unifiedpush_disabled))
             }
         }
 
@@ -2224,20 +2251,52 @@ body{background:$bg;padding:20px}
         }
     }
 
-    private fun applySettingsChanges(showSavedStatus: Boolean = true) {
-        saveSwipePreferences()
-        saveCategoryPreferences()
-        rebuildDrawerMenu()
-        if (showSavedStatus) {
-            Snackbar.make(
-                            drawerLayout,
-                            getString(R.string.settings_saved_short),
-                            Snackbar.LENGTH_SHORT
-                    )
-                    .setBackgroundTint("#2E7D32".toColorInt())
-                    .setTextColor(Color.WHITE)
-                    .show()
+    /**
+     * Theme-aware snackbar with an optional action button that can show a leading icon.
+     * Background and text colours follow the active theme; the action uses the accent colour.
+     */
+    internal fun showThemedSnackbar(
+        message: String,
+        actionLabel: String? = null,
+        actionIcon: Int? = null,
+        action: (() -> Unit)? = null
+    ) {
+        val hasAction = actionLabel != null && action != null
+        val sb = Snackbar.make(
+            drawerLayout, message,
+            if (hasAction) Snackbar.LENGTH_LONG else Snackbar.LENGTH_SHORT
+        )
+        val dp = resources.displayMetrics.density
+        val isLight = currentTheme == "light"
+        val bg = if (isLight) "#FFFFFF".toColorInt() else "#2A2A2E".toColorInt()
+        val fg = if (isLight) "#212121".toColorInt() else Color.WHITE
+        val accent = currentAccentColor.toColorInt()
+        sb.setTextColor(fg)
+        sb.setActionTextColor(accent)
+        sb.view.background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = 12 * dp
+            setColor(bg)
         }
+        if (hasAction) {
+            sb.setAction(actionLabel) { action() }
+            if (actionIcon != null) {
+                sb.view.post {
+                    val actionView = sb.view.findViewById<Button>(
+                        com.google.android.material.R.id.snackbar_action
+                    )
+                    actionView?.let { btn ->
+                        val d = ContextCompat.getDrawable(this, actionIcon)?.mutate()
+                        d?.setTint(accent)
+                        val size = (18 * dp).toInt()
+                        d?.setBounds(0, 0, size, size)
+                        btn.setCompoundDrawables(d, null, null, null)
+                        btn.compoundDrawablePadding = (6 * dp).toInt()
+                    }
+                }
+            }
+        }
+        sb.show()
     }
 
     internal fun attemptLeaveSettingsSubmenu() {
@@ -2299,7 +2358,12 @@ body{background:$bg;padding:20px}
         menu.clear()
         // Per-item icon colors (labels): disable the global tint and tint manually.
         navigationView.itemIconTintList = null
-        val defaultIconTint = "#E0E0E0".toColorInt()
+        // Theme-aware icon color: dark on light theme, light on dark themes. A hardcoded light
+        // tint here previously turned drawer icons white after a rebuild on the light theme.
+        val defaultIconTint = when (currentTheme) {
+            "light" -> "#1B1B1F".toColorInt()
+            else    -> "#E0E0E0".toColorInt()
+        }
 
         var menuIndex = 0
         if (savedAccounts.size > 1) {
@@ -2359,8 +2423,15 @@ body{background:$bg;padding:20px}
                 )
         settingsItem.setIcon(R.drawable.ic_lucide_settings)
         settingsItem.icon?.mutate()?.setTint(defaultIconTint)
+        settingsItem.isCheckable = true
 
-        menu.findItem(selectedFolder)?.isChecked = true
+        // In the settings screen the accent highlight belongs on Settings, not the
+        // previously selected folder (which stays remembered in selectedFolder).
+        if (settingsContainer.visibility == View.VISIBLE) {
+            settingsItem.isChecked = true
+        } else {
+            menu.findItem(selectedFolder)?.isChecked = true
+        }
         attachLabelDrag()
 
         val dp = resources.displayMetrics.density
@@ -2396,8 +2467,6 @@ body{background:$bg;padding:20px}
         attachMailSwipe()
         setupSelectionBarListeners()
     }
-
-    private fun attachCategoryDrag() {}
 
     /** Long-press drag to reorder label rows inside the drawer's internal RecyclerView. */
     private fun attachLabelDrag() {
@@ -2730,8 +2799,6 @@ body{background:$bg;padding:20px}
                 swipeRightActionIdx = idx
                 updateSettingsDropdownDisplays()
                 saveSwipePreferences()
-                Snackbar.make(drawerLayout, getString(R.string.settings_saved_short), Snackbar.LENGTH_SHORT)
-                    .setBackgroundTint("#2E7D32".toColorInt()).setTextColor(Color.WHITE).show()
             }
         }
         swipeLeftDropdown.setOnClickListener {
@@ -2739,8 +2806,6 @@ body{background:$bg;padding:20px}
                 swipeLeftActionIdx = idx
                 updateSettingsDropdownDisplays()
                 saveSwipePreferences()
-                Snackbar.make(drawerLayout, getString(R.string.settings_saved_short), Snackbar.LENGTH_SHORT)
-                    .setBackgroundTint("#2E7D32".toColorInt()).setTextColor(Color.WHITE).show()
             }
         }
     }
@@ -2760,8 +2825,6 @@ body{background:$bg;padding:20px}
                     currentTheme = newTheme
                     saveThemePreference()
                     applyTheme()
-                    Snackbar.make(drawerLayout, getString(R.string.settings_saved_short), Snackbar.LENGTH_SHORT)
-                        .setBackgroundTint("#2E7D32".toColorInt()).setTextColor(Color.WHITE).show()
                 }
             }
         }
@@ -3839,14 +3902,7 @@ body{background:$bg;padding:20px}
                 .getString(KEY_LAST_UP_ENDPOINT, null)
                 ?.takeIf { it.isNotBlank() }
         if (endpoint == null) {
-            Snackbar.make(
-                            drawerLayout,
-                            getString(R.string.settings_unifiedpush_waiting_endpoint),
-                            Snackbar.LENGTH_SHORT
-                    )
-                    .setBackgroundTint("#616161".toColorInt())
-                    .setTextColor(Color.WHITE)
-                    .show()
+            showThemedSnackbar(getString(R.string.settings_unifiedpush_waiting_endpoint))
             return
         }
         lifecycleScope.launch {
@@ -3871,26 +3927,15 @@ body{background:$bg;padding:20px}
                         }
                     }
 
-            Snackbar.make(
-                            drawerLayout,
-                            if (result.success) {
-                                getString(R.string.settings_unifiedpush_test_sent)
-                            } else if (result.httpCode != null) {
-                                getString(
-                                        R.string.settings_unifiedpush_error_with_code,
-                                        result.httpCode
-                                )
-                            } else {
-                                getString(R.string.settings_unifiedpush_error)
-                            },
-                            Snackbar.LENGTH_SHORT
-                    )
-                    .setBackgroundTint(
-                            if (result.success) "#2E7D32".toColorInt()
-                            else "#C62828".toColorInt()
-                    )
-                    .setTextColor(Color.WHITE)
-                    .show()
+            showThemedSnackbar(
+                if (result.success) {
+                    getString(R.string.settings_unifiedpush_test_sent)
+                } else if (result.httpCode != null) {
+                    getString(R.string.settings_unifiedpush_error_with_code, result.httpCode)
+                } else {
+                    getString(R.string.settings_unifiedpush_error)
+                }
+            )
         }
     }
 

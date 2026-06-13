@@ -145,6 +145,9 @@ internal fun MainActivity.applyTheme() {
 
     applyAccentColor()
     emailAdapter.notifyDataSetChanged()
+    // applyTheme nulls itemBackground above; rebuild to restore the accent highlight
+    // stateList immediately instead of waiting for the next folder/category change.
+    rebuildDrawerMenuPublic()
 }
 
 internal fun MainActivity.getOnAccentColor(): Int {
