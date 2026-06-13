@@ -75,6 +75,7 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
                 val httpUrl = sessionUrl.toHttpUrlOrNull() ?: continue
                 try {
                     JmapClient(email, password, httpUrl).use { client ->
+                        client.setSessionCache(sessionCache)
                         val session = client.getSession().get(12, TimeUnit.SECONDS)
                         val apiUrl = session.getApiUrl().toString()
                         val accountId = session.getPrimaryAccount(MailAccountCapability::class.java)
@@ -110,7 +111,7 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
         connectedAccount: ConnectedAccount,
         mailboxId: String? = null
     ): List<EmailSummary> = withContext(Dispatchers.IO) {
-        val client = JmapClient(connectedAccount.email, connectedAccount.password, connectedAccount.sessionUrl.toHttpUrlOrNull()!!)
+        val client = newClient(connectedAccount)
         client.use { jmapClient ->
             val session = jmapClient.getSession().get(12, TimeUnit.SECONDS)
             val accountId = session.getPrimaryAccount(MailAccountCapability::class.java)
@@ -139,7 +140,7 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
         ids: List<String>
     ): List<EmailSummary> = withContext(Dispatchers.IO) {
         if (ids.isEmpty()) return@withContext emptyList()
-        val client = JmapClient(connectedAccount.email, connectedAccount.password, connectedAccount.sessionUrl.toHttpUrlOrNull()!!)
+        val client = newClient(connectedAccount)
         client.use { jmapClient ->
             val session = jmapClient.getSession().get(12, TimeUnit.SECONDS)
             val accountId = session.getPrimaryAccount(MailAccountCapability::class.java)
@@ -182,7 +183,7 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
     suspend fun fetchStarredEmails(
         connectedAccount: ConnectedAccount
     ): List<EmailSummary> = withContext(Dispatchers.IO) {
-        val client = JmapClient(connectedAccount.email, connectedAccount.password, connectedAccount.sessionUrl.toHttpUrlOrNull()!!)
+        val client = newClient(connectedAccount)
         client.use { jmapClient ->
             val session = jmapClient.getSession().get(12, TimeUnit.SECONDS)
             val accountId = session.getPrimaryAccount(MailAccountCapability::class.java)
@@ -326,7 +327,7 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
     )
 
     suspend fun fetchMailboxes(connectedAccount: ConnectedAccount): List<MailboxInfo> = withContext(Dispatchers.IO) {
-        val client = JmapClient(connectedAccount.email, connectedAccount.password, connectedAccount.sessionUrl.toHttpUrlOrNull()!!)
+        val client = newClient(connectedAccount)
         client.use { jmapClient ->
             val session = jmapClient.getSession().get(12, TimeUnit.SECONDS)
             val accountId = session.getPrimaryAccount(MailAccountCapability::class.java)
@@ -376,7 +377,7 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
         emailId: String,
         seen: Boolean
     ): Boolean = withContext(Dispatchers.IO) {
-        val client = JmapClient(connectedAccount.email, connectedAccount.password, connectedAccount.sessionUrl.toHttpUrlOrNull()!!)
+        val client = newClient(connectedAccount)
         client.use { jmapClient ->
             val session = jmapClient.getSession().get(12, TimeUnit.SECONDS)
             val accountId = session.getPrimaryAccount(MailAccountCapability::class.java)
@@ -418,7 +419,7 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
         emailId: String,
         favorite: Boolean
     ): Boolean = withContext(Dispatchers.IO) {
-        val client = JmapClient(connectedAccount.email, connectedAccount.password, connectedAccount.sessionUrl.toHttpUrlOrNull()!!)
+        val client = newClient(connectedAccount)
         client.use { jmapClient ->
             val session = jmapClient.getSession().get(12, TimeUnit.SECONDS)
             val accountId = session.getPrimaryAccount(MailAccountCapability::class.java)
@@ -462,7 +463,7 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
         keyword: String,
         value: Boolean
     ): Boolean = withContext(Dispatchers.IO) {
-        val client = JmapClient(connectedAccount.email, connectedAccount.password, connectedAccount.sessionUrl.toHttpUrlOrNull()!!)
+        val client = newClient(connectedAccount)
         client.use { jmapClient ->
             val session = jmapClient.getSession().get(12, TimeUnit.SECONDS)
             val accountId = session.getPrimaryAccount(MailAccountCapability::class.java)
@@ -504,7 +505,7 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
         connectedAccount: ConnectedAccount,
         keyword: String
     ): List<EmailSummary> = withContext(Dispatchers.IO) {
-        val client = JmapClient(connectedAccount.email, connectedAccount.password, connectedAccount.sessionUrl.toHttpUrlOrNull()!!)
+        val client = newClient(connectedAccount)
         client.use { jmapClient ->
             val session = jmapClient.getSession().get(12, TimeUnit.SECONDS)
             val accountId = session.getPrimaryAccount(MailAccountCapability::class.java)
@@ -573,7 +574,7 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
         emailId: String,
         mailboxId: String
     ): Boolean = withContext(Dispatchers.IO) {
-        val client = JmapClient(connectedAccount.email, connectedAccount.password, connectedAccount.sessionUrl.toHttpUrlOrNull()!!)
+        val client = newClient(connectedAccount)
         client.use { jmapClient ->
             val session = jmapClient.getSession().get(12, TimeUnit.SECONDS)
             val accountId = session.getPrimaryAccount(MailAccountCapability::class.java)
@@ -608,7 +609,7 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
         name: String,
         role: String?
     ): String? = withContext(Dispatchers.IO) {
-        val client = JmapClient(connectedAccount.email, connectedAccount.password, connectedAccount.sessionUrl.toHttpUrlOrNull()!!)
+        val client = newClient(connectedAccount)
         client.use { jmapClient ->
             val session = jmapClient.getSession().get(12, TimeUnit.SECONDS)
             val accountId = session.getPrimaryAccount(MailAccountCapability::class.java)
@@ -646,7 +647,7 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
         connectedAccount: ConnectedAccount,
         role: String
     ): String? = withContext(Dispatchers.IO) {
-        val client = JmapClient(connectedAccount.email, connectedAccount.password, connectedAccount.sessionUrl.toHttpUrlOrNull()!!)
+        val client = newClient(connectedAccount)
         client.use { jmapClient ->
             val session = jmapClient.getSession().get(12, TimeUnit.SECONDS)
             val accountId = session.getPrimaryAccount(MailAccountCapability::class.java)
@@ -690,7 +691,7 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
                 Log.w(TAG, "uploadBlob: refusing upload URL outside session origin")
                 return null
             }
-            val http = OkHttpClient.Builder().callTimeout(30, TimeUnit.SECONDS).build()
+            val http = sharedHttp.newBuilder().callTimeout(30, TimeUnit.SECONDS).build()
             val body = attachment.data.toRequestBody(attachment.mimeType.toMediaType())
             val request = Request.Builder()
                 .url(uploadUrl)
@@ -716,7 +717,7 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
         bodyContentType: String = "text/plain",
         attachments: List<Attachment> = emptyList()
     ): Boolean = withContext(Dispatchers.IO) {
-        val client = JmapClient(connectedAccount.email, connectedAccount.password, connectedAccount.sessionUrl.toHttpUrlOrNull()!!)
+        val client = newClient(connectedAccount)
         client.use { jmapClient ->
             try {
                 val session = jmapClient.getSession().get(12, TimeUnit.SECONDS)
@@ -820,7 +821,7 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
         bodyContentType: String = "text/html",
         attachments: List<Attachment> = emptyList()
     ): Boolean = withContext(Dispatchers.IO) {
-        val client = JmapClient(connectedAccount.email, connectedAccount.password, connectedAccount.sessionUrl.toHttpUrlOrNull()!!)
+        val client = newClient(connectedAccount)
         client.use { jmapClient ->
             try {
                 val session = jmapClient.getSession().get(12, TimeUnit.SECONDS)
@@ -901,7 +902,7 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
         connectedAccount: ConnectedAccount,
         emailId: String
     ): Boolean = withContext(Dispatchers.IO) {
-        val client = JmapClient(connectedAccount.email, connectedAccount.password, connectedAccount.sessionUrl.toHttpUrlOrNull()!!)
+        val client = newClient(connectedAccount)
         client.use { jmapClient ->
             try {
                 val session = jmapClient.getSession().get(12, TimeUnit.SECONDS)
@@ -928,11 +929,7 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
     ): Boolean = withContext(Dispatchers.IO) {
         try {
             val keys = WebPushKeys.getOrCreate(context)
-            val client = JmapClient(
-                connectedAccount.email,
-                connectedAccount.password,
-                connectedAccount.sessionUrl.toHttpUrlOrNull()!!
-            )
+            val client = newClient(connectedAccount)
             client.use { jmapClient ->
                 val pushKeys = rs.ltt.jmap.common.entity.Keys.builder()
                     .p256dh(keys.p256dh)
@@ -976,7 +973,7 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
         mimeType: String
     ): ByteArray? = withContext(Dispatchers.IO) {
         try {
-            val client = JmapClient(connectedAccount.email, connectedAccount.password, connectedAccount.sessionUrl.toHttpUrlOrNull()!!)
+            val client = newClient(connectedAccount)
             client.use { jmapClient ->
                 val session = jmapClient.getSession().get(12, TimeUnit.SECONDS)
                 val accountId = session.getPrimaryAccount(MailAccountCapability::class.java)
@@ -987,7 +984,7 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
                     Log.w(TAG, "downloadBlob: refusing download URL outside session origin")
                     return@withContext null
                 }
-                val http = OkHttpClient.Builder().callTimeout(60, TimeUnit.SECONDS).build()
+                val http = sharedHttp.newBuilder().callTimeout(60, TimeUnit.SECONDS).build()
                 val req = Request.Builder()
                     .url(downloadUrl)
                     .header("Authorization", Credentials.basic(connectedAccount.email, connectedAccount.password))
@@ -1004,8 +1001,27 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
         }
     }
 
+    /**
+     * Short-lived JmapClient sharing a process-wide session cache: SessionClient.get()
+     * consults the cache before hitting the network, so repeated operations skip the
+     * per-call session round trip. The library invalidates the cached session itself
+     * when a response carries a new sessionState.
+     */
+    private fun newClient(account: ConnectedAccount): JmapClient {
+        val url = account.sessionUrl.toHttpUrlOrNull()
+            ?: throw IllegalStateException("Invalid session URL")
+        return JmapClient(account.email, account.password, url)
+            .apply { setSessionCache(sessionCache) }
+    }
+
     companion object {
         private const val TAG = "JMapClient"
+
+        private val sessionCache = rs.ltt.jmap.client.session.InMemorySessionCache()
+
+        // One shared client: reuses connection pool and dispatcher threads across
+        // uploads/downloads instead of allocating a fresh stack per call.
+        private val sharedHttp = OkHttpClient()
 
         /**
          * Server-provided URLs (upload/download/eventSource templates) receive Basic auth

@@ -13,6 +13,7 @@ object FaviconRepository {
     private const val CACHE_TTL_MS = 14L * 24 * 60 * 60 * 1000
     private const val NEGATIVE_CACHE_TTL_MS = 24L * 60 * 60 * 1000
     private const val NEGATIVE_CACHE_MAX_SIZE = 2000
+    private const val MAX_ICON_BYTES = 512 * 1024
 
     private data class CacheEntry(val bitmap: Bitmap, val fetchedAt: Long)
 
@@ -486,7 +487,21 @@ object FaviconRepository {
             conn.readTimeout = 5000
             conn.setRequestProperty("User-Agent", "Mozilla/5.0")
             if (conn.responseCode != 200) return null
-            conn.inputStream.use { it.readBytes() }
+            if (conn.contentLength > MAX_ICON_BYTES) return null
+            conn.inputStream.use { input ->
+                val out = java.io.ByteArrayOutputStream()
+                val buf = ByteArray(8192)
+                var total = 0
+                while (true) {
+                    val n = input.read(buf)
+                    if (n == -1) break
+                    total += n
+                    // Server-controlled stream: cap it so a hostile/broken host can't exhaust memory.
+                    if (total > MAX_ICON_BYTES) return null
+                    out.write(buf, 0, n)
+                }
+                out.toByteArray()
+            }
         } catch (_: Exception) {
             null
         } finally {

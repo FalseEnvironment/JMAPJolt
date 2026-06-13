@@ -30,8 +30,17 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
         setHasStableIds(true)
     }
 
-    override fun getItemId(position: Int): Long =
-        activity.emails[position].id.hashCode().toLong()
+    // 64-bit FNV-1a over the JMAP id: String.hashCode() is only 32-bit and a
+    // collision between two different ids in the same list (e.g. the cross-folder
+    // union built for search) crashes RecyclerView when stable IDs are enabled
+    // ("Called attach on a child which is not detached").
+    override fun getItemId(position: Int): Long {
+        var h = -3750763034362895579L
+        for (c in activity.emails[position].id) {
+            h = (h xor c.code.toLong()) * 1099511628211L
+        }
+        return h
+    }
 
     // Cached preference: reading SharedPreferences on every onBindViewHolder
     // costs a map lookup + potential lock per row while scrolling.

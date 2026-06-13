@@ -39,6 +39,14 @@ class JmapEventSourceService : Service() {
     // Tracks emails of accounts that already have a running loop in this instance.
     private val activeLoops = ConcurrentHashMap.newKeySet<String>()
 
+    // startForeground() must run as early as possible: onCreate fires before
+    // onStartCommand, and a busy main thread at app launch can otherwise push the
+    // call past the system deadline (ForegroundServiceDidNotStartInTimeException).
+    override fun onCreate() {
+        super.onCreate()
+        startForeground(NOTIFICATION_ID, buildNotification())
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForeground(NOTIFICATION_ID, buildNotification())
         serviceScope.launch { startLoopsForAllAccounts() }
@@ -197,11 +205,15 @@ class JmapEventSourceService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         if (isEnabled(this)) {
-            val restart = PendingIntent.getService(
-                this, 1,
-                Intent(this, JmapEventSourceService::class.java),
-                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
-            )
+            val restartIntent = Intent(this, JmapEventSourceService::class.java)
+            val flags = PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+            // getService would restart without foreground allowance and crash with
+            // ForegroundServiceDidNotStartInTimeException on O+.
+            val restart = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                PendingIntent.getForegroundService(this, 1, restartIntent, flags)
+            } else {
+                PendingIntent.getService(this, 1, restartIntent, flags)
+            }
             getSystemService(AlarmManager::class.java)
                 .set(AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime() + 5_000L, restart)
         }

@@ -527,14 +527,20 @@ class MainActivity : AppCompatActivity() {
 
         // Closing the keyboard (single back press) also exits search: chips and
         // input disappear without needing a second back press.
-        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(drawerLayout) { _, insets ->
-            val imeVisible = insets.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime())
-            if (wasImeVisible && !imeVisible && isSearchActive &&
-                searchInput.text.isNullOrEmpty()) {
-                deactivateSearch()
+        // Note: an OnApplyWindowInsetsListener on an inner view never fires here
+        // because the window is not edge-to-edge; root insets polled on layout
+        // changes are reliable regardless of fitsSystemWindows.
+        drawerLayout.viewTreeObserver.addOnGlobalLayoutListener {
+            val insets = androidx.core.view.ViewCompat.getRootWindowInsets(drawerLayout)
+            val imeVisible =
+                insets?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true
+            if (wasImeVisible && !imeVisible && isSearchActive) {
+                // Global layout fires mid-layout-pass: mutating the RecyclerView
+                // adapter here corrupts child state ("Called attach on a child
+                // which is not detached"). Defer past the layout pass.
+                drawerLayout.post { if (isSearchActive) deactivateSearch() }
             }
             wasImeVisible = imeVisible
-            insets
         }
 
         setupOnboardingPager()
@@ -2197,6 +2203,11 @@ body{background:$bg;padding:20px}
         mailSwipeRefresh.setOnChildScrollUpCallback { _, _ ->
             emailsRecyclerView.canScrollVertically(-1)
         }
+        // Pull must travel further before triggering refresh: a slightly diagonal
+        // swipe-to-delete/archive on the top rows would otherwise start a refresh.
+        mailSwipeRefresh.setDistanceToTriggerSync(
+            (PULL_TO_REFRESH_TRIGGER_DP * resources.displayMetrics.density).toInt()
+        )
         mailSwipeRefresh.setOnRefreshListener {
             status.text = getString(R.string.mailbox_refreshing)
             refreshInboxNow { mailSwipeRefresh.isRefreshing = false }
@@ -2476,6 +2487,20 @@ body{background:$bg;padding:20px}
                         return Float.MAX_VALUE  // disabilita swipe da velocità — richiede rilascio dito
                     }
 
+                    // While a row is being swiped horizontally, the pull-to-refresh
+                    // spinner must not appear at all.
+                    override fun onSelectedChanged(viewHolder: RecyclerView.ViewHolder?, actionState: Int) {
+                        super.onSelectedChanged(viewHolder, actionState)
+                        if (actionState == ItemTouchHelper.ACTION_STATE_SWIPE) {
+                            mailSwipeRefresh.isEnabled = false
+                        }
+                    }
+
+                    override fun clearView(rv: RecyclerView, vh: RecyclerView.ViewHolder) {
+                        super.clearView(rv, vh)
+                        mailSwipeRefresh.isEnabled = true
+                    }
+
                     override fun onChildDraw(
                             c: Canvas,
                             rv: RecyclerView,
@@ -2511,43 +2536,35 @@ body{background:$bg;padding:20px}
                             val intrinsicWidth = icon?.intrinsicWidth ?: 0
                             val intrinsicHeight = icon?.intrinsicHeight ?: 0
 
+                            // Clip everything to the revealed strip: the icon stays
+                            // "behind" the row and is uncovered progressively instead
+                            // of popping in/out at a pixel threshold.
+                            val iconTop = view.top + (itemHeight - intrinsicHeight) / 2
+                            val iconBottom = iconTop + intrinsicHeight
+                            c.save()
                             if (cappedDX > 0) {
-                                // Draw background color
-                                c.drawRect(
+                                c.clipRect(
                                         view.left.toFloat(),
                                         view.top.toFloat(),
                                         view.left + cappedDX,
-                                        view.bottom.toFloat(),
-                                        paint
+                                        view.bottom.toFloat()
                                 )
-                                // Draw centered icon if swiped enough
-                                if (cappedDX > 72) {
-                                    val iconLeft = view.left + 48
-                                    val iconRight = iconLeft + intrinsicWidth
-                                    val iconTop = view.top + (itemHeight - intrinsicHeight) / 2
-                                    val iconBottom = iconTop + intrinsicHeight
-                                    icon?.setBounds(iconLeft, iconTop, iconRight, iconBottom)
-                                    icon?.draw(c)
-                                }
+                                c.drawColor(colorRes)
+                                val iconLeft = view.left + 48
+                                icon?.setBounds(iconLeft, iconTop, iconLeft + intrinsicWidth, iconBottom)
                             } else {
-                                // Draw background color
-                                c.drawRect(
+                                c.clipRect(
                                         view.right + cappedDX,
                                         view.top.toFloat(),
                                         view.right.toFloat(),
-                                        view.bottom.toFloat(),
-                                        paint
+                                        view.bottom.toFloat()
                                 )
-                                // Draw centered icon if swiped enough
-                                if (cappedDX < -72) {
-                                    val iconRight = view.right - 48
-                                    val iconLeft = iconRight - intrinsicWidth
-                                    val iconTop = view.top + (itemHeight - intrinsicHeight) / 2
-                                    val iconBottom = iconTop + intrinsicHeight
-                                    icon?.setBounds(iconLeft, iconTop, iconRight, iconBottom)
-                                    icon?.draw(c)
-                                }
+                                c.drawColor(colorRes)
+                                val iconRight = view.right - 48
+                                icon?.setBounds(iconRight - intrinsicWidth, iconTop, iconRight, iconBottom)
                             }
+                            icon?.draw(c)
+                            c.restore()
                         }
                         super.onChildDraw(c, rv, vh, cappedDX, dY, state, active)
                     }
@@ -2878,7 +2895,11 @@ body{background:$bg;padding:20px}
                 SwipeAction.MARK_SPAM -> getString(R.string.swipe_action_spam)
             }
 
-    private fun updateEmailsList(newList: List<DisplayEmail>) {
+    private fun updateEmailsList(rawList: List<DisplayEmail>) {
+        // Stable adapter ids derive from email ids: a duplicate id in the list
+        // (e.g. multi-account label sync merging overlapping results) crashes
+        // RecyclerView with "Called attach on a child which is not detached".
+        val newList = rawList.distinctBy { it.id }
         val folderChanged = prevUpdateFolder != selectedFolder
         prevUpdateFolder = selectedFolder
 
@@ -3125,7 +3146,7 @@ body{background:$bg;padding:20px}
             labelsOf(it).any { label -> label.name.contains(query, ignoreCase = true) }
         }
         emails.clear()
-        emails.addAll(filtered)
+        emails.addAll(filtered.distinctBy { it.id })
         emailAdapter.notifyDataSetChanged()
         emptyStateView.visibility = if (emails.isEmpty()) View.VISIBLE else View.GONE
         emailsRecyclerView.visibility = if (emails.isEmpty()) View.GONE else View.VISIBLE
@@ -4337,6 +4358,10 @@ body{background:$bg;padding:20px}
     companion object {
         internal const val TAG = "MainActivity"
         internal const val PREFS_NAME = "mail_prefs"
+
+        // Pull-to-refresh trigger distance (default is ~64dp; raised to avoid
+        // accidental refreshes while swiping the top email row horizontally).
+        private const val PULL_TO_REFRESH_TRIGGER_DP = 160
 
         // Detects common HTML elements so HTML fragments (no <html> root) are rendered as
         // markup instead of being escaped and shown as raw text.
