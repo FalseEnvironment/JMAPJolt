@@ -131,6 +131,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var settingsGeneralHeader: LinearLayout
     private lateinit var settingsGeneralContent: LinearLayout
     internal lateinit var settingsGeneralChevron: ImageView
+    private lateinit var settingsLabelsContainer: LinearLayout
+    private lateinit var settingsLabelsHeader: LinearLayout
+    private lateinit var settingsLabelsContent: LinearLayout
+    internal lateinit var settingsLabelsChevron: ImageView
     private lateinit var settingsSwipeContainer: LinearLayout
     private lateinit var settingsUnifiedPushContainer: LinearLayout
     private lateinit var settingsUnifiedPushHeader: LinearLayout
@@ -139,8 +143,8 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var settingsAccountsContainer: LinearLayout
     private lateinit var settingsAccountsHeader: LinearLayout
-    private lateinit var settingsAccountsContent: LinearLayout
-    private lateinit var settingsAccountsChevron: ImageView
+    internal lateinit var settingsAccountsContent: LinearLayout
+    internal lateinit var settingsAccountsChevron: ImageView
     private lateinit var settingsThemeContainer: LinearLayout
     private lateinit var settingsThemeHeader: LinearLayout
     private lateinit var settingsThemeContent: LinearLayout
@@ -356,6 +360,10 @@ class MainActivity : AppCompatActivity() {
         settingsGeneralHeader = findViewById(R.id.settingsGeneralHeader)
         settingsGeneralContent = findViewById(R.id.settingsGeneralContent)
         settingsGeneralChevron = findViewById(R.id.settingsGeneralChevron)
+        settingsLabelsContainer = findViewById(R.id.settingsLabelsContainer)
+        settingsLabelsHeader = findViewById(R.id.settingsLabelsHeader)
+        settingsLabelsContent = findViewById(R.id.settingsLabelsContent)
+        settingsLabelsChevron = findViewById(R.id.settingsLabelsChevron)
         settingsSwipeContainer = findViewById(R.id.settingsSwipeContainer)
         settingsUnifiedPushContainer = findViewById(R.id.settingsUnifiedPushContainer)
         settingsUnifiedPushHeader = findViewById(R.id.settingsUnifiedPushHeader)
@@ -510,6 +518,7 @@ class MainActivity : AppCompatActivity() {
         bindPullToRefresh()
         loadAccounts()
         applyTheme()
+        handleMailtoIntent(intent)
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -1977,13 +1986,29 @@ body{background:$bg;padding:20px}
             }
         }
         loadFaviconsSwitch.setOnCheckedChangeListener { _, isChecked ->
-            saveGeneralPreferences()
-            emailAdapter.loadFaviconsEnabled = isChecked
-            emailAdapter.notifyDataSetChanged()
+            if (isChecked) {
+                showThemedConfirmDialog(
+                    title = "Auto-load favicons",
+                    message = "This feature uses DuckDuckGo's external service (icons.duckduckgo.com) to fetch favicons for email senders. No personal data is sent, only the domain name.",
+                    confirmLabel = "Enable"
+                ) {
+                    saveGeneralPreferences()
+                    emailAdapter.loadFaviconsEnabled = true
+                    emailAdapter.notifyDataSetChanged()
+                }
+                loadFaviconsSwitch.isChecked = false
+            } else {
+                saveGeneralPreferences()
+                emailAdapter.loadFaviconsEnabled = false
+                emailAdapter.notifyDataSetChanged()
+            }
         }
 
         settingsGeneralHeader.setOnClickListener {
             toggleSettingsSection(settingsGeneralContent, settingsGeneralChevron)
+        }
+        settingsLabelsHeader.setOnClickListener {
+            toggleSettingsSection(settingsLabelsContent, settingsLabelsChevron)
         }
         settingsThemeHeader.setOnClickListener {
             toggleSettingsSection(settingsThemeContent, settingsThemeChevron)
@@ -2991,7 +3016,14 @@ body{background:$bg;padding:20px}
                                 oldItemPosition: Int,
                                 newItemPosition: Int
                         ): Boolean {
-                            return emails[oldItemPosition] == newList[newItemPosition]
+                            val a = emails[oldItemPosition]
+                            val b = newList[newItemPosition]
+                            return a.seen == b.seen &&
+                                    a.isFavorite == b.isFavorite &&
+                                    a.labels == b.labels &&
+                                    a.preview == b.preview &&
+                                    a.subject == b.subject &&
+                                    a.from == b.from
                         }
                     }
             )
@@ -3133,8 +3165,13 @@ body{background:$bg;padding:20px}
         }
         searchChipsScroll.visibility = View.VISIBLE
         searchChipsScroll.alpha = 0f
-        searchChipsScroll.translationY = 0f
-        searchChipsScroll.animate().alpha(1f).setDuration(200).start()
+        searchChipsScroll.translationY = -40f * resources.displayMetrics.density
+        searchChipsScroll.animate()
+            .alpha(1f)
+            .translationY(0f)
+            .setDuration(250)
+            .setInterpolator(android.view.animation.DecelerateInterpolator(2f))
+            .start()
         searchInput.requestFocus()
         val imm = getSystemService(InputMethodManager::class.java)
         imm?.showSoftInput(searchInput, InputMethodManager.SHOW_IMPLICIT)
@@ -4036,7 +4073,7 @@ body{background:$bg;padding:20px}
         val textInt = if (currentTheme == "light") "#212121".toColorInt() else Color.WHITE
         val secondaryTextInt =
                 if (currentTheme == "light") "#757575".toColorInt() else "#BDBDBD".toColorInt()
-        drawerAccountArrow.imageTintList = ColorStateList.valueOf(secondaryTextInt)
+        drawerAccountArrow.imageTintList = ColorStateList.valueOf(currentAccentColor.toColorInt())
         val iconTint =
                 if (currentTheme == "light") "#757575".toColorInt() else "#9E9E9E".toColorInt()
 
@@ -4181,7 +4218,7 @@ body{background:$bg;padding:20px}
         getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().putInt("account_color_$email", color).apply()
     }
 
-    private fun refreshAccountsSettings() {
+    internal fun refreshAccountsSettings() {
         settingsAccountsContent.removeAllViews()
         val dp = resources.displayMetrics.density
         val textColor = if (currentTheme == "light") "#212121".toColorInt() else Color.WHITE
@@ -4405,6 +4442,12 @@ body{background:$bg;padding:20px}
             return true
         }
         return super.onSupportNavigateUp()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleMailtoIntent(intent)
     }
 
     override fun onResume() {

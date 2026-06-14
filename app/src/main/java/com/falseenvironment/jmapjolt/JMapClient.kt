@@ -398,10 +398,11 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
                 mapOf("keywords" to newKeywords)
             }
 
-            val update = mapOf(emailId to patch)
+            @Suppress("UNCHECKED_CAST")
+            val update = mapOf(emailId to patch) as Map<String, Map<String, Any>>
             val setCall = rs.ltt.jmap.common.method.call.email.SetEmailMethodCall.builder()
                 .accountId(accountId)
-                .update(update as Map<String, Map<String, Any>>)
+                .update(update)
                 .build()
 
             try {
@@ -439,11 +440,13 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
                 val newKeywords = current.filterKeys { it != "\$flagged" }
                 mapOf("keywords" to newKeywords)
             }
-            val update = mapOf(emailId to patch)
+
+            @Suppress("UNCHECKED_CAST")
+            val update = mapOf(emailId to patch) as Map<String, Map<String, Any>>
 
             val setCall = rs.ltt.jmap.common.method.call.email.SetEmailMethodCall.builder()
                 .accountId(accountId)
-                .update(update as Map<String, Map<String, Any>>)
+                .update(update)
                 .build()
 
             try {
@@ -483,11 +486,13 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
                 val newKeywords = current.filterKeys { it != keyword }
                 mapOf("keywords" to newKeywords)
             }
-            val update = mapOf(emailId to patch)
+
+            @Suppress("UNCHECKED_CAST")
+            val update = mapOf(emailId to patch) as Map<String, Map<String, Any>>
 
             val setCall = rs.ltt.jmap.common.method.call.email.SetEmailMethodCall.builder()
                 .accountId(accountId)
-                .update(update as Map<String, Map<String, Any>>)
+                .update(update)
                 .build()
 
             try {
@@ -1045,7 +1050,7 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
                     .build()
                 http.newCall(req).execute().use { resp ->
                     if (!resp.isSuccessful) return@withContext null
-                    resp.body?.bytes()
+                    resp.body?.bytes() ?: return@withContext null
                 }
             }
         } catch (e: Exception) {

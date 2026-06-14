@@ -26,12 +26,18 @@ data class DisplayEmail(
     val fromEmail: String,
     val preview: String,
     val fullBody: String = "",
-    var seen: Boolean = false,
-    var isFavorite: Boolean = false,
+    @JvmField var seen: Boolean = false,
+    @JvmField var isFavorite: Boolean = false,
     val receivedAt: Long = 0L,
     val toEmail: String = "",
     val attachments: List<EmailAttachmentInfo> = emptyList(),
     val accountEmail: String = "",
-    // Custom JMAP keywords representing user labels (system "$..." keywords excluded).
-    var labels: List<String> = emptyList()
-)
+    @JvmField var labels: List<String> = emptyList()
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is DisplayEmail) return false
+        return id == other.id
+    }
+    override fun hashCode(): Int = id.hashCode()
+}

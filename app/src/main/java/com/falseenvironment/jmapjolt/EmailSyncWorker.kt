@@ -49,7 +49,7 @@ class EmailSyncWorker(context: Context, params: WorkerParameters) : CoroutineWor
                 )
                 .build()
             WorkManager.getInstance(context)
-                .enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.UPDATE, request)
+                .enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.KEEP, request)
             Log.d(TAG, "Scheduled periodic email sync (10 min fallback)")
         }
 

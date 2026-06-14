@@ -54,7 +54,12 @@ class JmapEventSourceService : Service() {
     }
 
     private suspend fun startLoopsForAllAccounts() {
-        val accounts = BackgroundEmailSyncReceiver.readAllAccounts(this@JmapEventSourceService)
+        val accounts = try {
+            BackgroundEmailSyncReceiver.readAllAccounts(this@JmapEventSourceService)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to read accounts (keystore may be corrupted)", e)
+            emptyList()
+        }
         if (accounts.isEmpty()) {
             Log.w(TAG, "No accounts — stopping SSE service")
             stopSelf()

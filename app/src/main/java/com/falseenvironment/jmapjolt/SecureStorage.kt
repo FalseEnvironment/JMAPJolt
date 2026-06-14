@@ -63,7 +63,7 @@ object SecureStorage {
         val legacy = context.getSharedPreferences(LEGACY_PREFS_NAME, Context.MODE_PRIVATE)
         val plaintext = legacy.getString(KEY_ACCOUNTS_JSON, null) ?: return
         securePrefs.edit().putString(KEY_ACCOUNTS_JSON, plaintext).apply()
-        legacy.edit().remove(KEY_ACCOUNTS_JSON).apply()
+        legacy.edit().clear().apply()
         Log.i(TAG, "Migrated account credentials from plaintext to encrypted storage")
     }
 }

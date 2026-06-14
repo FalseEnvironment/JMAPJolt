@@ -261,7 +261,6 @@
                         android:src="@drawable/ic_lucide_chevron_right"
                         android:contentDescription="@string/onboarding_next"
                         app:backgroundTint="#3D8BFD"
-                        app:tint="#FFFFFF"
                         app:fabSize="normal" />
 
                 </RelativeLayout>
@@ -414,7 +413,6 @@
                     android:layout_gravity="bottom|end"
                     android:layout_margin="16dp"
                     android:src="@android:drawable/ic_menu_edit"
-                    app:tint="#FFFFFF"
                     app:backgroundTint="#3D8BFD"
                     android:contentDescription="Compose Email" />
 
@@ -480,7 +478,6 @@
                         android:layout_height="48dp"
                         android:padding="10dp"
                         android:src="@android:drawable/ic_menu_send"
-                        app:tint="#4CAF50"
                         android:visibility="gone" />
                 </LinearLayout>
 
@@ -599,7 +596,6 @@
                         android:layout_height="18dp"
                         android:src="@drawable/ic_lucide_reply"
                         android:layout_marginEnd="10dp"
-                        app:tint="#9E9E9E"
                         android:contentDescription="Quoted message" />
 
                     <TextView
@@ -619,7 +615,6 @@
                         android:layout_height="36dp"
                         android:padding="8dp"
                         android:src="@drawable/ic_delete_24dp"
-                        app:tint="#9E9E9E"
                         android:contentDescription="Remove quoted message" />
                 </LinearLayout>
 
@@ -693,7 +688,6 @@
                         android:layout_height="44dp"
                         android:padding="10dp"
                         android:src="@drawable/ic_attach_24dp"
-                        app:tint="#9E9E9E"
                         android:contentDescription="Attach file" />
                 </LinearLayout>
 
@@ -746,6 +740,11 @@
                         android:layout_height="0dp"
                         android:visibility="gone" />
 
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="#33FFFFFF" />
+
                     <!-- Appearance accordion section -->
                     <LinearLayout
                         android:id="@+id/settingsThemeContainer"
@@ -760,7 +759,7 @@
                             android:gravity="center_vertical"
                             android:orientation="horizontal"
                             android:paddingStart="20dp"
-                            android:paddingEnd="16dp"
+                            android:paddingEnd="20dp"
                             android:clickable="true"
                             android:focusable="true"
                             android:background="?attr/selectableItemBackground">
@@ -778,8 +777,7 @@
                                 android:layout_width="20dp"
                                 android:layout_height="20dp"
                                 android:src="@drawable/ic_lucide_chevron_down"
-                                android:scaleType="fitCenter"
-                                app:tint="#FFFFFF" />
+                                android:scaleType="fitCenter" />
 
                         </LinearLayout>
 
@@ -809,6 +807,7 @@
                                 <LinearLayout
                                     android:id="@+id/themeDropdown"
                                     android:layout_width="wrap_content"
+                                    android:minWidth="130dp"
                                     android:layout_height="40dp"
                                     android:gravity="center_vertical"
                                     android:paddingStart="14dp"
@@ -818,8 +817,10 @@
                                     android:focusable="true">
                                     <TextView
                                         android:id="@+id/themeDropdownText"
-                                        android:layout_width="wrap_content"
+                                        android:layout_width="0dp"
                                         android:layout_height="wrap_content"
+                                        android:layout_weight="1"
+                                        android:gravity="center"
                                         android:textSize="13sp" />
                                     <ImageView
                                         android:layout_width="14dp"
@@ -876,7 +877,7 @@
                             android:gravity="center_vertical"
                             android:orientation="horizontal"
                             android:paddingStart="20dp"
-                            android:paddingEnd="16dp"
+                            android:paddingEnd="20dp"
                             android:clickable="true"
                             android:focusable="true"
                             android:background="?attr/selectableItemBackground">
@@ -894,8 +895,7 @@
                                 android:layout_width="20dp"
                                 android:layout_height="20dp"
                                 android:src="@drawable/ic_lucide_chevron_down"
-                                android:scaleType="fitCenter"
-                                app:tint="#FFFFFF" />
+                                android:scaleType="fitCenter" />
 
                         </LinearLayout>
 
@@ -930,33 +930,6 @@
                                 android:textSize="15sp" />
 
                             <LinearLayout
-                                android:id="@+id/settingsEditLabelsRow"
-                                android:layout_width="match_parent"
-                                android:layout_height="48dp"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal"
-                                android:clickable="true"
-                                android:focusable="true"
-                                android:background="?attr/selectableItemBackground">
-
-                                <TextView
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:text="@string/settings_edit_labels"
-                                    android:textSize="15sp" />
-
-                                <TextView
-                                    android:id="@+id/settingsEditLabelsButton"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/settings_edit_labels_button"
-                                    android:textSize="14sp"
-                                    android:paddingStart="12dp"
-                                    android:paddingEnd="4dp" />
-                            </LinearLayout>
-
-                            <LinearLayout
                                 android:layout_width="match_parent"
                                 android:layout_height="48dp"
                                 android:gravity="center_vertical"
@@ -972,6 +945,7 @@
                                 <LinearLayout
                                     android:id="@+id/swipeLeftDropdown"
                                     android:layout_width="wrap_content"
+                                    android:minWidth="130dp"
                                     android:layout_height="40dp"
                                     android:gravity="center_vertical"
                                     android:paddingStart="14dp"
@@ -981,8 +955,10 @@
                                     android:focusable="true">
                                     <TextView
                                         android:id="@+id/swipeLeftDropdownText"
-                                        android:layout_width="wrap_content"
+                                        android:layout_width="0dp"
                                         android:layout_height="wrap_content"
+                                        android:layout_weight="1"
+                                        android:gravity="center"
                                         android:textSize="13sp" />
                                     <ImageView
                                         android:layout_width="14dp"
@@ -1009,6 +985,7 @@
                                 <LinearLayout
                                     android:id="@+id/swipeRightDropdown"
                                     android:layout_width="wrap_content"
+                                    android:minWidth="130dp"
                                     android:layout_height="40dp"
                                     android:gravity="center_vertical"
                                     android:paddingStart="14dp"
@@ -1018,8 +995,10 @@
                                     android:focusable="true">
                                     <TextView
                                         android:id="@+id/swipeRightDropdownText"
-                                        android:layout_width="wrap_content"
+                                        android:layout_width="0dp"
                                         android:layout_height="wrap_content"
+                                        android:layout_weight="1"
+                                        android:gravity="center"
                                         android:textSize="13sp" />
                                     <ImageView
                                         android:layout_width="14dp"
@@ -1031,7 +1010,88 @@
                             </LinearLayout>
 
                         </LinearLayout>
+
                     </LinearLayout>
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="#33FFFFFF" />
+
+                        <LinearLayout
+                            android:id="@+id/settingsLabelsContainer"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical">
+
+                            <LinearLayout
+                                android:id="@+id/settingsLabelsHeader"
+                                android:layout_width="match_parent"
+                                android:layout_height="52dp"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:paddingStart="20dp"
+                                android:paddingEnd="20dp"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:background="?attr/selectableItemBackground">
+
+                                <TextView
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="@string/settings_labels"
+                                    android:textSize="15sp"
+                                    android:textStyle="bold" />
+
+                                <ImageView
+                                    android:id="@+id/settingsLabelsChevron"
+                                    android:layout_width="20dp"
+                                    android:layout_height="20dp"
+                                    android:src="@drawable/ic_lucide_chevron_down"
+                                    android:scaleType="fitCenter" />
+
+                            </LinearLayout>
+
+                            <LinearLayout
+                                android:id="@+id/settingsLabelsContent"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:paddingStart="20dp"
+                                android:paddingEnd="20dp"
+                                android:paddingBottom="12dp"
+                                android:visibility="gone">
+
+                                <LinearLayout
+                                    android:id="@+id/settingsEditLabelsRow"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="48dp"
+                                    android:gravity="center_vertical"
+                                    android:orientation="horizontal"
+                                    android:clickable="true"
+                                    android:focusable="true"
+                                    android:background="?attr/selectableItemBackground">
+
+                                    <TextView
+                                        android:layout_width="0dp"
+                                        android:layout_height="wrap_content"
+                                        android:layout_weight="1"
+                                        android:text="@string/settings_edit_labels"
+                                        android:textSize="15sp" />
+
+                                    <TextView
+                                        android:id="@+id/settingsEditLabelsButton"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="@string/settings_edit_labels_button"
+                                        android:textSize="14sp"
+                                        android:paddingStart="12dp" />
+                                </LinearLayout>
+
+                            </LinearLayout>
+
+                        </LinearLayout>
 
                     <View
                         android:layout_width="match_parent"
@@ -1052,7 +1112,7 @@
                             android:gravity="center_vertical"
                             android:orientation="horizontal"
                             android:paddingStart="20dp"
-                            android:paddingEnd="16dp"
+                            android:paddingEnd="20dp"
                             android:clickable="true"
                             android:focusable="true"
                             android:background="?attr/selectableItemBackground">
@@ -1070,8 +1130,7 @@
                                 android:layout_width="20dp"
                                 android:layout_height="20dp"
                                 android:src="@drawable/ic_lucide_chevron_down"
-                                android:scaleType="fitCenter"
-                                app:tint="#FFFFFF" />
+                                android:scaleType="fitCenter" />
 
                         </LinearLayout>
 
@@ -1145,7 +1204,7 @@
                             android:gravity="center_vertical"
                             android:orientation="horizontal"
                             android:paddingStart="20dp"
-                            android:paddingEnd="16dp"
+                            android:paddingEnd="20dp"
                             android:clickable="true"
                             android:focusable="true"
                             android:background="?attr/selectableItemBackground">
@@ -1163,8 +1222,7 @@
                                 android:layout_width="20dp"
                                 android:layout_height="20dp"
                                 android:src="@drawable/ic_lucide_chevron_down"
-                                android:scaleType="fitCenter"
-                                app:tint="#FFFFFF" />
+                                android:scaleType="fitCenter" />
 
                         </LinearLayout>
 
@@ -1193,7 +1251,7 @@
                         android:gravity="center_vertical"
                         android:orientation="horizontal"
                         android:paddingStart="20dp"
-                        android:paddingEnd="16dp"
+                        android:paddingEnd="20dp"
                         android:clickable="true"
                         android:focusable="true"
                         android:background="?attr/selectableItemBackground">
@@ -1204,8 +1262,7 @@
                             android:layout_height="20dp"
                             android:layout_marginEnd="14dp"
                             android:src="@drawable/ic_lucide_info"
-                            android:scaleType="fitCenter"
-                            app:tint="#FFFFFF" />
+                            android:scaleType="fitCenter" />
 
                         <TextView
                             android:layout_width="0dp"
@@ -1219,8 +1276,7 @@
                             android:layout_width="16dp"
                             android:layout_height="16dp"
                             android:src="@drawable/ic_lucide_chevron_right"
-                            android:scaleType="fitCenter"
-                            app:tint="#FFFFFF" />
+                            android:scaleType="fitCenter" />
 
                     </LinearLayout>
 

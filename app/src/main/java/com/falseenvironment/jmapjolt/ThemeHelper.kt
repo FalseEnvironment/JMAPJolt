@@ -116,14 +116,15 @@ internal fun MainActivity.applyTheme() {
     // Recursively update text colors in settings container
     updateContainerTextColors(settingsContainer, textInt, secondaryTextInt)
 
-    // Tint settings info row icons with primary text color (white on dark, black on light)
-    val infoTint = ColorStateList.valueOf(textInt)
-    settingsInfoIcon.imageTintList = infoTint
-    settingsInfoArrow.imageTintList = infoTint
-    val chevronTint = ColorStateList.valueOf(secondaryTextInt)
-    settingsGeneralChevron.imageTintList = chevronTint
-    settingsThemeChevron.imageTintList = chevronTint
-    settingsUnifiedPushChevron.imageTintList = chevronTint
+    // Tint settings chevrons and info row icons with accent color
+    val accentTint = ColorStateList.valueOf(currentAccentColor.toColorInt())
+    settingsGeneralChevron.imageTintList = accentTint
+    settingsLabelsChevron.imageTintList = accentTint
+    settingsThemeChevron.imageTintList = accentTint
+    settingsUnifiedPushChevron.imageTintList = accentTint
+    settingsAccountsChevron.imageTintList = accentTint
+    settingsInfoIcon.imageTintList = accentTint
+    settingsInfoArrow.imageTintList = accentTint
 
     // Update detail view header if visible
     if (isShowingEmailDetail) {
@@ -191,12 +192,26 @@ internal fun MainActivity.styleAccentButton(button: Button) {
 internal fun MainActivity.applyAccentColor() {
     val accentInt = currentAccentColor.toColorInt()
     val onAccent = getOnAccentColor()
-    fabCompose.backgroundTintList = ColorStateList.valueOf(accentInt)
+    val accentTint = ColorStateList.valueOf(accentInt)
+    fabCompose.backgroundTintList = accentTint
     toolbar.setBackgroundColor(accentInt)
     toolbar.setTitleTextColor(onAccent)
     drawerToggle.drawerArrowDrawable.color = onAccent
     applyNavIconTint(onAccent)
     topBarAccentArea.setBackgroundColor(accentInt)
+    // Update settings chevrons and icons immediately
+    settingsGeneralChevron.imageTintList = accentTint
+    settingsLabelsChevron.imageTintList = accentTint
+    settingsThemeChevron.imageTintList = accentTint
+    settingsUnifiedPushChevron.imageTintList = accentTint
+    settingsAccountsChevron.imageTintList = accentTint
+    settingsInfoIcon.imageTintList = accentTint
+    settingsInfoArrow.imageTintList = accentTint
+    // Refresh accounts section to update "Change color" button
+    try {
+        settingsAccountsContent.removeAllViews()
+        refreshAccountsSettings()
+    } catch (_: Exception) {}
     val hintAlpha = if (currentTheme == "light") 0.55f else 0.65f
     searchBarTitle.setTextColor(android.graphics.Color.argb(
         (255 * hintAlpha).toInt(),
@@ -213,18 +228,30 @@ internal fun MainActivity.applyAccentColor() {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
         window.statusBarColor = accentInt
     }
-    // Switch tint: accent when ON, gray when OFF
-    val offColor = if (currentTheme == "light") "#C7C7CC".toColorInt() else "#48484A".toColorInt()
-    val switchTint = ColorStateList(
+    // Switch tint: lighter accent when ON, darkened accent when OFF
+    val darkAccent = darkenColor(accentInt, 0.5f)
+    val lightAccent = lightenColor(accentInt, 1.3f)
+    val thumbTint = ColorStateList(
         arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
-        intArrayOf(accentInt, offColor)
+        intArrayOf(lightAccent, darkAccent)
+    )
+    val trackTint = ColorStateList(
+        arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+        intArrayOf(accentInt, darkAccent)
     )
     listOf(loadImagesSwitch, loadFaviconsSwitch, unifiedPushSwitch, sseSwitch).forEach {
-        CompoundButtonCompat.setButtonTintList(it, switchTint)
+        it.setThumbTintList(thumbTint)
+        it.setTrackTintList(trackTint)
     }
     // Primary accent buttons (settings test, login, onboarding)
     styleAccentButton(loginButton)
     onboardingNextFab.backgroundTintList = ColorStateList.valueOf(accentInt)
+    onboardingNextFab.imageTintList = ColorStateList.valueOf(onAccent)
+    fabCompose.imageTintList = ColorStateList.valueOf(onAccent)
+    composeSendButton.imageTintList = ColorStateList.valueOf(accentInt)
+    composeAttachButton.imageTintList = ColorStateList.valueOf(accentInt)
+    val quoteTint = ColorStateList.valueOf(if (currentTheme == "light") "#757575".toColorInt() else "#9E9E9E".toColorInt())
+    quoteIndicatorRemove.imageTintList = quoteTint
     updateAccentColorPreview()
     // Selection bar icons and count text
     val selIconTint = ColorStateList.valueOf(onAccent)
@@ -421,6 +448,12 @@ internal fun MainActivity.tintActionModeBar() {
 }
 
 internal fun MainActivity.darkenColor(color: Int, factor: Float = 0.72f): Int = Color.rgb(
+    (Color.red(color) * factor).toInt().coerceIn(0, 255),
+    (Color.green(color) * factor).toInt().coerceIn(0, 255),
+    (Color.blue(color) * factor).toInt().coerceIn(0, 255)
+)
+
+internal fun MainActivity.lightenColor(color: Int, factor: Float = 1.3f): Int = Color.rgb(
     (Color.red(color) * factor).toInt().coerceIn(0, 255),
     (Color.green(color) * factor).toInt().coerceIn(0, 255),
     (Color.blue(color) * factor).toInt().coerceIn(0, 255)

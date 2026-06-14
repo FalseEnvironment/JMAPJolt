@@ -38,6 +38,8 @@ import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
+private const val MAX_ATTACHMENT_BYTES = 25L * 1024 * 1024
+
 internal fun MainActivity.setupComposeView() {
     fabCompose.setOnClickListener { showComposeView() }
 
@@ -112,6 +114,10 @@ internal fun MainActivity.performSend() {
 
     val jmapAttachments = pendingAttachments.mapNotNull { att ->
         try {
+            if (att.size > MAX_ATTACHMENT_BYTES) {
+                Snackbar.make(drawerLayout, "${att.name} too large (max ${MAX_ATTACHMENT_BYTES / 1048576}MB)", Snackbar.LENGTH_SHORT).show()
+                return@mapNotNull null
+            }
             val bytes = contentResolver.openInputStream(att.uri)?.use { it.readBytes() } ?: return@mapNotNull null
             JMapClient.Attachment(att.name, att.mimeType, att.size, bytes)
         } catch (e: Exception) { null }
@@ -216,6 +222,40 @@ internal fun MainActivity.startForward(email: DisplayEmail) {
     setPendingQuote(island, "Forwarding: ${email.subject}")
     composeBodyInput.setText("")
     composeBodyInput.requestFocus()
+}
+
+/**
+ * Opens compose pre-filled from a mailto: intent (Android default-email-app links).
+ * Parses to/subject/body via android.net.MailTo. Consumes the intent so a config
+ * change (rotation) does not reopen compose on the same link.
+ */
+internal fun MainActivity.handleMailtoIntent(intent: android.content.Intent?) {
+    val action = intent?.action ?: return
+    if (action != android.content.Intent.ACTION_VIEW &&
+        action != android.content.Intent.ACTION_SENDTO) return
+    val data = intent.data ?: return
+    if (data.scheme?.lowercase() != "mailto") return
+    if (savedAccounts.isEmpty()) return
+
+    val mailTo = try {
+        android.net.MailTo.parse(data.toString())
+    } catch (e: Exception) {
+        return
+    }
+
+    showComposeView()
+    mailTo.to
+        ?.split(",")
+        ?.map { it.trim() }
+        ?.filter { it.isNotBlank() }
+        ?.forEach { addRecipientChip(it) }
+    mailTo.subject?.takeIf { it.isNotBlank() }?.let { composeSubjectInput.setText(it) }
+    mailTo.body?.takeIf { it.isNotBlank() }?.let { composeBodyInput.setText(it) }
+    composeBodyInput.requestFocus()
+
+    // Consume so onCreate after rotation does not reopen.
+    intent.action = null
+    intent.data = null
 }
 
 internal fun MainActivity.showComposeView() {
@@ -573,6 +613,10 @@ internal fun MainActivity.saveDraftFromCompose() {
 
     val jmapAttachments = pendingAttachments.mapNotNull { att ->
         try {
+            if (att.size > MAX_ATTACHMENT_BYTES) {
+                Snackbar.make(drawerLayout, "${att.name} too large (max ${MAX_ATTACHMENT_BYTES / 1048576}MB)", Snackbar.LENGTH_SHORT).show()
+                return@mapNotNull null
+            }
             val bytes = contentResolver.openInputStream(att.uri)?.use { it.readBytes() } ?: return@mapNotNull null
             JMapClient.Attachment(att.name, att.mimeType, att.size, bytes)
         } catch (e: Exception) { null }

@@ -24,6 +24,13 @@ import java.util.Locale
 
 internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.Adapter<EmailAdapter.EmailHolder>() {
 
+    private fun darkenColor(color: Int, factor: Float): Int {
+        val r = (Color.red(color) * factor).toInt()
+        val g = (Color.green(color) * factor).toInt()
+        val b = (Color.blue(color) * factor).toInt()
+        return Color.rgb(r.coerceIn(0, 255), g.coerceIn(0, 255), b.coerceIn(0, 255))
+    }
+
     init {
         // Stable ids let RecyclerView match rows across full rebinds
         // (notifyDataSetChanged), avoiding flicker and needless rebinds.
@@ -368,25 +375,14 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
             holder.avatarImage.load(R.drawable.ic_lucide_check) { crossfade(false) }
             holder.avatarImage.imageTintList = ColorStateList.valueOf(activity.getOnAccentColor())
             holder.avatarImage.visibility = android.view.View.VISIBLE
-            holder.itemView.setBackgroundColor(
-                when (activity.currentTheme) {
-                    "oled" -> Color.BLACK
-                    "light" -> "#E8E8E8".toColorInt()
-                    else -> "#242424".toColorInt()
-                }
-            )
+            val themeBg = activity.getDialogBackgroundColor()
+            holder.itemView.setBackgroundColor(darkenColor(themeBg, 0.85f))
         } else {
             holder.avatarImage.imageTintList = null
             holder.avatarImage.setPadding(0, 0, 0, 0)
             val letter =
                     if (item.from.isNotBlank()) item.from.first().uppercaseChar().toString()
                     else "?"
-            val hash = item.from.hashCode()
-            val hue = kotlin.math.abs(hash % 360).toFloat()
-            val hashColor = android.graphics.Color.HSVToColor(floatArrayOf(hue, 0.6f, 0.6f))
-            holder.itemView.setBackgroundColor(Color.TRANSPARENT)
-
-            val loadFavicons = loadFaviconsEnabled
 
             val domain =
                     item.fromEmail.substringAfter("@", "").ifEmpty {
@@ -397,6 +393,14 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
                                 ?: ""
                     }
             val normalizedDomain = if (domain.isNotEmpty()) FaviconRepository.getRootDomain(domain.lowercase()) else ""
+
+            val hashKey = if (normalizedDomain.isNotEmpty()) normalizedDomain else item.from
+            val hash = hashKey.hashCode()
+            val hue = kotlin.math.abs(hash % 360).toFloat()
+            val hashColor = android.graphics.Color.HSVToColor(floatArrayOf(hue, 0.55f, 0.75f))
+            holder.itemView.setBackgroundColor(Color.TRANSPARENT)
+
+            val loadFavicons = loadFaviconsEnabled
 
             if (loadFavicons && normalizedDomain.isNotEmpty()) {
                 // Offset from the theme background so dark favicons stay visible on dark themes

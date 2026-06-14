@@ -517,6 +517,72 @@ internal fun MainActivity.showLabelPicker(ids: List<String>) {
     dialog.show()
 }
 
+private fun MainActivity.rebuildLabelPicker(ids: List<String>, dialogRef: AlertDialog?) {
+    dialogRef?.dismiss()
+    showLabelPicker(ids)
+}
+
+internal fun MainActivity.showEditLabelDialog(label: EmailLabel, onSaved: () -> Unit) {
+    val dp = resources.displayMetrics.density
+    val textColor = if (currentTheme == "light") "#212121".toColorInt() else Color.WHITE
+    val hintColor = if (currentTheme == "light") "#9E9E9E".toColorInt() else "#616161".toColorInt()
+
+    val pendingHsv = FloatArray(3).also { hsv ->
+        Color.colorToHSV(
+            runCatching { label.colorHex.toColorInt() }.getOrDefault("#3D8BFD".toColorInt()),
+            hsv
+        )
+    }
+
+    val nameInput = EditText(this).apply {
+        hint = "Label name"
+        inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        filters = arrayOf(android.text.InputFilter.LengthFilter(18))
+        setText(label.name)
+        setTextColor(textColor)
+        setHintTextColor(hintColor)
+        backgroundTintList = ColorStateList.valueOf(hintColor)
+        layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).also { it.bottomMargin = (16 * dp).toInt() }
+    }
+    val wheel = buildHueWheel(pendingHsv, 200)
+    val root = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER_HORIZONTAL
+        val p = (20 * dp).toInt()
+        setPadding(p, (14 * dp).toInt(), p, (4 * dp).toInt())
+        addView(nameInput)
+        addView(wheel.also { (it.layoutParams as LinearLayout.LayoutParams).bottomMargin = (16 * dp).toInt() })
+        addView(buildPresetSwatchRow(pendingHsv, wheel))
+    }
+
+    showCardDialog("Edit label", root, "Save") {
+        val name = nameInput.text.toString().trim()
+        if (name.isEmpty()) {
+            nameInput.error = "Name required"
+            return@showCardDialog false
+        }
+        val newKeyword = labelNameToKeyword(name)
+        if (newKeyword.isEmpty()) {
+            nameInput.error = "Invalid name"
+            return@showCardDialog false
+        }
+        if (newKeyword != label.keyword && labels.any { it.keyword == newKeyword }) {
+            nameInput.error = "Label already exists"
+            return@showCardDialog false
+        }
+        label.name = name
+        label.colorHex = hsvHex(pendingHsv)
+        saveLabels()
+        rebuildDrawerMenuPublic()
+        emailAdapter.notifyDataSetChanged()
+        updateDetailLabelIcon()
+        onSaved()
+        true
+    }
+}
+
 /** Optimistic local update + JMAP keyword set/remove for [ids]. */
 internal fun MainActivity.applyLabelToEmails(ids: List<String>, label: EmailLabel, add: Boolean) {
     fun patched(current: List<String>): List<String> =
@@ -675,6 +741,9 @@ internal fun MainActivity.showLabelEditorDialog() {
                     labels.add(index + 1, labels.removeAt(index))
                     saveLabels(); rebuildDrawerMenuPublic(); rebuildRows()
                 }
+            })
+            row.addView(iconBtn(R.drawable.ic_lucide_pencil, accentInt) {
+                showEditLabelDialog(label) { rebuildRows() }
             })
             row.addView(iconBtn(R.drawable.ic_lucide_trash, "#D32F2F".toColorInt()) {
                 showThemedConfirmDialog(

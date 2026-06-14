@@ -3,6 +3,8 @@ package com.falseenvironment.jmapjolt
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
@@ -17,10 +19,12 @@ object FaviconRepository {
 
     private data class CacheEntry(val bitmap: Bitmap, val fetchedAt: Long)
 
+    private val cacheLock = Any()
     private val cache = object : LinkedHashMap<String, CacheEntry>(16, 0.75f, true) {
         override fun removeEldestEntry(eldest: Map.Entry<String, CacheEntry>) = size > CACHE_MAX_SIZE
     }
 
+    private val negCacheLock = Any()
     private val negativeCache = object : LinkedHashMap<String, Long>(16, 0.75f, true) {
         override fun removeEldestEntry(eldest: Map.Entry<String, Long>) = size > NEGATIVE_CACHE_MAX_SIZE
     }
@@ -436,44 +440,46 @@ object FaviconRepository {
     suspend fun fetchFavicon(rawDomain: String): Bitmap? = withContext(Dispatchers.IO) {
         val domain = getRootDomain(rawDomain.lowercase())
 
-        synchronized(negativeCache) {
+        synchronized(negCacheLock) {
             val negTime = negativeCache[domain]
             if (negTime != null && System.currentTimeMillis() - negTime < NEGATIVE_CACHE_TTL_MS) {
                 return@withContext null
             }
         }
 
-        synchronized(cache) {
+        synchronized(cacheLock) {
             val entry = cache[domain]
             if (entry != null && System.currentTimeMillis() - entry.fetchedAt < CACHE_TTL_MS) {
                 return@withContext entry.bitmap
             }
         }
 
-        // Disk cache — survives app restarts
         if (isNegativeOnDisk(domain)) return@withContext null
         readFromDisk(domain)?.let { entry ->
-            synchronized(cache) { cache[domain] = entry }
+            synchronized(cacheLock) { cache[domain] = entry }
             return@withContext entry.bitmap
         }
 
-        val bytes = fetchBytes("https://icons.duckduckgo.com/ip3/$domain.ico")
-            ?: fetchBytes("https://$domain/favicon.ico")
+        val bytes = coroutineScope {
+            val ddg = async { fetchBytes("https://icons.duckduckgo.com/ip3/$domain.ico") }
+            val local = async { fetchBytes("https://$domain/favicon.ico") }
+            ddg.await() ?: local.await()
+        }
 
         if (bytes == null || bytes.size < 10) {
-            synchronized(negativeCache) { negativeCache[domain] = System.currentTimeMillis() }
+            synchronized(negCacheLock) { negativeCache[domain] = System.currentTimeMillis() }
             writeNegativeToDisk(domain)
             return@withContext null
         }
 
         val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
         if (bitmap == null) {
-            synchronized(negativeCache) { negativeCache[domain] = System.currentTimeMillis() }
+            synchronized(negCacheLock) { negativeCache[domain] = System.currentTimeMillis() }
             writeNegativeToDisk(domain)
             return@withContext null
         }
 
-        synchronized(cache) { cache[domain] = CacheEntry(bitmap, System.currentTimeMillis()) }
+        synchronized(cacheLock) { cache[domain] = CacheEntry(bitmap, System.currentTimeMillis()) }
         writeToDisk(domain, bitmap)
         bitmap
     }
