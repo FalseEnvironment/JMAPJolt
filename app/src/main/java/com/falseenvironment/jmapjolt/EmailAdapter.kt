@@ -262,8 +262,8 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
         val item = activity.emails[position]
         val isLight = activity.currentTheme == "light"
         val primaryColor = if (isLight) Color.BLACK else Color.WHITE
-        val secondaryColor = if (isLight) "#757575".toColorInt() else "#9E9E9E".toColorInt()
-        val mutedColor = if (isLight) "#BDBDBD".toColorInt() else "#616161".toColorInt()
+        val secondaryColor = if (isLight) "#5A5A5A".toColorInt() else "#9E9E9E".toColorInt()
+        val mutedColor = if (isLight) "#8A8A8A".toColorInt() else "#616161".toColorInt()
 
         // Staggered entrance: only animate for first 12 items on fresh loads
         if (position < 12 && holder.itemView.alpha == 0f) {

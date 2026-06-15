@@ -699,6 +699,7 @@ private fun MainActivity.showAttachmentInApp(
             }.resourceId)
         setOnClickListener { onClick() }
     }
+    header.addView(headerBtn(R.drawable.ic_lucide_share_2) { shareAttachment(att, account) })
     header.addView(headerBtn(R.drawable.ic_lucide_download) { saveAttachmentToDownloads(att, account) })
     header.addView(headerBtn(R.drawable.ic_lucide_x) { dialog.dismiss() })
     card.addView(header)
@@ -1117,6 +1118,45 @@ private fun MainActivity.saveAttachmentToDownloads(
             } catch (e: Exception) {
                 showThemedSnackbar("No app found to open this file")
             }
+        }
+    }
+}
+
+/** Download the blob to the FileProvider cache and open the Android share sheet. */
+private fun MainActivity.shareAttachment(
+    att: EmailAttachmentInfo,
+    account: JMapClient.ConnectedAccount
+) {
+    lifecycleScope.launch {
+        showThemedSnackbar("Preparing…")
+        val bytes = jmapClient.downloadBlob(account, att.blobId, att.name, att.mimeType)
+        if (bytes == null) {
+            showThemedSnackbar("Download failed")
+            return@launch
+        }
+        val safeName = sanitizeAttachmentName(att.name)
+        val uri = withContext(Dispatchers.IO) {
+            try {
+                val dir = File(cacheDir, "attachments").apply { mkdirs() }
+                val f = File(dir, safeName).apply { writeBytes(bytes) }
+                FileProvider.getUriForFile(this@shareAttachment, "${packageName}.fileprovider", f)
+            } catch (e: Exception) {
+                null
+            }
+        }
+        if (uri == null) {
+            showThemedSnackbar("Failed to share")
+            return@launch
+        }
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = att.mimeType
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        try {
+            startActivity(Intent.createChooser(intent, "Share"))
+        } catch (e: Exception) {
+            showThemedSnackbar("No app found to share this file")
         }
     }
 }

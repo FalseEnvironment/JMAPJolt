@@ -172,12 +172,14 @@ internal fun MainActivity.styleLoginInputs() {
 }
 
 /** Pill-shaped accent button for primary actions (MD3 filled button shape). */
-internal fun MainActivity.styleAccentButton(button: Button) {
+internal fun MainActivity.styleAccentButton(button: Button, forceColor: Int? = null) {
     val d = resources.displayMetrics.density
+    val btnColor = forceColor ?: currentAccentColor.toColorInt()
+    button.backgroundTintList = null
     button.background = GradientDrawable().apply {
         shape = GradientDrawable.RECTANGLE
         cornerRadius = 999 * d
-        setColor(currentAccentColor.toColorInt())
+        setColor(btnColor)
     }
     button.setTextColor(getOnAccentColor())
     button.isAllCaps = false
@@ -240,12 +242,25 @@ internal fun MainActivity.applyAccentColor() {
         arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
         intArrayOf(accentInt, darkAccent)
     )
+    // Thumb press/toggle ripple ("aura"): default uses Android's blue colorControlHighlight.
+    // Replace with an accent-tinted borderless ripple so it matches the chosen accent.
+    val auraColor = ColorStateList.valueOf(
+        android.graphics.Color.argb(
+            90,
+            android.graphics.Color.red(accentInt),
+            android.graphics.Color.green(accentInt),
+            android.graphics.Color.blue(accentInt)
+        )
+    )
     listOf(loadImagesSwitch, loadFaviconsSwitch, unifiedPushSwitch, sseSwitch).forEach {
         it.setThumbTintList(thumbTint)
         it.setTrackTintList(trackTint)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            it.background = android.graphics.drawable.RippleDrawable(auraColor, null, null)
+        }
     }
     // Primary accent buttons (settings test, login, onboarding)
-    styleAccentButton(loginButton)
+    styleAccentButton(loginButton, forceColor = "#3D8BFD".toColorInt())
     onboardingNextFab.backgroundTintList = ColorStateList.valueOf(accentInt)
     onboardingNextFab.imageTintList = ColorStateList.valueOf(onAccent)
     fabCompose.imageTintList = ColorStateList.valueOf(onAccent)
@@ -289,6 +304,12 @@ internal fun MainActivity.applyAccentColor() {
     settingsEditLabelsButton.gravity = android.view.Gravity.CENTER
     settingsEditLabelsButton.setPadding((14 * d).toInt(), (8 * d).toInt(), (14 * d).toInt(), (8 * d).toInt())
     updateSettingsDropdownDisplays()
+    // Refresh drawer account header/list so row backgrounds, pencil and arrow
+    // pick up the new accent immediately.
+    renderAccountHeader()
+    // Rebuild the drawer menu so the selected-item accent bar (itemBackground)
+    // updates now, instead of staying on the old colour until the next folder/category change.
+    navigationView.post { rebuildDrawerMenuPublic() }
 }
 
 internal fun MainActivity.saveAccentColorPreference() {

@@ -5,9 +5,9 @@
     <string name="alpha_warning">Warning: this is an alpha version and may be unstable.</string>
     <string name="continue_text">Continue</string>
     <string name="login_title">JMAP Login</string>
-    <string name="email_hint">mail@jmapjolt.com</string>
+    <string name="email_hint">Email Address</string>
     <string name="password_hint">Password</string>
-    <string name="server_url_hint">https://mail.jmapjolt.com/jmap/session</string>
+    <string name="server_url_hint">JMAP URL</string>
     <string name="login_button">Login</string>
     <string name="status_initial">Enter your credentials to continue.</string>
     <string name="status_idle">Idle…</string>
@@ -85,7 +85,13 @@
     <string name="status_sync_contacting">Syncing with %1$s…</string>
     <string name="status_sync_failed">Sync failed: %1$s</string>
     <string name="drawer_add_account">Accounts</string>
-    <string name="drawer_add_account_action">+ Add account</string>
+    <string name="drawer_add_account_action">Add account</string>
+    <string name="drawer_edit_profile">Edit profile</string>
+    <string name="drawer_change_photo">Change photo</string>
+    <string name="drawer_change_name">Change name</string>
+    <string name="drawer_display_name_hint">Display name</string>
+    <string name="action_save">Save</string>
+    <string name="action_cancel">Cancel</string>
     <string name="settings_theme">Theme</string>
     <string name="settings_main_theme">Main theme</string>
     <string name="settings_accent_color">Accent color</string>

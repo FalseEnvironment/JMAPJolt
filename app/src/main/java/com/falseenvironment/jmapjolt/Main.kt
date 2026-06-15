@@ -265,9 +265,22 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.RequestMultiplePermissions()
     ) { /* permissions resolved; user can try picking again */ }
     private lateinit var drawerAccountName: TextView
+    private lateinit var drawerAccountEmail: TextView
+    private lateinit var drawerAccountAvatar: ImageView
     private lateinit var drawerAccountRow: LinearLayout
     private lateinit var drawerAccountArrow: ImageView
     private lateinit var drawerAccountsList: LinearLayout
+
+    /** Email whose avatar is being changed by the picker; refresh hook for the open dialog. */
+    private var editingAvatarEmail: String? = null
+    private var editProfileAvatarRefresh: (() -> Unit)? = null
+
+    internal val pickAvatarLauncher = registerForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        val email = editingAvatarEmail ?: return@registerForActivityResult
+        if (uri != null) showAvatarCropDialog(uri, email)
+    }
     internal lateinit var accentColorPreview: View
     private lateinit var accentColorRow: LinearLayout
     internal var currentAccentColor: String = "#3D8BFD"
@@ -478,6 +491,8 @@ class MainActivity : AppCompatActivity() {
         quoteIndicatorRemove.setOnClickListener { clearPendingQuote() }
         val drawerHeader = navigationView.getHeaderView(0)
         drawerAccountName = drawerHeader.findViewById(R.id.drawerAccountName)
+        drawerAccountEmail = drawerHeader.findViewById(R.id.drawerAccountEmail)
+        drawerAccountAvatar = drawerHeader.findViewById(R.id.drawerAccountAvatar)
         drawerAccountRow = drawerHeader.findViewById(R.id.drawerAccountRow)
         drawerAccountArrow = drawerHeader.findViewById(R.id.drawerAccountArrow)
         drawerAccountsList = drawerHeader.findViewById(R.id.drawerAccountsList)
@@ -583,11 +598,12 @@ class MainActivity : AppCompatActivity() {
                 drawerAccountsList.layoutParams.height = 0
                 drawerAccountsList.alpha = 0f
                 android.animation.ValueAnimator.ofInt(0, target).apply {
-                    duration = 240
-                    interpolator = android.view.animation.DecelerateInterpolator(2f)
+                    duration = 300
+                    interpolator = androidx.interpolator.view.animation.FastOutSlowInInterpolator()
                     addUpdateListener {
                         drawerAccountsList.layoutParams.height = it.animatedValue as Int
-                        drawerAccountsList.alpha = it.animatedFraction
+                        // Fade in faster than the height grows so content lands settled.
+                        drawerAccountsList.alpha = kotlin.math.min(1f, it.animatedFraction * 1.6f)
                         drawerAccountsList.requestLayout()
                     }
                     addListener(object : android.animation.AnimatorListenerAdapter() {
@@ -602,8 +618,8 @@ class MainActivity : AppCompatActivity() {
             } else {
                 val start = drawerAccountsList.height
                 android.animation.ValueAnimator.ofInt(start, 0).apply {
-                    duration = 200
-                    interpolator = android.view.animation.AccelerateInterpolator(1.5f)
+                    duration = 240
+                    interpolator = androidx.interpolator.view.animation.FastOutSlowInInterpolator()
                     addUpdateListener {
                         drawerAccountsList.layoutParams.height = it.animatedValue as Int
                         drawerAccountsList.alpha = 1f - it.animatedFraction
@@ -679,6 +695,13 @@ class MainActivity : AppCompatActivity() {
     private fun showLoginScreen() {
         onboardingContainer.visibility = View.GONE
         loginContainer.visibility = View.VISIBLE
+        val loginBg = when (currentTheme) {
+            "light"  -> android.graphics.Color.parseColor("#F6F6F8")
+            "oled"   -> android.graphics.Color.BLACK
+            "violet" -> android.graphics.Color.parseColor("#160E24")
+            else     -> android.graphics.Color.parseColor("#212126")
+        }
+        loginContainer.setBackgroundColor(loginBg)
         loginBackBtn.visibility = View.VISIBLE
         loginBackBtn.bringToFront()
         loginBackBtn.setOnClickListener { showOnboarding() }
@@ -842,10 +865,29 @@ class MainActivity : AppCompatActivity() {
             setColor(dialogBg)
         }
         (root.getChildAt(0) as? TextView)?.setTextColor(textColor)
+        // The XML input_field_bg drawable is a hardcoded dark grey that ignores the theme
+        // (hints become grey-on-grey and unreadable). Give each field a theme-aware surface.
+        val fieldFill = when (currentTheme) {
+            "light"  -> "#FFFFFF".toColorInt()
+            "oled"   -> "#141414".toColorInt()
+            "violet" -> "#241634".toColorInt()
+            else     -> "#2E2E34".toColorInt()
+        }
+        val fieldStroke = if (currentTheme == "light") "#D0D0D4".toColorInt() else "#454552".toColorInt()
+        // A clearer hint colour so the field labels (Email Address / Password / JMAP URL) read well.
+        val fieldHint = if (currentTheme == "light") "#8A8A90".toColorInt() else "#B0B0BA".toColorInt()
         listOf(dialogEmail, dialogPassword, dialogServerUrl).forEach {
             it.setTextColor(textColor)
-            it.setHintTextColor(hintColor)
-            it.backgroundTintList = ColorStateList.valueOf(hintColor)
+            it.setHintTextColor(fieldHint)
+            it.backgroundTintList = null
+            it.background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 14 * dp
+                setColor(fieldFill)
+                setStroke((1 * dp).toInt(), fieldStroke)
+            }
+            it.setPadding((16 * dp).toInt(), (14 * dp).toInt(), (16 * dp).toInt(), (14 * dp).toInt())
+            it.compoundDrawableTintList = ColorStateList.valueOf(fieldHint)
         }
 
         val btnRow = LinearLayout(this).apply {
@@ -863,7 +905,7 @@ class MainActivity : AppCompatActivity() {
             .create()
 
         val cancelBtn = TextView(this).apply {
-            text = getString(android.R.string.cancel)
+            text = getString(R.string.action_cancel)
             textSize = 14f
             setTextColor(secondaryColor)
             setPadding((16 * dp).toInt(), (10 * dp).toInt(), (16 * dp).toInt(), (10 * dp).toInt())
@@ -3988,14 +4030,27 @@ body{background:$bg;padding:20px}
     }
 
     private fun sendUnifiedPushTestNotification() {
-        val endpoint = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-                .getString(KEY_LAST_UP_ENDPOINT, null)
-                ?.takeIf { it.isNotBlank() }
-        if (endpoint == null) {
-            showThemedSnackbar(getString(R.string.settings_unifiedpush_waiting_endpoint))
-            return
-        }
         lifecycleScope.launch {
+            // Registration is asynchronous: when the switch is toggled on, the fresh
+            // endpoint arrives via onNewEndpoint a moment later. Poll the pref for a
+            // short window so the test isn't sent to a stale/missing endpoint.
+            val endpoint = withContext(Dispatchers.IO) {
+                var attempt = 0
+                var found: String? = null
+                while (attempt < 24) { // ~12s at 500ms
+                    found = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                        .getString(KEY_LAST_UP_ENDPOINT, null)
+                        ?.takeIf { it.isNotBlank() }
+                    if (found != null) break
+                    Thread.sleep(500)
+                    attempt++
+                }
+                found
+            }
+            if (endpoint == null) {
+                showThemedSnackbar(getString(R.string.settings_unifiedpush_waiting_endpoint))
+                return@launch
+            }
             val result =
                     withContext(Dispatchers.IO) {
                         try {
@@ -4103,42 +4158,112 @@ body{background:$bg;padding:20px}
         drawerAccountArrow.rotation = 0f
     }
 
-    internal fun renderAccountHeader() {
-        val label = currentAccountEmail ?: savedAccounts.firstOrNull()?.email.orEmpty()
-        drawerAccountName.text = label
-        drawerAccountsList.removeAllViews()
+    /** Internal storage file holding the custom avatar photo for an account. */
+    private fun accountAvatarFile(email: String): java.io.File =
+        java.io.File(filesDir, "avatar_" + email.lowercase().replace(Regex("[^a-z0-9]"), "_") + ".jpg")
 
+    /** Display name shown in the account section; falls back to the local part of the email. */
+    internal fun getAccountDisplayName(email: String): String {
+        val saved = getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString("account_name_$email", null)
+        return saved?.takeIf { it.isNotBlank() } ?: email.substringBefore('@')
+    }
+
+    private fun setAccountDisplayName(email: String, name: String) {
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
+            .putString("account_name_$email", name.trim()).apply()
+    }
+
+    private fun centerCropSquare(src: android.graphics.Bitmap): android.graphics.Bitmap {
+        val dim = minOf(src.width, src.height)
+        val x = (src.width - dim) / 2
+        val y = (src.height - dim) / 2
+        return android.graphics.Bitmap.createBitmap(src, x, y, dim, dim)
+    }
+
+    /** Circular avatar: custom photo if present, otherwise a colored disc with the first initial. */
+    private fun buildAccountAvatar(email: String, sizePx: Int): android.graphics.Bitmap {
+        val bmp = android.graphics.Bitmap.createBitmap(sizePx, sizePx, android.graphics.Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bmp)
+        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        val r = sizePx / 2f
+        val file = accountAvatarFile(email)
+        val photo = if (file.exists())
+            try { android.graphics.BitmapFactory.decodeFile(file.absolutePath) } catch (_: Throwable) { null }
+        else null
+        if (photo != null) {
+            val scaled = android.graphics.Bitmap.createScaledBitmap(centerCropSquare(photo), sizePx, sizePx, true)
+            paint.shader = android.graphics.BitmapShader(
+                scaled,
+                android.graphics.Shader.TileMode.CLAMP,
+                android.graphics.Shader.TileMode.CLAMP
+            )
+            canvas.drawCircle(r, r, r, paint)
+        } else {
+            paint.color = getAccountColor(email)
+            canvas.drawCircle(r, r, r, paint)
+            val letter = getAccountDisplayName(email).firstOrNull()?.uppercaseChar()?.toString() ?: "?"
+            val tp = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.WHITE
+                textSize = sizePx * 0.42f
+                textAlign = android.graphics.Paint.Align.CENTER
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+            }
+            val baseline = r - (tp.descent() + tp.ascent()) / 2f
+            canvas.drawText(letter, r, baseline, tp)
+        }
+        return bmp
+    }
+
+    internal fun renderAccountHeader() {
+        val current = currentAccountEmail ?: savedAccounts.firstOrNull()?.email.orEmpty()
         val dp = resources.displayMetrics.density
 
-        // Colored dot next to the account name, matching the account color.
-        if (label.isNotBlank()) {
-            val dotSz = (10 * dp).toInt()
-            val dot = android.graphics.drawable.GradientDrawable().apply {
-                shape = android.graphics.drawable.GradientDrawable.OVAL
-                setColor(getAccountColor(label))
-                setBounds(0, 0, dotSz, dotSz)
-            }
-            drawerAccountName.setCompoundDrawablesRelative(dot, null, null, null)
-            drawerAccountName.compoundDrawablePadding = (8 * dp).toInt()
-        } else {
-            drawerAccountName.setCompoundDrawablesRelative(null, null, null, null)
-        }
         val textInt = if (currentTheme == "light") "#212121".toColorInt() else Color.WHITE
         val secondaryTextInt =
-                if (currentTheme == "light") "#757575".toColorInt() else "#BDBDBD".toColorInt()
-        drawerAccountArrow.imageTintList = ColorStateList.valueOf(currentAccentColor.toColorInt())
-        val iconTint =
-                if (currentTheme == "light") "#757575".toColorInt() else "#9E9E9E".toColorInt()
+                if (currentTheme == "light") "#5A5A5A".toColorInt() else "#BDBDBD".toColorInt()
+        val accentInt = currentAccentColor.toColorInt()
+        val logoutRed = "#E53935".toColorInt()
+        val addGreen = "#43A047".toColorInt()
 
+        // Keep the header background in sync with the active theme (was hardcoded dark).
+        val headerBg = when (currentTheme) {
+            "light"  -> "#F6F6F8".toColorInt()
+            "oled"   -> "#000000".toColorInt()
+            "violet" -> "#160E24".toColorInt()
+            else     -> "#212126".toColorInt()
+        }
+        (drawerAccountRow.parent as? View)?.setBackgroundColor(headerBg)
+
+        // Header: avatar + display name (bold, primary) + email (secondary).
+        drawerAccountName.setCompoundDrawablesRelative(null, null, null, null)
+        drawerAccountName.text = if (current.isBlank()) "" else getAccountDisplayName(current)
+        drawerAccountName.setTextColor(textInt)
+        drawerAccountEmail.text = current
+        drawerAccountEmail.setTextColor(secondaryTextInt)
+        drawerAccountEmail.visibility = if (current.isBlank()) View.GONE else View.VISIBLE
+        if (current.isNotBlank()) {
+            drawerAccountAvatar.setImageBitmap(buildAccountAvatar(current, (44 * dp).toInt()))
+            drawerAccountAvatar.visibility = View.VISIBLE
+        } else {
+            drawerAccountAvatar.visibility = View.GONE
+        }
+        drawerAccountArrow.imageTintList = ColorStateList.valueOf(accentInt)
+
+        drawerAccountsList.removeAllViews()
+
+        // Per-account row background: a darkened shade of the active theme so the rows
+        // (with pencil/exit icons) match the theme instead of a generic dark grey
+        // that clashes under e.g. the iris/violet theme.
+        val rowBg = when (currentTheme) {
+            "light"  -> "#F0F0F0".toColorInt()
+            "oled"   -> "#181818".toColorInt()
+            "violet" -> "#0F0918".toColorInt()
+            else     -> "#2A2A2A".toColorInt()
+        }
+
+        // All accounts, including the currently logged-in one (it shows a red sign-out icon).
         savedAccounts.forEach { account ->
-            if (account.email == currentAccountEmail) return@forEach
-
-            val accentColor = getAccountColor(account.email)
-            val rowBg = when (currentTheme) {
-                "light" -> "#F0F0F0".toColorInt()
-                "oled"  -> "#181818".toColorInt()
-                else    -> "#2A2A2A".toColorInt()
-            }
+            val isCurrent = account.email.equals(current, ignoreCase = true)
 
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -4149,30 +4274,40 @@ body{background:$bg;padding:20px}
                 ).apply { topMargin = (4 * dp).toInt() }
                 background = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
-                    cornerRadius = 8 * dp
+                    cornerRadius = 10 * dp
                     setColor(rowBg)
+                    if (isCurrent) setStroke((1.5f * dp).toInt(), accentInt)
                 }
                 setPadding((10 * dp).toInt(), (6 * dp).toInt(), (6 * dp).toInt(), (6 * dp).toInt())
             }
 
-            // Colored dot indicating account color
-            row.addView(View(this).apply {
-                val sz = (8 * dp).toInt()
+            // Circular avatar for the account.
+            row.addView(ImageView(this).apply {
+                val sz = (32 * dp).toInt()
                 layoutParams = LinearLayout.LayoutParams(sz, sz).apply { marginEnd = (10 * dp).toInt() }
-                background = GradientDrawable().apply {
-                    shape = GradientDrawable.OVAL
-                    setColor(accentColor)
-                }
+                setImageBitmap(buildAccountAvatar(account.email, sz))
             })
 
-            row.addView(TextView(this).apply {
-                text = account.email
-                textSize = 15f
-                setTextColor(textInt)
+            // Name (bold) over email (secondary).
+            row.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-                maxLines = 1
-                ellipsize = android.text.TextUtils.TruncateAt.END
-                setOnClickListener {
+                addView(TextView(this@MainActivity).apply {
+                    text = getAccountDisplayName(account.email)
+                    textSize = 14f
+                    setTextColor(textInt)
+                    setTypeface(null, android.graphics.Typeface.BOLD)
+                    maxLines = 1
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                })
+                addView(TextView(this@MainActivity).apply {
+                    text = account.email
+                    textSize = 12f
+                    setTextColor(secondaryTextInt)
+                    maxLines = 1
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                })
+                if (!isCurrent) setOnClickListener {
                     showThemedConfirmDialog(
                         title = "Switch Account",
                         message = "Switch to ${account.email}?",
@@ -4185,16 +4320,26 @@ body{background:$bg;padding:20px}
                 }
             })
 
+            // Pencil: edit this account's profile (display name + photo).
+            row.addView(ImageView(this).apply {
+                setImageResource(R.drawable.ic_lucide_pencil)
+                imageTintList = ColorStateList.valueOf(accentInt)
+                setPadding((8 * dp).toInt(), (8 * dp).toInt(), (8 * dp).toInt(), (8 * dp).toInt())
+                layoutParams = LinearLayout.LayoutParams((36 * dp).toInt(), (36 * dp).toInt())
+                setOnClickListener { showEditProfileDialog(account.email) }
+            })
+
+            // Red sign-out / remove icon.
             row.addView(ImageView(this).apply {
                 setImageResource(R.drawable.ic_lucide_log_out)
-                imageTintList = android.content.res.ColorStateList.valueOf(iconTint)
+                imageTintList = ColorStateList.valueOf(logoutRed)
                 setPadding((8 * dp).toInt(), (8 * dp).toInt(), (8 * dp).toInt(), (8 * dp).toInt())
                 layoutParams = LinearLayout.LayoutParams((36 * dp).toInt(), (36 * dp).toInt())
                 setOnClickListener {
                     showThemedConfirmDialog(
-                        title = "Remove Account",
-                        message = "Remove ${account.email}?",
-                        confirmLabel = "Remove",
+                        title = if (isCurrent) "Sign Out" else "Remove Account",
+                        message = if (isCurrent) "Sign out of ${account.email}?" else "Remove ${account.email}?",
+                        confirmLabel = if (isCurrent) "Sign Out" else "Remove",
                         isDangerous = true
                     ) { deleteAccount(account) }
                 }
@@ -4203,18 +4348,341 @@ body{background:$bg;padding:20px}
             drawerAccountsList.addView(row)
         }
 
-        val add = TextView(this).apply {
-            text = getString(R.string.drawer_add_account_action)
+        // Compact green "+" button to add the account you are currently logged into elsewhere.
+        drawerAccountsList.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = (8 * dp).toInt() }
+            addView(ImageView(this@MainActivity).apply {
+                setImageResource(R.drawable.ic_lucide_plus)
+                imageTintList = ColorStateList.valueOf(addGreen)
+                val sz = (40 * dp).toInt()
+                layoutParams = LinearLayout.LayoutParams(sz, sz)
+                setPadding((9 * dp).toInt(), (9 * dp).toInt(), (9 * dp).toInt(), (9 * dp).toInt())
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(android.graphics.Color.argb(40, Color.red(addGreen), Color.green(addGreen), Color.blue(addGreen)))
+                }
+                contentDescription = getString(R.string.drawer_add_account_action)
+                setOnClickListener {
+                    showAddAccountDialog()
+                    closeAccountsList()
+                    drawerLayout.closeDrawer(GravityCompat.START)
+                }
+            })
+        })
+    }
+
+    /** Discord-style crop/rotate editor before the chosen photo becomes the avatar. */
+    private fun showAvatarCropDialog(uri: android.net.Uri, email: String) {
+        val dp = resources.displayMetrics.density
+        val source = try {
+            contentResolver.openInputStream(uri)?.use { input ->
+                val opts = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                android.graphics.BitmapFactory.decodeStream(input, null, opts)
+                val maxDim = 1600
+                var sample = 1
+                while (opts.outWidth / sample > maxDim || opts.outHeight / sample > maxDim) sample *= 2
+                opts.inJustDecodeBounds = false
+                opts.inSampleSize = sample
+                contentResolver.openInputStream(uri)?.use { s2 ->
+                    android.graphics.BitmapFactory.decodeStream(s2, null, opts)
+                }
+            }
+        } catch (e: Throwable) {
+            Log.e(TAG, "Avatar decode failed", e)
+            null
+        }
+        if (source == null) {
+            android.widget.Toast.makeText(this, "Could not load image", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val dialogBg = getDialogBackgroundColor()
+        val accentInt = currentAccentColor.toColorInt()
+        val secondaryColor = if (currentTheme == "light") "#757575".toColorInt() else "#9E9E9E".toColorInt()
+
+        val cropView = AvatarCropView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, (280 * dp).toInt()
+            )
+            setBitmap(source)
+        }
+
+        // Center magnet: snap to 0° when the thumb is within this many units of center.
+        val snapThreshold = 8
+        val rotateSlider = android.widget.SeekBar(this).apply {
+            max = 360
+            progress = 180
+            progressTintList = ColorStateList.valueOf(accentInt)
+            thumbTintList = ColorStateList.valueOf(accentInt)
+            progressBackgroundTintList = ColorStateList.valueOf(
+                if (currentTheme == "light") "#C0C0C4".toColorInt() else "#5A5A5A".toColorInt()
+            )
+            layoutParams = android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT
+            )
+            setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(sb: android.widget.SeekBar?, value: Int, fromUser: Boolean) {
+                    if (fromUser && kotlin.math.abs(value - 180) <= snapThreshold && value != 180) {
+                        progress = 180
+                        return
+                    }
+                    cropView.rotationDeg = (value - 180).toFloat()
+                }
+                override fun onStartTrackingTouch(sb: android.widget.SeekBar?) {}
+                override fun onStopTrackingTouch(sb: android.widget.SeekBar?) {}
+            })
+        }
+
+        // Rotate icon (left) + slider with a centered "|" marker showing the image's centre.
+        val rotateBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = (12 * dp).toInt() }
+            addView(ImageView(this@MainActivity).apply {
+                val sz = (24 * dp).toInt()
+                layoutParams = LinearLayout.LayoutParams(sz, sz).apply { marginEnd = (8 * dp).toInt() }
+                setImageResource(R.drawable.ic_rotate_cw)
+                imageTintList = ColorStateList.valueOf(accentInt)
+            })
+            addView(android.widget.FrameLayout(this@MainActivity).apply {
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                // Centre marker first so it sits UNDER the slider thumb; exact same colour
+                // as the slider track background (not lighter), so it reads as part of the bar.
+                addView(View(this@MainActivity).apply {
+                    layoutParams = android.widget.FrameLayout.LayoutParams(
+                        (2 * dp).toInt(), (14 * dp).toInt(), Gravity.CENTER
+                    )
+                    setBackgroundColor(
+                        if (currentTheme == "light") "#C0C0C4".toColorInt() else "#5A5A5A".toColorInt()
+                    )
+                })
+                addView(rotateSlider)
+            })
+        }
+
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 20 * dp
+                setColor(dialogBg)
+            }
+            setPadding((16 * dp).toInt(), (16 * dp).toInt(), (16 * dp).toInt(), (12 * dp).toInt())
+            addView(cropView)
+            addView(rotateBar)
+        }
+
+        val btnRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = (8 * dp).toInt() }
+        }
+        root.addView(btnRow)
+
+        val dialog = AlertDialog.Builder(this).setView(root).create()
+
+        btnRow.addView(TextView(this).apply {
+            text = getString(R.string.action_cancel)
             textSize = 14f
-            setTextColor(secondaryTextInt)
-            setPadding((4 * dp).toInt(), (10 * dp).toInt(), (4 * dp).toInt(), (6 * dp).toInt())
+            setTextColor(secondaryColor)
+            setPadding((16 * dp).toInt(), (10 * dp).toInt(), (16 * dp).toInt(), (10 * dp).toInt())
+            isClickable = true; isFocusable = true
+            setOnClickListener { dialog.dismiss() }
+        })
+        btnRow.addView(TextView(this).apply {
+            text = getString(R.string.action_save)
+            textSize = 14f
+            setTextColor(accentInt)
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setPadding((16 * dp).toInt(), (10 * dp).toInt(), (4 * dp).toInt(), (10 * dp).toInt())
+            isClickable = true; isFocusable = true
             setOnClickListener {
-                showAddAccountDialog()
-                closeAccountsList()
-                drawerLayout.closeDrawer(GravityCompat.START)
+                val cropped = cropView.getCroppedBitmap(512)
+                if (cropped != null) {
+                    try {
+                        accountAvatarFile(email).outputStream().use { out ->
+                            cropped.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, out)
+                        }
+                        renderAccountHeader()
+                        editProfileAvatarRefresh?.invoke()
+                    } catch (e: Throwable) {
+                        Log.e(TAG, "Avatar save failed", e)
+                    }
+                }
+                dialog.dismiss()
+            }
+        })
+
+        dialog.show()
+        dialog.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+        dialog.window?.attributes?.let { lp ->
+            lp.width = (resources.displayMetrics.widthPixels * 0.92f).toInt()
+            dialog.window?.attributes = lp
+        }
+    }
+
+    /** Edit dialog: change the display name and the avatar photo for an account. */
+    private fun showEditProfileDialog(email: String) {
+        val dp = resources.displayMetrics.density
+        val dialogBg = getDialogBackgroundColor()
+        val accentInt = currentAccentColor.toColorInt()
+        val textColor = if (currentTheme == "light") "#212121".toColorInt() else Color.WHITE
+        val hintColor = if (currentTheme == "light") "#9E9E9E".toColorInt() else "#616161".toColorInt()
+        val secondaryColor = if (currentTheme == "light") "#757575".toColorInt() else "#9E9E9E".toColorInt()
+
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 20 * dp
+                setColor(dialogBg)
+            }
+            setPadding((20 * dp).toInt(), (20 * dp).toInt(), (20 * dp).toInt(), (16 * dp).toInt())
+        }
+
+        val avatarSz = (96 * dp).toInt()
+        val avatarView = ImageView(this).apply {
+            layoutParams = android.widget.FrameLayout.LayoutParams(avatarSz, avatarSz)
+            setImageBitmap(buildAccountAvatar(email, avatarSz))
+        }
+        // Pencil centered over a slight dark scrim that dims the photo.
+        val scrim = View(this).apply {
+            layoutParams = android.widget.FrameLayout.LayoutParams(avatarSz, avatarSz)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(0x55000000)
             }
         }
-        drawerAccountsList.addView(add)
+        val pencil = ImageView(this).apply {
+            val sz = (30 * dp).toInt()
+            layoutParams = android.widget.FrameLayout.LayoutParams(sz, sz, Gravity.CENTER)
+            setImageResource(R.drawable.ic_lucide_pencil)
+            imageTintList = ColorStateList.valueOf(Color.WHITE)
+        }
+        val avatarFrame = android.widget.FrameLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(avatarSz, avatarSz).apply {
+                bottomMargin = (18 * dp).toInt()
+            }
+            isClickable = true
+            isFocusable = true
+            addView(avatarView)
+            addView(scrim)
+            addView(pencil)
+        }
+        root.addView(avatarFrame)
+
+        // "Change name" label on the left + tappable account-color swatch on the right.
+        val colorSwatch = View(this).apply {
+            val sz = (22 * dp).toInt()
+            layoutParams = LinearLayout.LayoutParams(sz, sz)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(getAccountColor(email))
+                setStroke((1.5f * dp).toInt(), Color.argb(60, 255, 255, 255))
+            }
+            isClickable = true
+            isFocusable = true
+        }
+        root.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { bottomMargin = (6 * dp).toInt() }
+            addView(TextView(this@MainActivity).apply {
+                text = getString(R.string.drawer_change_name)
+                textSize = 13f
+                setTextColor(accentInt)
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            })
+            addView(colorSwatch)
+        })
+        colorSwatch.setOnClickListener {
+            showAccountColorDialog(email) {
+                (colorSwatch.background as? GradientDrawable)?.setColor(getAccountColor(email))
+                editProfileAvatarRefresh?.invoke()
+            }
+        }
+
+        val nameInput = EditText(this).apply {
+            setText(getAccountDisplayName(email))
+            hint = getString(R.string.drawer_display_name_hint)
+            textSize = 15f
+            setTextColor(textColor)
+            setHintTextColor(hintColor)
+            backgroundTintList = ColorStateList.valueOf(hintColor)
+            isSingleLine = true
+            maxLines = 1
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_WORDS
+            filters = arrayOf(android.text.InputFilter.LengthFilter(13), noArabicFilter())
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
+        root.addView(nameInput)
+
+        editProfileAvatarRefresh = { avatarView.setImageBitmap(buildAccountAvatar(email, avatarSz)) }
+        avatarFrame.setOnClickListener {
+            editingAvatarEmail = email
+            pickAvatarLauncher.launch(
+                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+            )
+        }
+
+        val btnRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = (12 * dp).toInt() }
+        }
+        root.addView(btnRow)
+
+        val dialog = AlertDialog.Builder(this).setView(root).create()
+
+        btnRow.addView(TextView(this).apply {
+            text = getString(R.string.action_cancel)
+            textSize = 14f
+            setTextColor(secondaryColor)
+            setPadding((16 * dp).toInt(), (10 * dp).toInt(), (16 * dp).toInt(), (10 * dp).toInt())
+            isClickable = true; isFocusable = true
+            setOnClickListener { dialog.dismiss() }
+        })
+        btnRow.addView(TextView(this).apply {
+            text = getString(R.string.action_save)
+            textSize = 14f
+            setTextColor(accentInt)
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setPadding((16 * dp).toInt(), (10 * dp).toInt(), (4 * dp).toInt(), (10 * dp).toInt())
+            isClickable = true; isFocusable = true
+            setOnClickListener {
+                setAccountDisplayName(email, nameInput.text.toString())
+                renderAccountHeader()
+                dialog.dismiss()
+            }
+        })
+
+        dialog.setOnDismissListener {
+            editingAvatarEmail = null
+            editProfileAvatarRefresh = null
+        }
+        dialog.show()
+        dialog.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+        dialog.window?.attributes?.let { lp ->
+            lp.width = (resources.displayMetrics.widthPixels * 0.85f).toInt()
+            dialog.window?.attributes = lp
+        }
     }
 
     private fun deleteAccount(account: AccountEntry) {
@@ -5100,4 +5568,13 @@ body{background:$bg;padding:20px}
             InboxWidgetProvider.refreshAll(applicationContext)
         }
     }
+}
+
+/** InputFilter that rejects Arabic-script characters (used for account names and labels). */
+internal fun noArabicFilter(): android.text.InputFilter = android.text.InputFilter { source, start, end, _, _, _ ->
+    val arabic = source.subSequence(start, end).any { ch ->
+        ch in '؀'..'ۿ' || ch in 'ݐ'..'ݿ' || ch in 'ࢠ'..'ࣿ' ||
+            ch in 'ﭐ'..'﷿' || ch in 'ﹰ'..'﻿'
+    }
+    if (arabic) "" else null
 }

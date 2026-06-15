@@ -37,9 +37,10 @@ internal fun MainActivity.setupOnboardingPager() {
     val dp = resources.displayMetrics.density
     val accentInt = currentAccentColor.toColorInt()
     val bgColor = when (currentTheme) {
-        "light" -> Color.parseColor("#F5F5F7")
-        "oled"  -> Color.BLACK
-        else    -> Color.parseColor("#141414")
+        "light"  -> Color.parseColor("#F6F6F8")
+        "oled"   -> Color.BLACK
+        "violet" -> Color.parseColor("#160E24")
+        else     -> Color.parseColor("#212126")
     }
     val textColor = when (currentTheme) {
         "light" -> Color.parseColor("#1A1A1A")
@@ -115,6 +116,8 @@ internal fun MainActivity.setupOnboardingPager() {
         activeDot = pos
     }
 
+    onboardingBottomBar.setBackgroundColor(bgColor)
+
     onboardingPager.adapter = object : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         override fun getItemCount() = pageViews.size
         override fun getItemViewType(position: Int) = position
@@ -128,7 +131,10 @@ internal fun MainActivity.setupOnboardingPager() {
     }
 
     onboardingPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
-        override fun onPageSelected(position: Int) { updateDots(position) }
+        override fun onPageSelected(position: Int) {
+            updateDots(position)
+            onboardingBottomBar.setBackgroundColor(bgColor)
+        }
     })
 
     // Staggered parallax that tracks the finger: each child of the page lags

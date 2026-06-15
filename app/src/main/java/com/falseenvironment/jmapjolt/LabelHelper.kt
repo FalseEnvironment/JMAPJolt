@@ -353,7 +353,7 @@ internal fun MainActivity.showCreateLabelDialog(onCreated: (EmailLabel) -> Unit)
     val nameInput = EditText(this).apply {
         hint = "Label name"
         inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-        filters = arrayOf(android.text.InputFilter.LengthFilter(18))
+        filters = arrayOf(android.text.InputFilter.LengthFilter(18), noArabicFilter())
         setTextColor(textColor)
         setHintTextColor(hintColor)
         backgroundTintList = ColorStateList.valueOf(hintColor)
@@ -564,7 +564,7 @@ internal fun MainActivity.showEditLabelDialog(label: EmailLabel, onSaved: () -> 
     val nameInput = EditText(this).apply {
         hint = "Label name"
         inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-        filters = arrayOf(android.text.InputFilter.LengthFilter(18))
+        filters = arrayOf(android.text.InputFilter.LengthFilter(18), noArabicFilter())
         setText(label.name)
         setTextColor(textColor)
         setHintTextColor(hintColor)
