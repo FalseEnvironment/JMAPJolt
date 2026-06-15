@@ -213,6 +213,18 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
                 .apply { marginEnd = (4 * dp).toInt() }
             visibility = android.view.View.GONE
         })
+        // Child index 4: account-color dot. Shown only in the unified inbox so the
+        // user can tell which account a row's labels belong to.
+        labelRowView.addView(ImageView(activity).apply {
+            val sz = (8 * dp).toInt()
+            layoutParams = LinearLayout.LayoutParams(sz, sz)
+                .apply { marginEnd = (4 * dp).toInt() }
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setColor(android.graphics.Color.GRAY)
+            }
+            visibility = android.view.View.GONE
+        })
         val dateRow = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL or Gravity.END
@@ -275,11 +287,15 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
             item.from.ifBlank { item.fromEmail }
         }
 
-        // Account color strip only in unified inbox
-        if (activity.selectedFolder == R.id.nav_unified_inbox && item.accountEmail.isNotBlank()) {
-            val accentColor = activity.getAccountColor(item.accountEmail)
+        // Account color strip: only meaningful with more than one account, shown in the
+        // unified inbox and kept visible during search (selectedFolder stays unified, but
+        // be explicit so the strip survives any future search-scope changes).
+        val multiAccount = activity.savedAccounts.size > 1
+        val showAccountStrip = multiAccount && item.accountEmail.isNotBlank() &&
+            (activity.selectedFolder == R.id.nav_unified_inbox || activity.isSearchActive)
+        if (showAccountStrip) {
             holder.colorStrip.visibility = android.view.View.VISIBLE
-            holder.colorStrip.setBackgroundColor(accentColor)
+            holder.colorStrip.setBackgroundColor(activity.getAccountColor(item.accountEmail))
         } else {
             holder.colorStrip.visibility = android.view.View.GONE
         }
@@ -325,6 +341,16 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
         (holder.labelRow.getChildAt(3) as TextView).apply {
             visibility = if (rowLabels.size > 3) android.view.View.VISIBLE else android.view.View.GONE
             setTextColor(secondaryColor)
+        }
+        // Account-ownership dot: same gating as the account strip, only when the row has labels.
+        (holder.labelRow.getChildAt(4) as ImageView).apply {
+            if (showAccountStrip && rowLabels.isNotEmpty()) {
+                (background as android.graphics.drawable.GradientDrawable)
+                    .setColor(activity.getAccountColor(item.accountEmail))
+                visibility = android.view.View.VISIBLE
+            } else {
+                visibility = android.view.View.GONE
+            }
         }
 
         holder.starButton.imageTintList = ColorStateList.valueOf(

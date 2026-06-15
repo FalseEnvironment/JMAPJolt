@@ -47,6 +47,11 @@ class EmailCache(private val filesDir: File) {
                         put("seen", e.seen)
                         put("isFavorite", e.isFavorite)
                         put("receivedAt", e.receivedAt)
+                        // Account ownership must survive a cache round-trip, otherwise
+                        // unified-inbox rows lose it and labelsOf() falls back to the
+                        // wrong (current) account, hiding the other account's labels.
+                        if (e.accountEmail.isNotBlank()) put("accountEmail", e.accountEmail)
+                        if (e.toEmail.isNotBlank()) put("toEmail", e.toEmail)
                         if (e.labels.isNotEmpty()) {
                             put("labels", JSONArray().also { l -> e.labels.forEach { l.put(it) } })
                         }
@@ -140,6 +145,8 @@ class EmailCache(private val filesDir: File) {
                 seen = o.optBoolean("seen"),
                 isFavorite = o.optBoolean("isFavorite"),
                 receivedAt = o.optLong("receivedAt"),
+                toEmail = o.optString("toEmail"),
+                accountEmail = o.optString("accountEmail"),
                 attachments = atts,
                 labels = o.optJSONArray("labels")?.let { arr2 ->
                     buildList { for (j in 0 until arr2.length()) arr2.optString(j).takeIf { it.isNotBlank() }?.let { add(it) } }

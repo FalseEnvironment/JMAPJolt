@@ -305,7 +305,11 @@ class MainActivity : AppCompatActivity() {
     internal var currentTheme: String = "gray"
     internal val selectedEmails = mutableSetOf<String>()
     internal val baseEmails = mutableListOf<DisplayEmail>() // unfiltered list for search
-    private var isSearchActive = false
+    // Pending request from a widget tap: open this email once its account's data is loaded.
+    private var pendingWidgetEmailId: String? = null
+    private var pendingWidgetAccount: String? = null
+    private var widgetSwitchAttempted = false
+    internal var isSearchActive = false
     private var wasImeVisible = false
     private lateinit var selectionBarContainer: LinearLayout
     internal lateinit var selectionCountText: TextView
@@ -519,6 +523,7 @@ class MainActivity : AppCompatActivity() {
         loadAccounts()
         applyTheme()
         handleMailtoIntent(intent)
+        handleWidgetIntent(intent)
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -1402,7 +1407,11 @@ class MainActivity : AppCompatActivity() {
         if (!::detailLabelRowView.isInitialized) return
         val email = currentDetailEmail ?: return
         val rowLabels = labelsOf(email)
-        if (rowLabels.isEmpty()) {
+        val owned = ownsEmail(email)
+        // Not owned: labels are read-only. Show a single gray tag as a disabled
+        // affordance (tapping routes through the guarded picker → "switch account").
+        val grayTint = if (currentTheme == "light") "#BDBDBD".toColorInt() else "#616161".toColorInt()
+        if (rowLabels.isEmpty() && owned) {
             detailLabelRowView.visibility = View.GONE
             return
         }
@@ -1410,11 +1419,19 @@ class MainActivity : AppCompatActivity() {
         for (i in 0..2) {
             val iv = detailLabelRowView.getChildAt(i) as ImageView
             val l = rowLabels.getOrNull(i)
-            if (l != null) {
-                iv.visibility = View.VISIBLE
-                iv.imageTintList = ColorStateList.valueOf(l.colorHex.toColorInt())
-            } else {
-                iv.visibility = View.GONE
+            when {
+                l != null -> {
+                    iv.visibility = View.VISIBLE
+                    iv.imageTintList = ColorStateList.valueOf(
+                        if (owned) l.colorHex.toColorInt() else grayTint
+                    )
+                }
+                // No labels but not owned → one gray tag at slot 0 as the locked affordance.
+                i == 0 && !owned -> {
+                    iv.visibility = View.VISIBLE
+                    iv.imageTintList = ColorStateList.valueOf(grayTint)
+                }
+                else -> iv.visibility = View.GONE
             }
         }
         (detailLabelRowView.getChildAt(3) as TextView).apply {
@@ -1768,6 +1785,40 @@ body{background:$bg;padding:20px}
         applyNavIconTint(getOnAccentColor())
         updateCustomTopBar(getCurrentMailboxTitle(), inMailbox = true)
         if (isSearchActive) searchChipsScroll.visibility = View.VISIBLE
+    }
+
+    /** Captures a widget tap so the target email opens once its data is available. */
+    private fun handleWidgetIntent(intent: Intent?) {
+        val id = intent?.getStringExtra(InboxWidgetProvider.EXTRA_OPEN_EMAIL_ID) ?: return
+        if (id.isBlank()) return
+        pendingWidgetEmailId = id
+        pendingWidgetAccount = intent.getStringExtra(InboxWidgetProvider.EXTRA_OPEN_ACCOUNT)
+        widgetSwitchAttempted = false
+        // Consume so a config change or re-delivery doesn't reopen it.
+        intent.removeExtra(InboxWidgetProvider.EXTRA_OPEN_EMAIL_ID)
+        // On a warm start data is already loaded; on cold start the session-restore
+        // load path will call tryOpenPendingWidgetEmail once emails arrive.
+        if (baseEmails.isNotEmpty()) tryOpenPendingWidgetEmail()
+    }
+
+    /** Opens a pending widget email when its account is active and the message is loaded. */
+    private fun tryOpenPendingWidgetEmail() {
+        val id = pendingWidgetEmailId ?: return
+        val account = pendingWidgetAccount
+        // Different account than the one shown: switch to it once, then wait for its load.
+        if (!account.isNullOrBlank() && account != WidgetSupport.UNIFIED &&
+            !account.equals(currentAccountEmail, ignoreCase = true)) {
+            if (!widgetSwitchAttempted) {
+                widgetSwitchAttempted = true
+                savedAccounts.firstOrNull { it.email.equals(account, ignoreCase = true) }
+                    ?.let { switchToSavedAccount(it, forceInbox = true) }
+            }
+            return
+        }
+        val match = baseEmails.firstOrNull { it.id == id } ?: return
+        pendingWidgetEmailId = null
+        pendingWidgetAccount = null
+        if (!isShowingEmailDetail) showEmailDetail(match)
     }
 
     internal fun showEmailDetail(email: DisplayEmail, fromSwipe: Boolean = false) {
@@ -3058,6 +3109,8 @@ body{background:$bg;padding:20px}
                 }
                 .start()
         }
+
+        tryOpenPendingWidgetEmail()
     }
 
     private fun applyFolderFilterAndRefresh() {
@@ -4448,6 +4501,7 @@ body{background:$bg;padding:20px}
         super.onNewIntent(intent)
         setIntent(intent)
         handleMailtoIntent(intent)
+        handleWidgetIntent(intent)
     }
 
     override fun onResume() {
@@ -5043,6 +5097,7 @@ body{background:$bg;padding:20px}
         val folder = selectedFolder
         lifecycleScope.launch {
             emailCache.save(email, folder, snapshot, currentList)
+            InboxWidgetProvider.refreshAll(applicationContext)
         }
     }
 }

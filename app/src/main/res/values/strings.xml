@@ -136,4 +136,15 @@
     <string name="login_label_email">Email</string>
     <string name="login_label_password">Password</string>
     <string name="login_label_server">JMAP URL</string>
+    <string name="widget_inbox_title">Inbox</string>
+    <string name="widget_unified_inbox">Unified inbox</string>
+    <string name="widget_inbox_description">Shows your inbox or unified inbox.</string>
+    <string name="widget_empty">No messages</string>
+    <string name="widget_refresh">Refresh</string>
+    <string name="widget_compose">Compose</string>
+    <string name="label_wrong_account">Switch to %1$s to label this email</string>
+    <string name="widget_more">+ More</string>
+    <string name="widget_config_title">Inbox widget</string>
+    <string name="widget_config_subtitle">Choose which inbox this widget shows.</string>
+    <string name="widget_config_no_accounts">Sign in to an account first, then add the widget again.</string>
 </resources>

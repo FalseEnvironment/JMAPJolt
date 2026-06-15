@@ -94,6 +94,24 @@ internal fun MainActivity.firstLabelOf(email: DisplayEmail): EmailLabel? {
     return email.labels.firstNotNullOfOrNull { kw -> accountLabels.find { it.keyword == kw } }
 }
 
+/**
+ * True if the active account may edit this email's labels. Labels are a per-account
+ * JMAP concept, so an email can only be (un)labelled while its owning account is active.
+ * Blank accountEmail means a single-account context → treated as owned.
+ */
+internal fun MainActivity.ownsEmail(email: DisplayEmail): Boolean {
+    val owner = email.accountEmail
+    if (owner.isBlank()) return true
+    return owner.equals(currentAccountEmail.orEmpty(), ignoreCase = true)
+}
+
+internal fun MainActivity.ownsEmailId(emailId: String): Boolean {
+    val email = emails.find { it.id == emailId }
+        ?: baseEmails.find { it.id == emailId }
+        ?: return true
+    return ownsEmail(email)
+}
+
 /** All configured labels of an email, in the email's keyword order. */
 internal fun MainActivity.labelsOf(email: DisplayEmail): List<EmailLabel> {
     val accountEmail = email.accountEmail.ifBlank { currentAccountEmail.orEmpty() }
@@ -385,6 +403,15 @@ internal fun MainActivity.showCreateLabelDialog(onCreated: (EmailLabel) -> Unit)
 
 internal fun MainActivity.showLabelPicker(ids: List<String>) {
     if (ids.isEmpty()) return
+    // Labels are per-account: block (un)labelling any email that isn't owned by the
+    // active account, and point the user at the account they need to switch to.
+    val foreign = ids.mapNotNull { id ->
+        (emails.find { it.id == id } ?: baseEmails.find { it.id == id })
+    }.firstOrNull { !ownsEmail(it) }
+    if (foreign != null) {
+        showThemedSnackbar(getString(R.string.label_wrong_account, foreign.accountEmail))
+        return
+    }
     val dp = resources.displayMetrics.density
     val bgColor = getDialogBackgroundColor()
     val textColor = if (currentTheme == "light") "#212121".toColorInt() else Color.WHITE

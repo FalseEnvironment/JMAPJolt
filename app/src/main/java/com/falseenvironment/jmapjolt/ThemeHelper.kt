@@ -39,6 +39,7 @@ internal fun MainActivity.saveThemePreference() {
             .edit()
             .putString("app_theme", currentTheme)
             .apply()
+    InboxWidgetProvider.refreshAll(applicationContext)
 }
 
 internal fun MainActivity.applyTheme() {
@@ -293,6 +294,7 @@ internal fun MainActivity.applyAccentColor() {
 internal fun MainActivity.saveAccentColorPreference() {
     getSharedPreferences(MainActivity.PREFS_NAME, android.content.Context.MODE_PRIVATE)
         .edit().putString(MainActivity.KEY_ACCENT_COLOR, currentAccentColor).apply()
+    InboxWidgetProvider.refreshAll(applicationContext)
 }
 
 internal fun MainActivity.updateAccentColorPreview() {

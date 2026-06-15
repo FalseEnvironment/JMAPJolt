@@ -43,6 +43,31 @@
             </intent-filter>
         </receiver>
 
+        <receiver
+            android:name=".InboxWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_inbox_info" />
+        </receiver>
+
+        <service
+            android:name=".InboxWidgetService"
+            android:permission="android.permission.BIND_REMOTEVIEWS"
+            android:exported="false" />
+
+        <activity
+            android:name=".InboxWidgetConfigActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
         <service
             android:name=".JmapEventSourceService"
             android:foregroundServiceType="dataSync"
