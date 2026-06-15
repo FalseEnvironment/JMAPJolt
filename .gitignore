@@ -50,3 +50,7 @@ Thumbs.db
 # Claude Code local settings (machine-specific)
 .claude/
 .claude-global/
+
+# MCP / graphify local config (machine-specific)
+.mcp.json
+.graphifyignore
