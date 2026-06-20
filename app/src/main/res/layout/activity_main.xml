@@ -1168,15 +1168,15 @@
                         android:layout_height="1dp"
                         android:background="#33FFFFFF" />
 
-                    <!-- Accounts accordion section -->
+                    <!-- Calendar accordion section (CalDAV + ICS import/export) -->
                     <LinearLayout
-                        android:id="@+id/settingsAccountsContainer"
+                        android:id="@+id/settingsCalendarContainer"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="vertical">
 
                         <LinearLayout
-                            android:id="@+id/settingsAccountsHeader"
+                            android:id="@+id/settingsCalendarHeader"
                             android:layout_width="match_parent"
                             android:layout_height="52dp"
                             android:gravity="center_vertical"
@@ -1191,12 +1191,12 @@
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1"
-                                android:text="Accounts"
+                                android:text="@string/settings_calendar"
                                 android:textSize="15sp"
                                 android:textStyle="bold" />
 
                             <ImageView
-                                android:id="@+id/settingsAccountsChevron"
+                                android:id="@+id/settingsCalendarChevron"
                                 android:layout_width="20dp"
                                 android:layout_height="20dp"
                                 android:src="@drawable/ic_lucide_chevron_down"
@@ -1205,15 +1205,138 @@
                         </LinearLayout>
 
                         <LinearLayout
-                            android:id="@+id/settingsAccountsContent"
+                            android:id="@+id/settingsCalendarContent"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:orientation="vertical"
                             android:paddingStart="20dp"
                             android:paddingEnd="20dp"
                             android:paddingBottom="12dp"
-                            android:visibility="gone" />
+                            android:visibility="gone">
 
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="52dp"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal">
+
+                                <TextView
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="@string/settings_cal_enable"
+                                    android:textSize="15sp" />
+
+                                <androidx.appcompat.widget.SwitchCompat
+                                    android:id="@+id/calendarEnabledSwitch"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content" />
+
+                            </LinearLayout>
+
+                            <LinearLayout
+                                android:id="@+id/settingsCalOptions"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical">
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal">
+
+                                <TextView
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="@string/settings_cal_provider"
+                                    android:textSize="15sp" />
+
+                                <LinearLayout
+                                    android:id="@+id/settingsCalProviderDropdown"
+                                    android:layout_width="wrap_content"
+                                    android:minWidth="150dp"
+                                    android:layout_height="40dp"
+                                    android:gravity="center_vertical"
+                                    android:paddingStart="14dp"
+                                    android:paddingEnd="10dp"
+                                    android:orientation="horizontal"
+                                    android:clickable="true"
+                                    android:focusable="true">
+                                    <TextView
+                                        android:id="@+id/settingsCalProviderText"
+                                        android:layout_width="0dp"
+                                        android:layout_height="wrap_content"
+                                        android:layout_weight="1"
+                                        android:gravity="center"
+                                        android:textSize="13sp" />
+                                    <ImageView
+                                        android:layout_width="14dp"
+                                        android:layout_height="14dp"
+                                        android:layout_marginStart="6dp"
+                                        android:src="@drawable/ic_lucide_chevron_down"
+                                        android:scaleType="fitCenter" />
+                                </LinearLayout>
+
+                            </LinearLayout>
+
+                            <TextView
+                                android:id="@+id/settingsCalProviderHint"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:paddingStart="4dp"
+                                android:paddingBottom="6dp"
+                                android:text="@string/settings_cal_provider_hint_jmap"
+                                android:textColor="#9E9E9E"
+                                android:textSize="12sp" />
+
+                            <TextView
+                                android:id="@+id/settingsCalProviderAccount"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:paddingTop="4dp"
+                                android:paddingBottom="8dp"
+                                android:textSize="15sp"
+                                android:visibility="gone" />
+
+                            <TextView
+                                android:id="@+id/settingsCalAddProviderRow"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginBottom="6dp"
+                                android:text="@string/settings_cal_add_davx5"
+                                android:textSize="14sp"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:visibility="gone" />
+
+                            <TextView
+                                android:id="@+id/settingsImportIcsRow"
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:gravity="center_vertical"
+                                android:text="@string/settings_import_ics"
+                                android:textSize="15sp"
+                                android:drawableEnd="@drawable/ic_lucide_chevron_right"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:background="?attr/selectableItemBackground" />
+
+                            <TextView
+                                android:id="@+id/settingsExportIcsRow"
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:gravity="center_vertical"
+                                android:text="@string/settings_export_ics"
+                                android:textSize="15sp"
+                                android:drawableEnd="@drawable/ic_lucide_chevron_right"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:background="?attr/selectableItemBackground" />
+
+                            </LinearLayout>
+                        </LinearLayout>
                     </LinearLayout>
 
                     <View

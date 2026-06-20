@@ -123,7 +123,9 @@ internal fun MainActivity.applyTheme() {
     settingsLabelsChevron.imageTintList = accentTint
     settingsThemeChevron.imageTintList = accentTint
     settingsUnifiedPushChevron.imageTintList = accentTint
-    settingsAccountsChevron.imageTintList = accentTint
+    settingsCalendarChevron.imageTintList = accentTint
+    settingsImportIcsRow.compoundDrawableTintList = accentTint
+    settingsExportIcsRow.compoundDrawableTintList = accentTint
     settingsInfoIcon.imageTintList = accentTint
     settingsInfoArrow.imageTintList = accentTint
 
@@ -207,14 +209,11 @@ internal fun MainActivity.applyAccentColor() {
     settingsLabelsChevron.imageTintList = accentTint
     settingsThemeChevron.imageTintList = accentTint
     settingsUnifiedPushChevron.imageTintList = accentTint
-    settingsAccountsChevron.imageTintList = accentTint
+    settingsCalendarChevron.imageTintList = accentTint
+    settingsImportIcsRow.compoundDrawableTintList = accentTint
+    settingsExportIcsRow.compoundDrawableTintList = accentTint
     settingsInfoIcon.imageTintList = accentTint
     settingsInfoArrow.imageTintList = accentTint
-    // Refresh accounts section to update "Change color" button
-    try {
-        settingsAccountsContent.removeAllViews()
-        refreshAccountsSettings()
-    } catch (_: Exception) {}
     val hintAlpha = if (currentTheme == "light") 0.55f else 0.65f
     searchBarTitle.setTextColor(android.graphics.Color.argb(
         (255 * hintAlpha).toInt(),
@@ -252,7 +251,7 @@ internal fun MainActivity.applyAccentColor() {
             android.graphics.Color.blue(accentInt)
         )
     )
-    listOf(loadImagesSwitch, loadFaviconsSwitch, unifiedPushSwitch, sseSwitch).forEach {
+    listOf(loadImagesSwitch, loadFaviconsSwitch, unifiedPushSwitch, sseSwitch, calendarEnabledSwitch).forEach {
         it.setThumbTintList(thumbTint)
         it.setTrackTintList(trackTint)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -281,7 +280,7 @@ internal fun MainActivity.applyAccentColor() {
     // MD3-style tonal pill for the dropdown triggers.
     val dropdownBg = darkenColor(accentInt, 0.78f)
     val dropdownStroke = darkenColor(accentInt, 1.15f)
-    for (dropdown in listOf(swipeLeftDropdown, swipeRightDropdown, themeDropdown)) {
+    for (dropdown in listOf(swipeLeftDropdown, swipeRightDropdown, themeDropdown, settingsCalProviderDropdown)) {
         dropdown.background = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             cornerRadius = 999 * d
@@ -303,6 +302,15 @@ internal fun MainActivity.applyAccentColor() {
     settingsEditLabelsButton.setTextColor(Color.WHITE)
     settingsEditLabelsButton.gravity = android.view.Gravity.CENTER
     settingsEditLabelsButton.setPadding((14 * d).toInt(), (8 * d).toInt(), (14 * d).toInt(), (8 * d).toInt())
+    settingsCalAddProviderButton.background = GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        cornerRadius = 999 * d
+        setColor(dropdownBg)
+        setStroke(d.toInt(), dropdownStroke)
+    }
+    settingsCalAddProviderButton.setTextColor(Color.WHITE)
+    settingsCalAddProviderButton.gravity = android.view.Gravity.CENTER
+    settingsCalAddProviderButton.setPadding((14 * d).toInt(), (8 * d).toInt(), (14 * d).toInt(), (8 * d).toInt())
     updateSettingsDropdownDisplays()
     // Refresh drawer account header/list so row backgrounds, pencil and arrow
     // pick up the new accent immediately.

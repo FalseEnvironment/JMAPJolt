@@ -53,7 +53,7 @@ private class InboxWidgetFactory(
         secondaryColor = palette[3]
         accentColor = WidgetSupport.accentColor(context)
 
-        val selection = WidgetSupport.selection(context, appWidgetId)
+        val selection = WidgetSupport.effectiveSelection(context, appWidgetId)
         val cache = EmailCache(context.filesDir)
         val accentForSingle = selection?.takeIf { it != WidgetSupport.UNIFIED }
             ?.let { WidgetSupport.accountColor(context, it) }
@@ -107,6 +107,16 @@ private class InboxWidgetFactory(
         views.setTextColor(R.id.itemPreview, secondaryColor)
         views.setTextColor(R.id.itemDate, secondaryColor)
         views.setViewVisibility(R.id.itemColorStrip, View.VISIBLE)
+
+        // Tint the press ripple/flash with the app accent (white drawable layers
+        // recolored via background tint). setColorStateList is API 31+; older
+        // versions keep the drawable's default white highlight.
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            views.setColorStateList(
+                R.id.itemRoot, "setBackgroundTintList",
+                android.content.res.ColorStateList.valueOf(accentColor)
+            )
+        }
 
         // Fill-in opens this specific email (merged into the list's template intent).
         val fillIn = Intent()

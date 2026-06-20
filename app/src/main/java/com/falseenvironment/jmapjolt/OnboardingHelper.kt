@@ -517,6 +517,14 @@ internal fun MainActivity.buildOnboardingGetStartedPage(
         }
     ))
 
+    page.addView(permRow(
+        iconRes = R.drawable.ic_lucide_calendar,
+        title = "Calendar",
+        subtitle = "Needed only if you sync calendars with DAVx5",
+        grantedCheck = { CalendarProvider.hasReadPermission(this) },
+        onAllow = { requestCalendarPermissions { onboardingPermRefresh?.invoke() } }
+    ))
+
     return page
 }
 

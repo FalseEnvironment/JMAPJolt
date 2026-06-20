@@ -33,6 +33,10 @@
         android:icon="@drawable/ic_lucide_trash"
         android:title="@string/folder_trash" />
     <item
+        android:id="@+id/nav_calendar"
+        android:icon="@drawable/ic_lucide_calendar"
+        android:title="@string/calendar_title" />
+    <item
         android:id="@+id/nav_settings"
         android:icon="@drawable/ic_lucide_settings"
         android:title="@string/settings_title" />

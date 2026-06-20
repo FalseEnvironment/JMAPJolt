@@ -71,6 +71,22 @@ object WidgetSupport {
         context.getSharedPreferences(WIDGET_PREFS, Context.MODE_PRIVATE)
             .getString("widget_account_$appWidgetId", null)
 
+    /**
+     * Selection to actually render. Some launchers (e.g. Kvaesitso) add widgets
+     * without ever launching the APPWIDGET_CONFIGURE activity, so [selection] stays
+     * null and the widget would show "no messages". Fall back to a sensible default:
+     * the only account if there's one, the unified inbox if there are several.
+     */
+    fun effectiveSelection(context: Context, appWidgetId: Int): String? {
+        selection(context, appWidgetId)?.let { return it }
+        val accounts = savedAccountEmails(context)
+        return when {
+            accounts.isEmpty() -> null
+            accounts.size == 1 -> accounts[0]
+            else -> UNIFIED
+        }
+    }
+
     fun clearSelection(context: Context, appWidgetId: Int) {
         context.getSharedPreferences(WIDGET_PREFS, Context.MODE_PRIVATE)
             .edit().remove("widget_account_$appWidgetId").apply()

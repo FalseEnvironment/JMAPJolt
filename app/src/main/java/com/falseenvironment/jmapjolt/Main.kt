@@ -36,6 +36,7 @@ import android.view.Gravity
 import android.view.Menu
 import android.widget.HorizontalScrollView
 import android.widget.PopupMenu
+import android.graphics.PorterDuff
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
@@ -141,14 +142,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var settingsUnifiedPushContent: LinearLayout
     internal lateinit var settingsUnifiedPushChevron: ImageView
 
-    private lateinit var settingsAccountsContainer: LinearLayout
-    private lateinit var settingsAccountsHeader: LinearLayout
-    internal lateinit var settingsAccountsContent: LinearLayout
-    internal lateinit var settingsAccountsChevron: ImageView
     private lateinit var settingsThemeContainer: LinearLayout
     private lateinit var settingsThemeHeader: LinearLayout
     private lateinit var settingsThemeContent: LinearLayout
     internal lateinit var settingsThemeChevron: ImageView
+    internal lateinit var settingsCalendarChevron: ImageView
+    internal lateinit var settingsImportIcsRow: TextView
+    internal lateinit var settingsExportIcsRow: TextView
     private lateinit var settingsInfoRow: LinearLayout
     internal lateinit var settingsInfoIcon: ImageView
     internal lateinit var settingsInfoArrow: ImageView
@@ -204,6 +204,10 @@ class MainActivity : AppCompatActivity() {
     internal lateinit var swipeLeftDropdown: LinearLayout
     private lateinit var swipeRightDropdownText: TextView
     private lateinit var swipeLeftDropdownText: TextView
+    internal lateinit var settingsCalProviderDropdown: LinearLayout
+    private lateinit var settingsCalProviderText: TextView
+    internal lateinit var calendarEnabledSwitch: SwitchCompat
+    internal lateinit var settingsCalAddProviderButton: TextView
     internal lateinit var topBarSendButton: ImageView
     internal lateinit var detailReplyButton: ImageView
     internal lateinit var detailForwardButton: ImageView
@@ -264,6 +268,16 @@ class MainActivity : AppCompatActivity() {
     internal val requestStoragePermLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { /* permissions resolved; user can try picking again */ }
+
+    /** Import a .ics file picked via the Storage Access Framework. */
+    internal val importIcsLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> uri?.let { doImportIcs(it) } }
+
+    /** Export all local events to a .ics file created via the Storage Access Framework. */
+    internal val exportIcsLauncher = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("text/calendar")
+    ) { uri -> uri?.let { doExportIcs(it) } }
     private lateinit var drawerAccountName: TextView
     private lateinit var drawerAccountEmail: TextView
     private lateinit var drawerAccountAvatar: ImageView
@@ -387,10 +401,6 @@ class MainActivity : AppCompatActivity() {
         settingsUnifiedPushContent = findViewById(R.id.settingsUnifiedPushContent)
         settingsUnifiedPushChevron = findViewById(R.id.settingsUnifiedPushChevron)
 
-        settingsAccountsContainer = findViewById(R.id.settingsAccountsContainer)
-        settingsAccountsHeader = findViewById(R.id.settingsAccountsHeader)
-        settingsAccountsContent = findViewById(R.id.settingsAccountsContent)
-        settingsAccountsChevron = findViewById(R.id.settingsAccountsChevron)
         settingsThemeContainer = findViewById(R.id.settingsThemeContainer)
         settingsThemeHeader = findViewById(R.id.settingsThemeHeader)
         settingsThemeContent = findViewById(R.id.settingsThemeContent)
@@ -482,6 +492,10 @@ class MainActivity : AppCompatActivity() {
         swipeLeftDropdown = findViewById(R.id.swipeLeftDropdown)
         swipeRightDropdownText = findViewById(R.id.swipeRightDropdownText)
         swipeLeftDropdownText = findViewById(R.id.swipeLeftDropdownText)
+        settingsCalProviderDropdown = findViewById(R.id.settingsCalProviderDropdown)
+        settingsCalProviderText = findViewById(R.id.settingsCalProviderText)
+        calendarEnabledSwitch = findViewById(R.id.calendarEnabledSwitch)
+        settingsCalAddProviderButton = findViewById(R.id.settingsCalAddProviderRow)
         topBarSendButton = findViewById(R.id.topBarSendButton)
         quoteIndicatorRow = findViewById(R.id.quoteIndicatorRow)
         quoteIndicatorLabel = findViewById(R.id.quoteIndicatorLabel)
@@ -539,6 +553,7 @@ class MainActivity : AppCompatActivity() {
         applyTheme()
         handleMailtoIntent(intent)
         handleWidgetIntent(intent)
+        handleCalendarIntent(intent)
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -546,6 +561,8 @@ class MainActivity : AppCompatActivity() {
                     composeContainer.visibility == View.VISIBLE -> attemptLeaveCompose()
                     drawerLayout.isDrawerOpen(GravityCompat.START) ->
                         drawerLayout.closeDrawer(GravityCompat.START)
+                    calendarPanelView?.visibility == View.VISIBLE ->
+                        if (calendarPanelView?.onBackPressed() != true) showMailboxScreen()
                     selectedEmails.isNotEmpty() -> clearSelection()
                     isSearchActive -> deactivateSearch()
                     isShowingEmailDetail -> closeEmailDetail()
@@ -789,6 +806,50 @@ class MainActivity : AppCompatActivity() {
 
     internal var isShowingEmailDetail = false
 
+    /** Calendar UI hosted in the content area so the app drawer stays available over it. */
+    private var calendarPanelView: CalendarPanel? = null
+
+    /** Opens the app navigation drawer (used by the calendar panel's hamburger). */
+    internal fun openMainDrawer() {
+        drawerLayout.openDrawer(GravityCompat.START)
+    }
+
+    /** Launches the .ics import picker and refreshes the calendar panel on return. */
+    internal fun launchCalendarIcsImport() {
+        runCatching { importIcsLauncher.launch(arrayOf("text/calendar", "*/*")) }
+    }
+
+    /** Shows the calendar inside MainActivity (keeps the real drawer). */
+    internal fun showCalendarScreen() {
+        if (composeContainer.visibility == View.VISIBLE) hideCompose()
+        onboardingContainer.visibility = View.GONE
+        loginContainer.visibility = View.GONE
+        loginBackBtn.visibility = View.GONE
+        mailboxContainer.visibility = View.GONE
+        settingsContainer.visibility = View.GONE
+        emailDetailContainer.visibility = View.GONE
+        fabCompose.visibility = View.GONE
+        customTopBar.visibility = View.GONE
+        isShowingEmailDetail = false
+        val panel = calendarPanelView ?: CalendarPanel(this).also { p ->
+            calendarPanelView = p
+            val parent = mailboxContainer.parent as android.view.ViewGroup
+            parent.addView(p, android.view.ViewGroup.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT))
+        }
+        panel.visibility = View.VISIBLE
+        panel.bringToFront()
+        panel.refresh()
+        panel.onShown()
+        navigationView.post { rebuildDrawerMenu() }
+        drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED)
+    }
+
+    private fun hideCalendarScreen() {
+        calendarPanelView?.visibility = View.GONE
+    }
+
     /** Id of the draft currently being edited, so it can be replaced (destroyed) on save/send. */
     internal var editingDraftId: String? = null
 
@@ -802,6 +863,7 @@ class MainActivity : AppCompatActivity() {
         onboardingContainer.visibility = View.GONE
         loginContainer.visibility = View.GONE
         loginBackBtn.visibility = View.GONE
+        hideCalendarScreen()
         mailboxContainer.visibility = View.VISIBLE
         mailboxContainer.animateScreenInBack()
         emailDetailContainer.visibility = View.GONE
@@ -2051,6 +2113,7 @@ body{background:$bg;padding:20px}
     }
 
     private fun showSettingsScreen() {
+        hideCalendarScreen()
         onboardingContainer.visibility = View.GONE
         loginContainer.visibility = View.GONE
         mailboxContainer.visibility = View.GONE
@@ -2109,11 +2172,144 @@ body{background:$bg;padding:20px}
         settingsUnifiedPushHeader.setOnClickListener {
             toggleSettingsSection(settingsUnifiedPushContent, settingsUnifiedPushChevron)
         }
-        settingsAccountsHeader.setOnClickListener {
-            if (settingsAccountsContent.visibility != View.VISIBLE) refreshAccountsSettings()
-            toggleSettingsSection(settingsAccountsContent, settingsAccountsChevron)
+        val settingsCalendarHeader = findViewById<LinearLayout>(R.id.settingsCalendarHeader)
+        val settingsCalendarContent = findViewById<LinearLayout>(R.id.settingsCalendarContent)
+        settingsCalendarChevron = findViewById(R.id.settingsCalendarChevron)
+        settingsImportIcsRow = findViewById(R.id.settingsImportIcsRow)
+        settingsExportIcsRow = findViewById(R.id.settingsExportIcsRow)
+        settingsCalendarHeader.setOnClickListener {
+            toggleSettingsSection(settingsCalendarContent, settingsCalendarChevron)
+        }
+        settingsCalProviderDropdown.setOnClickListener {
+            val options = listOf(
+                getString(R.string.settings_cal_provider_jmap),
+                getString(R.string.settings_cal_provider_davx5))
+            val current = if (CalendarPrefs.provider(this) == CalendarPrefs.Provider.DAVX5) 1 else 0
+            showSettingsDropdown(settingsCalProviderDropdown, options, current) { idx ->
+                val chosen = if (idx == 1) CalendarPrefs.Provider.DAVX5 else CalendarPrefs.Provider.JMAP
+                CalendarPrefs.setProvider(this, chosen)
+                updateCalProviderUi()
+                onCalendarProviderChosen(chosen)
+            }
+        }
+        settingsCalAddProviderButton.setOnClickListener { CalendarDavx5.launch(this@MainActivity) }
+        calendarEnabledSwitch.isChecked = CalendarPrefs.isEnabled(this)
+        calendarEnabledSwitch.setOnCheckedChangeListener { _, enabled ->
+            CalendarPrefs.setEnabled(this, enabled)
+            findViewById<LinearLayout>(R.id.settingsCalOptions).visibility =
+                if (enabled) View.VISIBLE else View.GONE
+            if (!enabled && calendarPanelView?.visibility == View.VISIBLE) showMailboxScreen()
+            navigationView.post { rebuildDrawerMenu() }
+        }
+        findViewById<LinearLayout>(R.id.settingsCalOptions).visibility =
+            if (CalendarPrefs.isEnabled(this)) View.VISIBLE else View.GONE
+        updateCalProviderUi()
+        settingsImportIcsRow.setOnClickListener {
+            runCatching { importIcsLauncher.launch(arrayOf("text/calendar", "*/*")) }
+        }
+        settingsExportIcsRow.setOnClickListener {
+            runCatching { exportIcsLauncher.launch("calendar-${System.currentTimeMillis()}.ics") }
         }
         settingsInfoRow.setOnClickListener { showAboutDialog() }
+    }
+
+    /** Requests READ/WRITE_CALENDAR; invokes [onResult] once the user responds. */
+    internal fun requestCalendarPermissions(onResult: () -> Unit) {
+        calendarPermissionCallback = onResult
+        calendarPermissionLauncher.launch(arrayOf(
+            android.Manifest.permission.READ_CALENDAR,
+            android.Manifest.permission.WRITE_CALENDAR
+        ))
+    }
+
+    private var calendarPermissionCallback: (() -> Unit)? = null
+    private val calendarPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { _ -> calendarPermissionCallback?.invoke(); calendarPermissionCallback = null }
+
+    /** Reflects the selected calendar provider in the dropdown text, hint, add button + account. */
+    private fun updateCalProviderUi() {
+        val isDavx5 = CalendarPrefs.provider(this) == CalendarPrefs.Provider.DAVX5
+        val accent = currentAccentColor.toColorInt()
+        settingsCalProviderText.text = getString(
+            if (isDavx5) R.string.settings_cal_provider_davx5
+            else R.string.settings_cal_provider_jmap)
+        findViewById<TextView>(R.id.settingsCalProviderHint)?.text = getString(
+            if (isDavx5) R.string.settings_cal_provider_hint_davx5
+            else R.string.settings_cal_provider_hint_jmap)
+        settingsCalAddProviderButton.visibility = if (isDavx5) View.VISIBLE else View.GONE
+        val accountText = findViewById<TextView>(R.id.settingsCalProviderAccount)
+        val connected = if (isDavx5 && CalendarProvider.hasReadPermission(this)) {
+            CalendarProvider.calendars(this)
+                .map { it.accountName }
+                .filter { it.isNotBlank() && !it.equals("LOCAL", ignoreCase = true) }
+                .distinct()
+        } else emptyList()
+        if (connected.isEmpty()) {
+            accountText?.visibility = View.GONE
+        } else {
+            accountText?.text = getString(R.string.settings_cal_connected, connected.joinToString(", "))
+            accountText?.visibility = View.VISIBLE
+        }
+    }
+
+    /** Handles a provider switch: warn here (not in the calendar tab) when the choice can't sync. */
+    private fun onCalendarProviderChosen(provider: CalendarPrefs.Provider) {
+        when (provider) {
+            CalendarPrefs.Provider.DAVX5 ->
+                if (!CalendarProvider.hasReadPermission(this)) {
+                    requestCalendarPermissions { updateCalProviderUi() }
+                }
+            CalendarPrefs.Provider.JMAP -> {
+                val account = CalendarAccount.current(this) ?: run {
+                    showInAppMessage(getString(R.string.calendar_jmap_unsupported)); return
+                }
+                lifecycleScope.launch {
+                    val result = CalendarSync.sync(applicationContext, account)
+                    if (!result.supported) showInAppMessage(getString(R.string.calendar_jmap_unsupported))
+                }
+            }
+        }
+    }
+
+    private fun doImportIcs(uri: android.net.Uri) {
+        lifecycleScope.launch {
+            val count = withContext(Dispatchers.IO) {
+                runCatching {
+                    val text = contentResolver.openInputStream(uri)?.bufferedReader()
+                        ?.use { it.readText() } ?: return@runCatching 0
+                    val events = CalendarIcs.parse(text, "local")
+                    events.forEach { CalendarStore.upsert(applicationContext, it) }
+                    events.size
+                }.getOrDefault(-1)
+            }
+            if (count >= 0) {
+                CalendarReminderScheduler.reschedule(applicationContext)
+                calendarPanelView?.refresh()
+                showInAppMessage("Imported $count event(s)")
+            } else showInAppMessage("Import failed")
+        }
+    }
+
+    private fun doExportIcs(uri: android.net.Uri) {
+        lifecycleScope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                runCatching {
+                    val ics = CalendarIcs.toIcs(CalendarStore.active(applicationContext))
+                    contentResolver.openOutputStream(uri)?.use { it.write(ics.toByteArray()) }
+                    true
+                }.getOrDefault(false)
+            }
+            showInAppMessage(if (ok) "Calendar exported" else "Export failed")
+        }
+    }
+
+    /** App-styled bottom in-app message (matches the snackbars used elsewhere). */
+    private fun showInAppMessage(text: String) {
+        com.google.android.material.snackbar.Snackbar.make(
+            findViewById(android.R.id.content), text,
+            com.google.android.material.snackbar.Snackbar.LENGTH_LONG
+        ).show()
     }
 
     private fun toggleSettingsSection(content: LinearLayout, chevron: ImageView) {
@@ -2277,7 +2473,6 @@ body{background:$bg;padding:20px}
         settingsSwipeContainer.visibility = View.GONE
         settingsUnifiedPushContainer.visibility = View.VISIBLE
         settingsThemeContainer.visibility = View.VISIBLE
-        settingsAccountsContainer.visibility = View.VISIBLE
         currentSettingsSection = SettingsSection.ROOT
         setDrawerIndicator(true)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
@@ -2290,7 +2485,9 @@ body{background:$bg;padding:20px}
 
     private fun bindDrawerNavigation() {
         navigationView.setNavigationItemSelectedListener { item ->
-            if (item.itemId == R.id.nav_settings) {
+            if (item.itemId == R.id.nav_calendar) {
+                showCalendarScreen()
+            } else if (item.itemId == R.id.nav_settings) {
                 showSettingsScreen()
             } else {
                 selectedFolder = item.itemId
@@ -2532,6 +2729,15 @@ body{background:$bg;padding:20px}
             item.isCheckable = true
         }
 
+        val calendarEnabled = CalendarPrefs.isEnabled(this)
+        val calendarItem = if (calendarEnabled) {
+            menu.add(0, R.id.nav_calendar, orderIdx, getString(R.string.calendar_title)).apply {
+                setIcon(R.drawable.ic_lucide_calendar)
+                icon?.mutate()?.setTint(defaultIconTint)
+                isCheckable = true
+            }
+        } else null
+
         val settingsItem =
                 menu.add(
                         0,
@@ -2547,6 +2753,8 @@ body{background:$bg;padding:20px}
         // previously selected folder (which stays remembered in selectedFolder).
         if (settingsContainer.visibility == View.VISIBLE) {
             settingsItem.isChecked = true
+        } else if (calendarItem != null && calendarPanelView?.visibility == View.VISIBLE) {
+            calendarItem.isChecked = true
         } else {
             menu.findItem(selectedFolder)?.isChecked = true
         }
@@ -4739,79 +4947,6 @@ body{background:$bg;padding:20px}
         getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().putInt("account_color_$email", color).apply()
     }
 
-    internal fun refreshAccountsSettings() {
-        settingsAccountsContent.removeAllViews()
-        val dp = resources.displayMetrics.density
-        val textColor = if (currentTheme == "light") "#212121".toColorInt() else Color.WHITE
-        val secondaryColor = if (currentTheme == "light") "#757575".toColorInt() else "#9E9E9E".toColorInt()
-
-        if (savedAccounts.isEmpty()) {
-            settingsAccountsContent.addView(TextView(this).apply {
-                text = "No accounts configured"
-                textSize = 13f
-                setTextColor(secondaryColor)
-                setPadding(0, (8 * dp).toInt(), 0, 0)
-            })
-            return
-        }
-
-        savedAccounts.forEach { account ->
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT, (52 * dp).toInt()
-                )
-            }
-
-            // Color dot
-            val colorDot = View(this).apply {
-                val sz = (12 * dp).toInt()
-                layoutParams = LinearLayout.LayoutParams(sz, sz).apply { marginEnd = (12 * dp).toInt() }
-                background = GradientDrawable().apply {
-                    shape = GradientDrawable.OVAL
-                    setColor(getAccountColor(account.email))
-                }
-            }
-            row.addView(colorDot)
-
-            // Email label
-            row.addView(TextView(this).apply {
-                text = account.email
-                textSize = 14f
-                setTextColor(textColor)
-                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-                maxLines = 1
-                ellipsize = android.text.TextUtils.TruncateAt.END
-            })
-
-            // Change color button
-            row.addView(TextView(this).apply {
-                text = "Change color"
-                textSize = 12f
-                setTextColor(getOnAccentColor())
-                background = GradientDrawable().apply {
-                    shape = GradientDrawable.RECTANGLE
-                    cornerRadius = 10 * dp
-                    setColor(currentAccentColor.toColorInt())
-                }
-                setPadding((12 * dp).toInt(), (6 * dp).toInt(), (12 * dp).toInt(), (6 * dp).toInt())
-                isClickable = true
-                isFocusable = true
-                setOnClickListener {
-                    showAccountColorDialog(account.email) {
-                        colorDot.background = GradientDrawable().apply {
-                            shape = GradientDrawable.OVAL
-                            setColor(getAccountColor(account.email))
-                        }
-                    }
-                }
-            })
-
-            settingsAccountsContent.addView(row)
-        }
-    }
-
     private fun switchToSavedAccount(account: AccountEntry, forceInbox: Boolean = false) {
         connectedAccount = JMapClient.ConnectedAccount(
             email = account.email,
@@ -4970,6 +5105,18 @@ body{background:$bg;padding:20px}
         setIntent(intent)
         handleMailtoIntent(intent)
         handleWidgetIntent(intent)
+        handleCalendarIntent(intent)
+    }
+
+    private fun handleCalendarIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra(EXTRA_OPEN_CALENDAR, false) == true) {
+            intent.removeExtra(EXTRA_OPEN_CALENDAR)
+            showCalendarScreen()
+        }
+        if (intent?.getBooleanExtra(EXTRA_OPEN_DRAWER, false) == true) {
+            intent.removeExtra(EXTRA_OPEN_DRAWER)
+            drawerLayout.post { drawerLayout.openDrawer(GravityCompat.START) }
+        }
     }
 
     override fun onResume() {
@@ -5013,6 +5160,8 @@ body{background:$bg;padding:20px}
     companion object {
         internal const val TAG = "MainActivity"
         internal const val PREFS_NAME = "mail_prefs"
+        internal const val EXTRA_OPEN_CALENDAR = "open_calendar"
+        internal const val EXTRA_OPEN_DRAWER = "open_drawer"
 
         // Pull-to-refresh trigger distance (default is ~64dp; raised to avoid
         // accidental refreshes while swiping the top email row horizontally).

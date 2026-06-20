@@ -66,7 +66,7 @@ class InboxWidgetProvider : AppWidgetProvider() {
 
         /** Theme/accent/title styling shared by full render and partial refresh. */
         private fun applyChrome(context: Context, views: RemoteViews, appWidgetId: Int) {
-            val selection = WidgetSupport.selection(context, appWidgetId)
+            val selection = WidgetSupport.effectiveSelection(context, appWidgetId)
             val palette = WidgetSupport.palette(WidgetSupport.currentTheme(context))
             val bg = palette[0]
             val header = palette[1]
