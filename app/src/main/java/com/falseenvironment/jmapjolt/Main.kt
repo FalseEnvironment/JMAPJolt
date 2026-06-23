@@ -318,6 +318,10 @@ class MainActivity : AppCompatActivity() {
             )
     private val categoryNames = mutableMapOf<Int, String>()
     internal val emails = mutableListOf<DisplayEmail>()
+    // Current page size for the visible folder. Grows by PAGE_SIZE on scroll-to-bottom.
+    private var emailLimit = JMapClient.DEFAULT_EMAIL_LIMIT
+    // True while a "load more" fetch is in flight, to avoid stacking requests.
+    private var isLoadingMore = false
     internal lateinit var emailAdapter: EmailAdapter
     internal lateinit var jmapClient: JMapClient
     private lateinit var emailCache: EmailCache
@@ -2788,10 +2792,35 @@ body{background:$bg;padding:20px}
 
     private fun setupAdapters() {
         emailAdapter = EmailAdapter(this)
-        emailsRecyclerView.layoutManager = LinearLayoutManager(this)
+        val layoutManager = LinearLayoutManager(this)
+        emailsRecyclerView.layoutManager = layoutManager
         emailsRecyclerView.adapter = emailAdapter
         attachMailSwipe()
+        setupInfiniteScroll(layoutManager)
         setupSelectionBarListeners()
+    }
+
+    /**
+     * Grows the page size when the user scrolls near the bottom, so more emails
+     * load on demand instead of being capped at the first page. The periodic sync
+     * loop refetches the folder with the larger [emailLimit].
+     */
+    private fun setupInfiniteScroll(layoutManager: LinearLayoutManager) {
+        emailsRecyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                if (dy <= 0 || isLoadingMore) return
+                // Only paginate when the current page is full — a short page means
+                // we already have every email the folder holds.
+                if (emails.size < emailLimit) return
+
+                val lastVisible = layoutManager.findLastVisibleItemPosition()
+                if (lastVisible >= emails.size - LOAD_MORE_THRESHOLD) {
+                    isLoadingMore = true
+                    emailLimit += JMapClient.DEFAULT_EMAIL_LIMIT
+                    refreshInboxNow()
+                }
+            }
+        })
     }
 
     /** Long-press drag to reorder label rows inside the drawer's internal RecyclerView. */
@@ -3295,6 +3324,8 @@ body{background:$bg;padding:20px}
             }
 
     private fun updateEmailsList(rawList: List<DisplayEmail>) {
+        // A fetch landed: allow the next scroll-triggered page load.
+        isLoadingMore = false
         // Stable adapter ids derive from email ids: a duplicate id in the list
         // (e.g. multi-account label sync merging overlapping results) crashes
         // RecyclerView with "Called attach on a child which is not detached".
@@ -3364,6 +3395,9 @@ body{background:$bg;padding:20px}
     }
 
     private fun applyFolderFilterAndRefresh() {
+        // New folder starts at the first page again.
+        emailLimit = JMapClient.DEFAULT_EMAIL_LIMIT
+        isLoadingMore = false
         val folderTitle = getCurrentMailboxTitle()
         supportActionBar?.title = folderTitle
         updateCustomTopBar(folderTitle, inMailbox = true)
@@ -4108,7 +4142,7 @@ body{background:$bg;padding:20px}
                                 val allAccounts = BackgroundEmailSyncReceiver.readAllAccounts(this@MainActivity)
                                 val merged = allAccounts.flatMap { acc ->
                                     try {
-                                        jmapClient.fetchEmails(acc).map { e ->
+                                        jmapClient.fetchEmails(acc, limit = emailLimit).map { e ->
                                             DisplayEmail(
                                                 e.id, e.subject, e.from, e.fromEmail,
                                                 e.preview, e.fullBody, e.seen, e.isStarred,
@@ -4138,15 +4172,15 @@ body{background:$bg;padding:20px}
                                     else null
                             val fresh =
                                     if (labelKeyword != null) {
-                                        jmapClient.fetchEmailsByKeyword(account, labelKeyword)
+                                        jmapClient.fetchEmailsByKeyword(account, labelKeyword, emailLimit)
                                     } else if (isFav) {
-                                        jmapClient.fetchStarredEmails(account)
+                                        jmapClient.fetchStarredEmails(account, emailLimit)
                                     } else if (isInbox) {
-                                        jmapClient.fetchEmails(account)
+                                        jmapClient.fetchEmails(account, limit = emailLimit)
                                     } else if (role != null && mailboxId == null) {
                                         emptyList()
                                     } else {
-                                        jmapClient.fetchEmails(account, mailboxId)
+                                        jmapClient.fetchEmails(account, mailboxId, emailLimit)
                                     }
 
                             val newEmailsList =
@@ -5166,6 +5200,8 @@ body{background:$bg;padding:20px}
         // Pull-to-refresh trigger distance (default is ~64dp; raised to avoid
         // accidental refreshes while swiping the top email row horizontally).
         private const val PULL_TO_REFRESH_TRIGGER_DP = 160
+        // Trigger the next page when within this many rows of the bottom.
+        private const val LOAD_MORE_THRESHOLD = 10
 
         // Detects common HTML elements so HTML fragments (no <html> root) are rendered as
         // markup instead of being escaped and shown as raw text.

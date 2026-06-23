@@ -109,7 +109,8 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
 
     suspend fun fetchEmails(
         connectedAccount: ConnectedAccount,
-        mailboxId: String? = null
+        mailboxId: String? = null,
+        limit: Long = DEFAULT_EMAIL_LIMIT
     ): List<EmailSummary> = withContext(Dispatchers.IO) {
         val client = newClient(connectedAccount)
         client.use { jmapClient ->
@@ -118,7 +119,7 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
                 ?: throw IllegalStateException("No mail account found")
 
             if (!mailboxId.isNullOrBlank()) {
-                return@withContext fetchEmailsForMailbox(jmapClient, accountId, mailboxId)
+                return@withContext fetchEmailsForMailbox(jmapClient, accountId, mailboxId, limit)
             }
 
             val inboxIds = queryMailboxIds(jmapClient, accountId, JSONObject().put("role", "inbox"))
@@ -127,7 +128,7 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
             }
 
             for (candidate in inboxIds) {
-                val result = fetchEmailsForMailbox(jmapClient, accountId, candidate)
+                val result = fetchEmailsForMailbox(jmapClient, accountId, candidate, limit)
                 if (result.isNotEmpty()) return@withContext result
             }
 
@@ -181,7 +182,8 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
     }
 
     suspend fun fetchStarredEmails(
-        connectedAccount: ConnectedAccount
+        connectedAccount: ConnectedAccount,
+        limit: Long = DEFAULT_EMAIL_LIMIT
     ): List<EmailSummary> = withContext(Dispatchers.IO) {
         val client = newClient(connectedAccount)
         client.use { jmapClient ->
@@ -203,7 +205,7 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
                 .accountId(accountId)
                 .filter(filter)
                 .sort(arrayOf(rs.ltt.jmap.common.entity.Comparator("receivedAt", false)))
-                .limit(50L)
+                .limit(limit)
                 .build()
 
             val queryResponse = jmapClient.call(queryCall).get().getMain(rs.ltt.jmap.common.method.response.email.QueryEmailMethodResponse::class.java)
@@ -254,7 +256,8 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
     private fun fetchEmailsForMailbox(
         jmapClient: JmapClient,
         accountId: String,
-        mailboxId: String?
+        mailboxId: String?,
+        limit: Long = DEFAULT_EMAIL_LIMIT
     ): List<EmailSummary> {
         val filter = if (!mailboxId.isNullOrBlank()) {
             rs.ltt.jmap.common.entity.filter.EmailFilterCondition.builder().inMailbox(mailboxId).build()
@@ -264,7 +267,7 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
             .accountId(accountId)
             .filter(filter)
             .sort(arrayOf(rs.ltt.jmap.common.entity.Comparator("receivedAt", false)))
-            .limit(50L)
+            .limit(limit)
             .build()
 
         val queryResponse = jmapClient.call(queryCall).get().getMain(rs.ltt.jmap.common.method.response.email.QueryEmailMethodResponse::class.java)
@@ -508,7 +511,8 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
     /** Emails carrying a given (label) keyword, excluding trash and junk. */
     suspend fun fetchEmailsByKeyword(
         connectedAccount: ConnectedAccount,
-        keyword: String
+        keyword: String,
+        limit: Long = DEFAULT_EMAIL_LIMIT
     ): List<EmailSummary> = withContext(Dispatchers.IO) {
         val client = newClient(connectedAccount)
         client.use { jmapClient ->
@@ -530,7 +534,7 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
                 .accountId(accountId)
                 .filter(filter)
                 .sort(arrayOf(rs.ltt.jmap.common.entity.Comparator("receivedAt", false)))
-                .limit(50L)
+                .limit(limit)
                 .build()
 
             val queryResponse = jmapClient.call(queryCall).get().getMain(rs.ltt.jmap.common.method.response.email.QueryEmailMethodResponse::class.java)
@@ -1074,6 +1078,9 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
 
     companion object {
         private const val TAG = "JMapClient"
+
+        /** Default page size for email queries. UI grows this for infinite scroll. */
+        const val DEFAULT_EMAIL_LIMIT = 50L
 
         private val sessionCache = rs.ltt.jmap.client.session.InMemorySessionCache()
 
