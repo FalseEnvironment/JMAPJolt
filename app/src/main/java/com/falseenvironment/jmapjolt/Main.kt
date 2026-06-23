@@ -3410,9 +3410,43 @@ body{background:$bg;padding:20px}
             emailAdapter.notifyDataSetChanged()
             emptyStateView.visibility = View.GONE
             emailsRecyclerView.visibility = View.GONE
+            // Show the persisted offline snapshot immediately (works with no network);
+            // the periodic sync below refreshes it once the network responds.
+            loadOfflineCache(selectedFolder)
         }
 
         startPeriodicSync()
+    }
+
+    /** Cache bucket for a folder, scoped per account (or "unified" for the merged inbox). */
+    private fun cacheBucket(folderId: Int): String? {
+        val scope = if (folderId == R.id.nav_unified_inbox) "unified"
+            else connectedAccount?.email ?: return null
+        return com.falseenvironment.jmapjolt.cache.EmailCacheStore.bucket(scope, folderId)
+    }
+
+    /** Display the persisted snapshot for a folder before the network responds. */
+    private fun loadOfflineCache(folderId: Int) {
+        val bucket = cacheBucket(folderId) ?: return
+        lifecycleScope.launch {
+            val cached = runCatching {
+                com.falseenvironment.jmapjolt.cache.EmailCacheStore.load(this@MainActivity, bucket)
+            }.getOrDefault(emptyList())
+            // Skip if the user already switched folders or the network beat us to it.
+            if (cached.isEmpty() || selectedFolder != folderId || emails.isNotEmpty()) return@launch
+            folderCache[folderId] = cached
+            updateEmailsList(cached)
+        }
+    }
+
+    /** Persist a freshly fetched folder snapshot for offline viewing. */
+    private fun persistOfflineCache(folderId: Int, list: List<DisplayEmail>) {
+        val bucket = cacheBucket(folderId) ?: return
+        lifecycleScope.launch {
+            runCatching {
+                com.falseenvironment.jmapjolt.cache.EmailCacheStore.save(this@MainActivity, bucket, list)
+            }
+        }
     }
 
     private fun getFolderRole(navId: Int): String? =
@@ -4160,6 +4194,7 @@ body{background:$bg;padding:20px}
                                 }.sortedByDescending { it.receivedAt }
                                 folderCache[currentFolderId] = merged
                                 updateEmailsList(merged)
+                                persistOfflineCache(currentFolderId, merged)
                                 status.text = if (merged.isEmpty())
                                     getString(R.string.status_sync_ok_empty, folderTitle)
                                 else getString(R.string.status_sync_ok, merged.size)
@@ -4204,6 +4239,7 @@ body{background:$bg;padding:20px}
                             val mergedList = applyOptimisticFavorite(newEmailsList, isFav)
                             folderCache[currentFolderId] = mergedList
                             updateEmailsList(mergedList)
+                            persistOfflineCache(currentFolderId, mergedList)
 
                             status.text =
                                     if (fresh.isEmpty())
