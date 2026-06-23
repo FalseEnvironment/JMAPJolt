@@ -21,7 +21,8 @@ import java.util.concurrent.TimeUnit
  */
 class CalendarJmapClient {
 
-    private val json = "application/json; charset=utf-8".toMediaType()
+    // Stalwart rejects a charset parameter on the content type with notRequest; use bare json.
+    private val json = "application/json".toMediaType()
     private val http = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
@@ -31,10 +32,21 @@ class CalendarJmapClient {
         .followSslRedirects(false)
         .build()
 
+    // Session discovery hits /.well-known/jmap, which Stalwart answers with a 307 redirect to the
+    // real session endpoint. This client follows redirects (OkHttp drops the Authorization header
+    // on cross-host hops) so autodiscovery resolves; method calls still use the no-redirect client.
+    private val httpFollow = http.newBuilder()
+        .followRedirects(true)
+        .followSslRedirects(true)
+        .build()
+
     companion object {
         const val CAP_CALENDARS = "urn:ietf:params:jmap:calendars"
         const val CAP_CORE = "urn:ietf:params:jmap:core"
     }
+
+    /** API endpoint advertised by the JMAP session; preferred over the stored mail apiUrl. */
+    private var sessionApiUrl: String? = null
 
     data class RemoteCalendar(val id: String, val name: String, val color: String?)
 
@@ -47,9 +59,10 @@ class CalendarJmapClient {
                     .header("Authorization", Credentials.basic(account.email, account.password))
                     .get()
                     .build()
-                http.newCall(req).execute().use { resp ->
+                httpFollow.newCall(req).execute().use { resp ->
                     val body = resp.body?.string() ?: return@use null
                     val session = JSONObject(body)
+                    sessionApiUrl = session.optString("apiUrl").takeIf { it.isNotBlank() }
                     val primary = session.optJSONObject("primaryAccounts")
                     primary?.optString(CAP_CALENDARS)?.takeIf { it.isNotBlank() }
                         ?: firstAccountWithCalendars(session)
@@ -71,15 +84,18 @@ class CalendarJmapClient {
             put("using", JSONArray(listOf(CAP_CORE, CAP_CALENDARS)))
             put("methodCalls", methodCalls)
         }
+        // org.json escapes forward slashes ("Calendar\/get"); Stalwart's parser rejects that as
+        // notRequest. Unescape to plain "/" (which never needs escaping in JSON).
+        val body = payload.toString().replace("\\/", "/")
         val req = Request.Builder()
-            .url(account.apiUrl)
+            .url(sessionApiUrl ?: account.apiUrl)
             .header("Authorization", Credentials.basic(account.email, account.password))
-            .post(payload.toString().toRequestBody(json))
+            .post(body.toRequestBody(json))
             .build()
         http.newCall(req).execute().use { resp ->
-            val body = resp.body?.string().orEmpty()
-            if (!resp.isSuccessful) throw IllegalStateException("JMAP ${resp.code}: $body")
-            return JSONObject(body)
+            val respBody = resp.body?.string().orEmpty()
+            if (!resp.isSuccessful) throw IllegalStateException("JMAP ${resp.code}: $respBody")
+            return JSONObject(respBody)
         }
     }
 
@@ -111,9 +127,11 @@ class CalendarJmapClient {
         from: Long,
         to: Long
     ): List<CalendarEvent> = withContext(Dispatchers.IO) {
+        // Stalwart interprets CalendarEvent/query after/before as LocalDateTime (no trailing Z),
+        // matching the Bulwark webmail client; sending a UTC "Z" value yields no results.
         val filter = JSONObject()
-            .put("after", utcDateTime(from))
-            .put("before", utcDateTime(to))
+            .put("after", localDateTime(from))
+            .put("before", localDateTime(to))
         val queryArgs = JSONObject().put("accountId", calAccountId).put("filter", filter)
         val getArgs = JSONObject()
             .put("accountId", calAccountId)

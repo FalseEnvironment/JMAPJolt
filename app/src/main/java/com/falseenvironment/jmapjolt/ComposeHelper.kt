@@ -171,8 +171,13 @@ private fun composeQuoteDate(receivedAt: Long): String =
     java.text.SimpleDateFormat("MMM d, yyyy 'at' h:mm a", java.util.Locale.getDefault())
         .format(java.util.Date(receivedAt))
 
-/** Inline style for the quoted-html island, so it renders even in clients that strip CSS classes. */
-private const val QUOTE_ISLAND_STYLE = "border-left:2px solid #c5c5c5;padding-left:12px;margin-top:8px"
+/**
+ * Inline style for the quoted-html island, so it renders even in clients that strip
+ * CSS classes. The accent bar uses the app's theme accent color and is detached a few
+ * pixels from the container edge so the quoted block reads as clearly separate.
+ */
+private fun MainActivity.quoteIslandStyle(): String =
+    "border-left:3px solid $currentAccentColor;margin-left:4px;padding-left:12px;margin-top:8px"
 
 internal fun MainActivity.setPendingQuote(html: String, label: String) {
     pendingQuoteHtml = html
@@ -197,7 +202,7 @@ internal fun MainActivity.startReply(email: DisplayEmail) {
     val sender = android.text.TextUtils.htmlEncode(email.from.ifBlank { email.fromEmail })
     val header = "On ${composeQuoteDate(email.receivedAt)}, $sender wrote:"
     val island = "<br><br><div>$header</div>" +
-        "<div data-quoted-html=\"\" class=\"quoted-html-island\" style=\"$QUOTE_ISLAND_STYLE\">" +
+        "<div data-quoted-html=\"\" class=\"quoted-html-island\" style=\"${quoteIslandStyle()}\">" +
         sanitizeEmailHtml(email.fullBody) + "</div>"
     setPendingQuote(island, "Quoted: ${email.from.ifBlank { email.fromEmail }}")
     composeBodyInput.setText("")
@@ -212,7 +217,7 @@ internal fun MainActivity.startForward(email: DisplayEmail) {
     val alreadyFwd = base.startsWith("Fwd:", ignoreCase = true) || base.startsWith("Fw:", ignoreCase = true)
     composeSubjectInput.setText(if (alreadyFwd) base else "Fwd: $base")
     fun enc(s: String) = android.text.TextUtils.htmlEncode(s)
-    val island = "<br><br><div data-forwarded-html=\"\" class=\"quoted-html-island\" style=\"$QUOTE_ISLAND_STYLE\">" +
+    val island = "<br><br><div data-forwarded-html=\"\" class=\"quoted-html-island\" style=\"${quoteIslandStyle()}\">" +
         "<div>---------- Forwarded message ----------</div>" +
         "<div>From: ${enc(email.from.ifBlank { email.fromEmail })}</div>" +
         "<div>Date: ${composeQuoteDate(email.receivedAt)}</div>" +

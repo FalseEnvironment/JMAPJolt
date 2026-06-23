@@ -32,7 +32,13 @@ data class DisplayEmail(
     val toEmail: String = "",
     val attachments: List<EmailAttachmentInfo> = emptyList(),
     val accountEmail: String = "",
-    @JvmField var labels: List<String> = emptyList()
+    @JvmField var labels: List<String> = emptyList(),
+    val threadId: String = "",
+    // Transient chat-thread display state, set by buildThreadedView().
+    @JvmField var threadCount: Int = 1,
+    @JvmField var isThreadHeadRow: Boolean = false,
+    @JvmField var isThreadChildRow: Boolean = false,
+    @JvmField var threadKey: String = ""
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true

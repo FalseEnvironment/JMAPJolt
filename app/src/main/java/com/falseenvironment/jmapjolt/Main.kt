@@ -336,6 +336,61 @@ class MainActivity : AppCompatActivity() {
     internal var currentTheme: String = "gray"
     internal val selectedEmails = mutableSetOf<String>()
     internal val baseEmails = mutableListOf<DisplayEmail>() // unfiltered list for search
+
+    // --- Conversation threading (chat-style) ---
+    // threadKey -> all member emails (newest first). Built by buildThreadedView().
+    internal val threadMembers = LinkedHashMap<String, List<DisplayEmail>>()
+    // Expanded thread keys: their child messages are shown indented under the head row.
+    internal val expandedThreads = mutableSetOf<String>()
+
+    /** Stable grouping key: real JMAP threadId, or a per-id singleton when absent. */
+    internal fun threadKeyOf(e: DisplayEmail): String =
+        if (e.threadId.isBlank()) "__single_${e.id}" else e.threadId
+
+    internal fun isThreadExpanded(key: String): Boolean = expandedThreads.contains(key)
+
+    /**
+     * Collapses [full] (newest-first) into a chat-style threaded list: one head row per
+     * conversation, with the other messages emitted right after it only when expanded.
+     * Bakes per-row thread state (count/head/child/key) onto each DisplayEmail so DiffUtil
+     * rebinds rows when threading changes, and rebuilds [threadMembers] as a side effect.
+     */
+    internal fun buildThreadedView(full: List<DisplayEmail>): List<DisplayEmail> {
+        threadMembers.clear()
+        val groups = LinkedHashMap<String, MutableList<DisplayEmail>>()
+        for (e in full) groups.getOrPut(threadKeyOf(e)) { mutableListOf() }.add(e)
+        val out = ArrayList<DisplayEmail>(full.size)
+        for ((key, members) in groups) {
+            threadMembers[key] = members
+            val multi = members.size > 1
+            val head = members.first()
+            head.threadKey = key
+            head.threadCount = members.size
+            head.isThreadHeadRow = multi
+            head.isThreadChildRow = false
+            out.add(head)
+            if (multi && expandedThreads.contains(key)) {
+                for (i in 1 until members.size) {
+                    val child = members[i]
+                    child.threadKey = key
+                    child.threadCount = members.size
+                    child.isThreadHeadRow = false
+                    child.isThreadChildRow = true
+                    out.add(child)
+                }
+            }
+        }
+        return out
+    }
+
+    /** Toggles a conversation's expanded state and rebuilds the visible list. */
+    internal fun toggleThread(key: String) {
+        if (!expandedThreads.add(key)) expandedThreads.remove(key)
+        val display = buildThreadedView(baseEmails)
+        emails.clear()
+        emails.addAll(display)
+        emailAdapter.notifyDataSetChanged()
+    }
     // Pending request from a widget tap: open this email once its account's data is loaded.
     private var pendingWidgetEmailId: String? = null
     private var pendingWidgetAccount: String? = null
@@ -1741,10 +1796,28 @@ body{background:$bg;padding:20px}
             </style>
         """.trimIndent() else ""
 
+        // Override quote/blockquote left bar to use the theme accent color (was grey),
+        // detached a few px from the edge. Applies at display-time to ALL emails,
+        // including ones already received with grey bars baked into their HTML.
+        val accentQuoteCss = """
+            <style id="jj-accent-quote">
+            .quoted-html-island{border-left-color:$currentAccentColor!important;margin-left:4px!important}
+            blockquote{border-left:3px solid $currentAccentColor!important;margin-left:4px!important;padding-left:12px!important}
+            details.jj-quote-collapse{margin:6px 0}
+            details.jj-quote-collapse>summary{display:flex;align-items:center;gap:7px;color:$currentAccentColor;cursor:pointer;font-size:13px;font-weight:600;padding:5px 0;list-style:none;-webkit-user-select:none;user-select:none}
+            details.jj-quote-collapse>summary::-webkit-details-marker{display:none}
+            details.jj-quote-collapse>summary .jj-fav{width:14px;height:14px;border-radius:50%;background:$currentAccentColor;flex:0 0 auto;opacity:.85}
+            details.jj-quote-collapse>summary .jj-chev{display:inline-block;transition:transform .15s ease;flex:0 0 auto}
+            details.jj-quote-collapse[open]>summary .jj-chev{transform:rotate(90deg)}
+            details.jj-quote-collapse>summary .jj-lbl::after{content:"Show quoted message"}
+            details.jj-quote-collapse[open]>summary .jj-lbl::after{content:"Hide quoted message"}
+            </style>
+        """.trimIndent()
+
         val isFullDoc = rawBody.contains("<html", ignoreCase = true)
         val isFragment = !isFullDoc && looksLikeHtml(rawBody)
         return if (isFullDoc) {
-            val body = sanitizeEmailHtml(rawBody)
+            val body = collapseDeepQuotes(sanitizeEmailHtml(rawBody))
             var html = body
             if (!html.contains("viewport", ignoreCase = true))
                 html = html.replaceFirst("<head", "<head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=3.0\">", ignoreCase = true)
@@ -1757,15 +1830,19 @@ body{background:$bg;padding:20px}
             }
             if (isDark) html
                 .replaceFirst("<html", "<html style=\"background-color:$bgColor\"", ignoreCase = true)
-                .replaceFirst("</head>", "<meta name=\"color-scheme\" content=\"dark\">$darkCss</head>", ignoreCase = true)
+                .replaceFirst("</head>", "<meta name=\"color-scheme\" content=\"dark\">$darkCss$accentQuoteCss</head>", ignoreCase = true)
                 .replaceFirst("<body", "<body style=\"background-color:$bgColor;color:$textColor\"", ignoreCase = true)
-            else html
+            else html.let { doc ->
+                if (doc.contains("</head>", ignoreCase = true))
+                    doc.replaceFirst("</head>", "$accentQuoteCss</head>", ignoreCase = true)
+                else doc.replaceFirst("<body", "$accentQuoteCss<body", ignoreCase = true)
+            }
         } else if (isFragment) {
             // HTML fragment (no <html> root, e.g. JMAP htmlBody parts or this app's replies).
             // Wrap it in a styled document and render as HTML instead of escaping the markup.
-            val body = sanitizeEmailHtml(rawBody)
+            val body = collapseDeepQuotes(sanitizeEmailHtml(rawBody))
             val colorScheme = if (isDark) "dark" else "light"
-            "<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=3.0\"><meta name=\"color-scheme\" content=\"$colorScheme\">$darkCss<style>body{color:$textColor;background:$bgColor;font-family:-apple-system,sans-serif;word-wrap:break-word;padding:12px;margin:0;max-width:100%;box-sizing:border-box}img{max-width:100%;height:auto}a{color:$linkColor}</style></head><body>$subjectHeading$body</body></html>"
+            "<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=3.0\"><meta name=\"color-scheme\" content=\"$colorScheme\">$darkCss$accentQuoteCss<style>body{color:$textColor;background:$bgColor;font-family:-apple-system,sans-serif;word-wrap:break-word;padding:12px;margin:0;max-width:100%;box-sizing:border-box}img{max-width:100%;height:auto}a{color:$linkColor}</style></head><body>$subjectHeading$body</body></html>"
         } else {
             // Plain text: escape HTML entities, then style quoted lines (lines starting with ">")
             val quoteColor = if (isDark) "#616161" else "#9E9E9E"
@@ -1779,8 +1856,63 @@ body{background:$bg;padding:20px}
                 else
                     line
             }
-            "<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=3.0\">$darkCss<style>body{color:$textColor;background:$bgColor;font-family:-apple-system,sans-serif;word-wrap:break-word;padding:12px;margin:0;max-width:100%;box-sizing:border-box}img{max-width:100%;height:auto}</style></head><body>$subjectHeading$lines</body></html>"
+            "<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=3.0\">$darkCss$accentQuoteCss<style>body{color:$textColor;background:$bgColor;font-family:-apple-system,sans-serif;word-wrap:break-word;padding:12px;margin:0;max-width:100%;box-sizing:border-box}img{max-width:100%;height:auto}</style></head><body>$subjectHeading$lines</body></html>"
         }
+    }
+
+    /**
+     * Collapses deeply-nested quote/forward chains behind a no-JS <details> toggle.
+     * Once the nesting of quote containers (`.quoted-html-island` divs or <blockquote>)
+     * exceeds [threshold], the container that crosses the threshold — and everything inside
+     * it — is wrapped in a collapsible <details class="jj-quote-collapse"> element so long
+     * forward chains don't flood the view. Pure HTML/CSS, no JavaScript required.
+     *
+     * Only `div` and `blockquote` elements are balanced (they form quote nesting); void and
+     * other tags are ignored for depth tracking. Insertions are applied right-to-left so
+     * earlier indices stay valid.
+     */
+    internal fun collapseDeepQuotes(html: String, threshold: Int = 4): String {
+        val tagRegex = Regex("<(/?)(div|blockquote)\\b([^>]*)>", RegexOption.IGNORE_CASE)
+        // Frame per open div/blockquote: whether it is a quote container + the matching insert.
+        data class Frame(val isQuote: Boolean, val collapsedRoot: Boolean)
+        val stack = ArrayDeque<Frame>()
+        val inserts = mutableListOf<Pair<Int, String>>()  // (index, text-to-insert)
+        var quoteDepth = 0
+        var collapsedActive = false  // a <details> is already open above us
+        val openDetails = "<details class=\"jj-quote-collapse\"><summary>" +
+            "<span class=\"jj-chev\">▸</span><span class=\"jj-fav\"></span><span class=\"jj-lbl\"></span>" +
+            "</summary>"
+
+        for (m in tagRegex.findAll(html)) {
+            val closing = m.groupValues[1] == "/"
+            val tag = m.groupValues[2].lowercase()
+            val attrs = m.groupValues[3]
+            // Self-closing (e.g. <div .../>) opens and closes nothing structural — skip.
+            if (!closing && attrs.trimEnd().endsWith("/")) continue
+
+            if (!closing) {
+                val isQuote = tag == "blockquote" ||
+                    Regex("class\\s*=\\s*[\"'][^\"']*quoted-html-island", RegexOption.IGNORE_CASE).containsMatchIn(attrs)
+                if (isQuote) quoteDepth++
+                val crossesThreshold = isQuote && !collapsedActive && quoteDepth == threshold + 1
+                if (crossesThreshold) {
+                    inserts.add(m.range.first to openDetails)
+                    collapsedActive = true
+                }
+                stack.addLast(Frame(isQuote, crossesThreshold))
+            } else {
+                val frame = stack.removeLastOrNull() ?: continue
+                if (frame.isQuote) quoteDepth--
+                if (frame.collapsedRoot) {
+                    inserts.add((m.range.last + 1) to "</details>")
+                    collapsedActive = false
+                }
+            }
+        }
+        if (inserts.isEmpty()) return html
+        val sb = StringBuilder(html)
+        for ((idx, text) in inserts.sortedByDescending { it.first }) sb.insert(idx, text)
+        return sb.toString()
     }
 
     private fun updateDetailStarIcon(isFavorite: Boolean) {
@@ -3333,39 +3465,47 @@ body{background:$bg;padding:20px}
         val folderChanged = prevUpdateFolder != selectedFolder
         prevUpdateFolder = selectedFolder
 
+        // Threaded view is what the adapter renders; baseEmails keeps the full flat
+        // list for search. The diff compares old vs new *threaded* lists so it stays
+        // consistent with the adapter's backing data.
+        val display = buildThreadedView(newList)
+
         val diffResult = if (!folderChanged) {
             androidx.recyclerview.widget.DiffUtil.calculateDiff(
                     object : androidx.recyclerview.widget.DiffUtil.Callback() {
                         override fun getOldListSize(): Int = emails.size
-                        override fun getNewListSize(): Int = newList.size
+                        override fun getNewListSize(): Int = display.size
                         override fun areItemsTheSame(
                                 oldItemPosition: Int,
                                 newItemPosition: Int
                         ): Boolean {
-                            return emails[oldItemPosition].id == newList[newItemPosition].id
+                            return emails[oldItemPosition].id == display[newItemPosition].id
                         }
                         override fun areContentsTheSame(
                                 oldItemPosition: Int,
                                 newItemPosition: Int
                         ): Boolean {
                             val a = emails[oldItemPosition]
-                            val b = newList[newItemPosition]
+                            val b = display[newItemPosition]
                             return a.seen == b.seen &&
                                     a.isFavorite == b.isFavorite &&
                                     a.labels == b.labels &&
                                     a.preview == b.preview &&
                                     a.subject == b.subject &&
-                                    a.from == b.from
+                                    a.from == b.from &&
+                                    a.isThreadHeadRow == b.isThreadHeadRow &&
+                                    a.isThreadChildRow == b.isThreadChildRow &&
+                                    a.threadCount == b.threadCount
                         }
                     }
             )
         } else null
 
-        val firstChanged = emails.firstOrNull()?.id != newList.firstOrNull()?.id
+        val firstChanged = emails.firstOrNull()?.id != display.firstOrNull()?.id
         baseEmails.clear()
         baseEmails.addAll(newList)
         emails.clear()
-        emails.addAll(newList)
+        emails.addAll(display)
         if (diffResult != null) diffResult.dispatchUpdatesTo(emailAdapter)
         else emailAdapter.notifyDataSetChanged()
 
@@ -4183,7 +4323,8 @@ body{background:$bg;padding:20px}
                                                 e.receivedAt, e.toEmail,
                                                 attachments = e.attachments,
                                                 accountEmail = acc.email,
-                                                labels = e.keywords.toList()
+                                                labels = e.keywords.toList(),
+                                                threadId = e.threadId
                                             )
                                         }
                                     } catch (e: kotlinx.coroutines.CancellationException) {
@@ -4233,10 +4374,30 @@ body{background:$bg;padding:20px}
                                                 it.toEmail,
                                                 attachments = it.attachments,
                                                 accountEmail = account.email,
-                                                labels = it.keywords.toList()
+                                                labels = it.keywords.toList(),
+                                                threadId = it.threadId
                                         )
                                     }
-                            val mergedList = applyOptimisticFavorite(newEmailsList, isFav)
+                            // Chat-style threading: pull in replies that live in other
+                            // mailboxes (e.g. Sent) so a conversation groups under one head.
+                            val threadedList = if (isInbox) {
+                                val threadIds = newEmailsList.mapNotNull { it.threadId.ifBlank { null } }.toSet()
+                                val haveIds = newEmailsList.map { it.id }.toSet()
+                                val extra = try {
+                                    jmapClient.fetchThreadMembers(account, threadIds, haveIds).map {
+                                        DisplayEmail(
+                                            it.id, it.subject, it.from, it.fromEmail, it.preview,
+                                            it.fullBody, it.seen, it.isStarred, it.receivedAt, it.toEmail,
+                                            attachments = it.attachments, accountEmail = account.email,
+                                            labels = it.keywords.toList(), threadId = it.threadId
+                                        )
+                                    }
+                                } catch (e: kotlinx.coroutines.CancellationException) {
+                                    throw e
+                                } catch (_: Exception) { emptyList() }
+                                (newEmailsList + extra).sortedByDescending { it.receivedAt }
+                            } else newEmailsList
+                            val mergedList = applyOptimisticFavorite(threadedList, isFav)
                             folderCache[currentFolderId] = mergedList
                             updateEmailsList(mergedList)
                             persistOfflineCache(currentFolderId, mergedList)

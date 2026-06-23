@@ -48,7 +48,8 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
         val receivedAt: Long = 0L,
         val toEmail: String = "",
         val attachments: List<EmailAttachmentInfo> = emptyList(),
-        val keywords: Set<String> = emptySet()
+        val keywords: Set<String> = emptySet(),
+        val threadId: String = ""
     )
 
     data class ConnectResult(
@@ -176,9 +177,40 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
                     seen = isSeen, isStarred = isStarred, fullBody = body,
                     receivedAt = email.receivedAt?.toEpochMilli() ?: 0L,
                     toEmail = email.to?.firstOrNull()?.email ?: "", attachments = atts,
-                    keywords = customKeywords(email.keywords))
+                    keywords = customKeywords(email.keywords),
+                    threadId = email.threadId ?: "")
             }
         }
+    }
+
+    /**
+     * Resolves the full member set of the given [threadIds] (across all mailboxes, e.g.
+     * a reply living in Sent) and returns summaries for members NOT already in [haveIds].
+     * Lets the inbox group a received mail with its replies into one chat-style thread.
+     */
+    suspend fun fetchThreadMembers(
+        connectedAccount: ConnectedAccount,
+        threadIds: Collection<String>,
+        haveIds: Set<String>
+    ): List<EmailSummary> = withContext(Dispatchers.IO) {
+        if (threadIds.isEmpty()) return@withContext emptyList()
+        val client = newClient(connectedAccount)
+        val missingIds: List<String> = client.use { jmapClient ->
+            val session = jmapClient.getSession().get(12, TimeUnit.SECONDS)
+            val accountId = session.getPrimaryAccount(MailAccountCapability::class.java)
+                ?: return@use emptyList()
+            val getThread = rs.ltt.jmap.common.method.call.thread.GetThreadMethodCall.builder()
+                .accountId(accountId)
+                .ids(threadIds.distinct().toTypedArray())
+                .build()
+            val resp = jmapClient.call(getThread).get()
+                .getMain(rs.ltt.jmap.common.method.response.thread.GetThreadMethodResponse::class.java)
+            resp.list.orEmpty()
+                .flatMap { it.emailIds.orEmpty().toList() }
+                .filter { it !in haveIds }
+                .distinct()
+        }
+        if (missingIds.isEmpty()) emptyList() else fetchEmailsById(connectedAccount, missingIds)
     }
 
     suspend fun fetchStarredEmails(
@@ -278,7 +310,7 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
         val getCall = rs.ltt.jmap.common.method.call.email.GetEmailMethodCall.builder()
             .accountId(accountId)
             .ids(ids)
-            .properties(arrayOf("id", "subject", "from", "to", "preview", "keywords", "receivedAt", "attachments"))
+            .properties(arrayOf("id", "threadId", "subject", "from", "to", "preview", "keywords", "receivedAt", "attachments"))
             .build()
 
         val getResponse = jmapClient.call(getCall).get().getMain(rs.ltt.jmap.common.method.response.email.GetEmailMethodResponse::class.java)
@@ -311,7 +343,8 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
                 receivedAt = email.receivedAt?.toEpochMilli() ?: 0L,
                 toEmail = toEmail,
                 attachments = atts,
-                keywords = customKeywords(email.keywords)
+                keywords = customKeywords(email.keywords),
+                threadId = email.threadId ?: ""
             )
         }
     }

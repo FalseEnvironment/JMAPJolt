@@ -58,6 +58,10 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
     @android.annotation.SuppressLint("ResourceType")
     inner class EmailHolder(root: ViewGroup) : RecyclerView.ViewHolder(root) {
         val colorStrip: android.view.View = root.findViewById(20)
+        val chevron: TextView = root.findViewById(30)
+        val threadPill: LinearLayout = root.findViewById(31)
+        val contentLayout: LinearLayout = root.findViewById(32)
+        val threadPillText: TextView = root.findViewById(33)
         val starButton: ImageView = root.findViewById(7)
         val avatarContainer: FrameLayout = root.findViewById(9)
         val avatar: TextView = root.findViewById(5)
@@ -84,11 +88,26 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
         }
 
         val contentLayout = LinearLayout(activity).apply {
+            id = 32
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.TOP
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
             setPadding((12 * dp).toInt(), (12 * dp).toInt(), (12 * dp).toInt(), (12 * dp).toInt())
+        }
+
+        // Conversation chevron (slim ›) — placed to the right of the favicon;
+        // rotates 90° when expanded. Hidden for non-thread rows. Toggles thread.
+        val chevron = TextView(activity).apply {
+            id = 30
+            text = "›"
+            textSize = 22f
+            gravity = Gravity.CENTER
+            includeFontPadding = false
+            layoutParams = LinearLayout.LayoutParams(
+                (16 * dp).toInt(), (44 * dp).toInt()
+            ).apply { marginStart = (4 * dp).toInt(); topMargin = (1 * dp).toInt() }
+            visibility = android.view.View.GONE
         }
 
         // Account color strip (left edge, 3dp wide, slightly rounded) - positioned overlay start
@@ -167,6 +186,33 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
                 .apply { topMargin = (2 * dp).toInt() }
         }
+        // Conversation pill (count + chat icon, accent). Placed in the date row so
+        // it aligns with the date, just like a normal email's date line.
+        val threadPill = LinearLayout(activity).apply {
+            id = 31
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding((6 * dp).toInt(), (1 * dp).toInt(), (6 * dp).toInt(), (1 * dp).toInt())
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                .apply { marginEnd = (6 * dp).toInt() }
+            visibility = android.view.View.GONE
+            addView(TextView(activity).apply {
+                id = 33
+                textSize = 11f
+                setTypeface(null, Typeface.BOLD)
+                includeFontPadding = false
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                    .apply { marginEnd = (3 * dp).toInt() }
+            })
+            addView(ImageView(activity).apply {
+                setImageResource(R.drawable.ic_lucide_reply)
+                val sz = (12 * dp).toInt()
+                layoutParams = LinearLayout.LayoutParams(sz, sz)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+            })
+        }
         textWrap.addView(senderTv)
         textWrap.addView(subjectTv)
         textWrap.addView(previewTv)
@@ -231,6 +277,7 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
                 .apply { topMargin = (4 * dp).toInt() }
+            addView(threadPill)
             addView(labelRowView)
             addView(dText)
         }
@@ -251,6 +298,7 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
         rightWrap.addView(starBtn)
 
         contentLayout.addView(avatarContainer)
+        contentLayout.addView(chevron)
         contentLayout.addView(textWrap)
         contentLayout.addView(rightWrap)
         return EmailHolder(root)
@@ -260,7 +308,39 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
 
     override fun onBindViewHolder(holder: EmailHolder, position: Int) {
         val item = activity.emails[position]
+        val dp = holder.itemView.resources.displayMetrics.density
         val isLight = activity.currentTheme == "light"
+
+        // --- Conversation threading row decoration ---
+        val isHead = item.isThreadHeadRow
+        val isChild = item.isThreadChildRow
+        val accentColor = activity.currentAccentColor.toColorInt()
+        if (isHead) {
+            val key = item.threadKey
+            holder.chevron.visibility = android.view.View.VISIBLE
+            holder.chevron.setTextColor(accentColor)
+            holder.chevron.rotation = if (activity.isThreadExpanded(key)) 90f else 0f
+            holder.chevron.setOnClickListener { activity.toggleThread(key) }
+            // Conversation pill near the subject: count + chat icon, accent themed.
+            holder.threadPill.visibility = android.view.View.VISIBLE
+            holder.threadPill.background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                cornerRadius = 999 * dp
+                setColor((accentColor and 0x00FFFFFF) or 0x33000000)
+            }
+            holder.threadPillText.text = item.threadCount.toString()
+            holder.threadPillText.setTextColor(accentColor)
+            (holder.threadPill.getChildAt(1) as? ImageView)
+                ?.imageTintList = ColorStateList.valueOf(accentColor)
+        } else {
+            holder.chevron.visibility = android.view.View.GONE
+            holder.chevron.setOnClickListener(null)
+            holder.threadPill.visibility = android.view.View.GONE
+        }
+        // Indent child rows so an expanded conversation reads as a chat thread.
+        holder.contentLayout.setPadding(
+            (if (isChild) 34 else 12).let { (it * dp).toInt() },
+            (12 * dp).toInt(), (12 * dp).toInt(), (12 * dp).toInt())
         val primaryColor = if (isLight) Color.BLACK else Color.WHITE
         val secondaryColor = if (isLight) "#5A5A5A".toColorInt() else "#9E9E9E".toColorInt()
         val mutedColor = if (isLight) "#8A8A8A".toColorInt() else "#616161".toColorInt()
