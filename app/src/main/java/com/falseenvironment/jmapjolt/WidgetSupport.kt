@@ -1,7 +1,11 @@
 package com.falseenvironment.jmapjolt
 
+import android.appwidget.AppWidgetManager
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.graphics.Color
+import android.view.View
+import android.widget.RemoteViews
 import androidx.core.graphics.toColorInt
 import org.json.JSONObject
 
@@ -58,6 +62,38 @@ object WidgetSupport {
             accounts.optJSONObject(it)?.optString("email")?.takeIf { e -> e.isNotBlank() }
         }
     }
+
+    /**
+     * Shows a spinning [android.widget.ProgressBar] in place of the refresh icon while the
+     * list reloads, then swaps back. Shared by both widgets — their headers use the same
+     * `widgetRefresh` / `widgetRefreshProgress` ids. [pending] is the receiver's goAsync()
+     * result, finished once the spin completes so the process stays alive meanwhile.
+     */
+    fun spinWhileRefreshing(
+        context: Context,
+        appWidgetId: Int,
+        layoutRes: Int,
+        pending: BroadcastReceiver.PendingResult?
+    ) {
+        val mgr = AppWidgetManager.getInstance(context)
+        val show = RemoteViews(context.packageName, layoutRes).apply {
+            setViewVisibility(R.id.widgetRefresh, View.GONE)
+            setViewVisibility(R.id.widgetRefreshProgress, View.VISIBLE)
+        }
+        mgr.partiallyUpdateAppWidget(appWidgetId, show)
+        mgr.notifyAppWidgetViewDataChanged(appWidgetId, R.id.widgetList)
+        Thread {
+            runCatching { Thread.sleep(REFRESH_SPIN_MS) }
+            val hide = RemoteViews(context.packageName, layoutRes).apply {
+                setViewVisibility(R.id.widgetRefreshProgress, View.GONE)
+                setViewVisibility(R.id.widgetRefresh, View.VISIBLE)
+            }
+            mgr.partiallyUpdateAppWidget(appWidgetId, hide)
+            pending?.finish()
+        }.start()
+    }
+
+    private const val REFRESH_SPIN_MS = 900L
 
     // --- per-widget configuration ---
 

@@ -29,8 +29,7 @@ class InboxWidgetProvider : AppWidgetProvider() {
             val id = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID,
                 AppWidgetManager.INVALID_APPWIDGET_ID)
             if (id != AppWidgetManager.INVALID_APPWIDGET_ID) {
-                AppWidgetManager.getInstance(context)
-                    .notifyAppWidgetViewDataChanged(id, R.id.widgetList)
+                WidgetSupport.spinWhileRefreshing(context, id, R.layout.widget_inbox, goAsync())
             }
         }
     }
@@ -39,6 +38,7 @@ class InboxWidgetProvider : AppWidgetProvider() {
         const val ACTION_REFRESH = "com.falseenvironment.jmapjolt.WIDGET_REFRESH"
         const val EXTRA_OPEN_EMAIL_ID = "widget_open_email_id"
         const val EXTRA_OPEN_ACCOUNT = "widget_open_account"
+        const val EXTRA_OPEN_INBOX = "widget_open_inbox"
         private const val TEMPLATE_OFFSET = 1_000_000
 
         /**
@@ -106,14 +106,17 @@ class InboxWidgetProvider : AppWidgetProvider() {
             views.setRemoteAdapter(R.id.widgetList, serviceIntent)
             views.setEmptyView(R.id.widgetList, R.id.widgetEmpty)
 
-            // Tapping a row or the title opens the app.
-            val openApp = PendingIntent.getActivity(
+            // Tapping the title/header opens the app on this widget's inbox.
+            val selection = WidgetSupport.effectiveSelection(context, appWidgetId)
+                ?: WidgetSupport.UNIFIED
+            val openInbox = PendingIntent.getActivity(
                 context, appWidgetId,
                 Intent(context, MainActivity::class.java)
+                    .putExtra(EXTRA_OPEN_INBOX, selection)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
-            views.setOnClickPendingIntent(R.id.widgetTitle, openApp)
+            views.setOnClickPendingIntent(R.id.widgetTitle, openInbox)
             // Mutable template so per-row fill-in intents (email id / account) merge in.
             val rowTemplate = PendingIntent.getActivity(
                 context, appWidgetId + TEMPLATE_OFFSET,

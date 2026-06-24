@@ -499,6 +499,17 @@ class CalendarPanel(private val activity: MainActivity) : FrameLayout(activity) 
 
     // ---- editor + persistence -------------------------------------------------------------
 
+    /** Opens the new-event editor at the next hour (1h default). Used by the agenda widget. */
+    fun startNewEvent() = openEditor(null)
+
+    /** Jumps to the week containing [ts] in WEEK view. Used when opening an event from the widget. */
+    fun goToWeekOf(ts: Long) {
+        mode = Mode.WEEK
+        anchor = ts
+        selectedDay = CalendarTimelineView.midnight(ts)
+        render()
+    }
+
     private fun openEditor(existing: CalendarEvent?, slotStart: Long? = null) {
         val defaultStart = slotStart ?: defaultNewStart()
         val calId = CalendarRepository.defaultCalendarId(activity)

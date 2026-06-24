@@ -102,56 +102,82 @@ object CalendarEventEditor {
         val descEdit = styledEdit("Description", existing?.description ?: "", lines = 2)
         val preservedLocation = existing?.location ?: ""
 
-        // working state
+        // working state — independent start and end instants (supports multi-day events)
         val cal = Calendar.getInstance().apply { timeInMillis = existing?.start ?: defaultStart }
+        val endCal = Calendar.getInstance().apply {
+            timeInMillis = cal.timeInMillis + (existing?.durationMinutes ?: 60) * 60_000L
+        }
         var allDay = existing?.allDay ?: false
-        var durationMin = existing?.durationMinutes ?: 60
 
-        val dateBtn = Button(context)
+        val startDateBtn = Button(context)
         val startTimeBtn = Button(context)
+        val endDateBtn = Button(context)
         val endTimeBtn = Button(context)
-        listOf(dateBtn, startTimeBtn, endTimeBtn).forEach {
+        listOf(startDateBtn, startTimeBtn, endDateBtn, endTimeBtn).forEach {
             it.setTextColor(palette.accent)
             it.setBackgroundColor(Color.TRANSPARENT)
             it.gravity = Gravity.START or Gravity.CENTER_VERTICAL
             it.isAllCaps = false
+            it.minWidth = 0
+            it.minimumWidth = 0
         }
 
         val dateFmt = SimpleDateFormat("EEE, d MMM yyyy", Locale.ENGLISH)
         val timeFmt = SimpleDateFormat("HH:mm", Locale.ENGLISH)
-        fun endMillis() = cal.timeInMillis + durationMin * 60_000L
         fun refresh() {
-            dateBtn.text = dateFmt.format(cal.time)
-            startTimeBtn.text = "Start: " + timeFmt.format(cal.time)
-            endTimeBtn.text = "End: " + timeFmt.format(java.util.Date(endMillis()))
+            startDateBtn.text = dateFmt.format(cal.time)
+            startTimeBtn.text = timeFmt.format(cal.time)
+            endDateBtn.text = dateFmt.format(endCal.time)
+            endTimeBtn.text = timeFmt.format(endCal.time)
             startTimeBtn.visibility = if (allDay) View.GONE else View.VISIBLE
             endTimeBtn.visibility = if (allDay) View.GONE else View.VISIBLE
         }
 
-        dateBtn.setOnClickListener {
+        // Reject any change that puts the end at/before the start; revert the offending field.
+        fun applyOrReject(target: Calendar, set: () -> Unit, undo: () -> Unit) {
+            set()
+            if (endCal.timeInMillis <= cal.timeInMillis) {
+                undo()
+                snackbar(root, palette, "End must be after start")
+            }
+            refresh()
+        }
+
+        startDateBtn.setOnClickListener {
             DatePickerDialog(context, { _, y, m, d ->
-                cal.set(Calendar.YEAR, y); cal.set(Calendar.MONTH, m); cal.set(Calendar.DAY_OF_MONTH, d)
-                refresh()
+                val prevY = cal.get(Calendar.YEAR); val prevM = cal.get(Calendar.MONTH)
+                val prevD = cal.get(Calendar.DAY_OF_MONTH)
+                applyOrReject(cal,
+                    set = { cal.set(Calendar.YEAR, y); cal.set(Calendar.MONTH, m); cal.set(Calendar.DAY_OF_MONTH, d) },
+                    undo = { cal.set(Calendar.YEAR, prevY); cal.set(Calendar.MONTH, prevM); cal.set(Calendar.DAY_OF_MONTH, prevD) })
             }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
         }
         startTimeBtn.setOnClickListener {
             TimePickerDialog(context, { _, h, min ->
-                cal.set(Calendar.HOUR_OF_DAY, h); cal.set(Calendar.MINUTE, min)
-                cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
-                refresh()
+                val prevH = cal.get(Calendar.HOUR_OF_DAY); val prevMin = cal.get(Calendar.MINUTE)
+                applyOrReject(cal,
+                    set = { cal.set(Calendar.HOUR_OF_DAY, h); cal.set(Calendar.MINUTE, min)
+                        cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0) },
+                    undo = { cal.set(Calendar.HOUR_OF_DAY, prevH); cal.set(Calendar.MINUTE, prevMin) })
             }, cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE), true).show()
         }
+        endDateBtn.setOnClickListener {
+            DatePickerDialog(context, { _, y, m, d ->
+                val prevY = endCal.get(Calendar.YEAR); val prevM = endCal.get(Calendar.MONTH)
+                val prevD = endCal.get(Calendar.DAY_OF_MONTH)
+                applyOrReject(endCal,
+                    set = { endCal.set(Calendar.YEAR, y); endCal.set(Calendar.MONTH, m); endCal.set(Calendar.DAY_OF_MONTH, d) },
+                    undo = { endCal.set(Calendar.YEAR, prevY); endCal.set(Calendar.MONTH, prevM); endCal.set(Calendar.DAY_OF_MONTH, prevD) })
+            }, endCal.get(Calendar.YEAR), endCal.get(Calendar.MONTH), endCal.get(Calendar.DAY_OF_MONTH)).show()
+        }
         endTimeBtn.setOnClickListener {
-            val end = Calendar.getInstance().apply { timeInMillis = endMillis() }
             TimePickerDialog(context, { _, h, min ->
-                val candidate = (cal.clone() as Calendar).apply {
-                    set(Calendar.HOUR_OF_DAY, h); set(Calendar.MINUTE, min)
-                }
-                var diff = ((candidate.timeInMillis - cal.timeInMillis) / 60_000L).toInt()
-                if (diff <= 0) diff += 1440
-                durationMin = diff
-                refresh()
-            }, end.get(Calendar.HOUR_OF_DAY), end.get(Calendar.MINUTE), true).show()
+                val prevH = endCal.get(Calendar.HOUR_OF_DAY); val prevMin = endCal.get(Calendar.MINUTE)
+                applyOrReject(endCal,
+                    set = { endCal.set(Calendar.HOUR_OF_DAY, h); endCal.set(Calendar.MINUTE, min)
+                        endCal.set(Calendar.SECOND, 0); endCal.set(Calendar.MILLISECOND, 0) },
+                    undo = { endCal.set(Calendar.HOUR_OF_DAY, prevH); endCal.set(Calendar.MINUTE, prevMin) })
+            }, endCal.get(Calendar.HOUR_OF_DAY), endCal.get(Calendar.MINUTE), true).show()
         }
 
         // Animated, accent-tinted toggle matching the settings switches.
@@ -228,8 +254,14 @@ object CalendarEventEditor {
         root.addView(titleEdit)
         root.addView(descEdit)
         root.addView(allDaySwitch)
-        root.addView(label("Date"));  root.addView(dateBtn)
-        root.addView(startTimeBtn); root.addView(endTimeBtn)
+        fun dateTimeRow(dateBtn: Button, timeBtn: Button) = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(dateBtn, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            addView(timeBtn, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(8) })
+        }
+        root.addView(label("Start")); root.addView(dateTimeRow(startDateBtn, startTimeBtn))
+        root.addView(label("End")); root.addView(dateTimeRow(endDateBtn, endTimeBtn))
         root.addView(label("Reminder")); root.addView(reminderSpinner)
         root.addView(label("Repeat")); root.addView(repeatSpinner)
         refresh()
@@ -267,10 +299,14 @@ object CalendarEventEditor {
 
         fun commit() {
             if (allDay) {
-                cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0)
-                cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
-                durationMin = 1440
+                listOf(cal, endCal).forEach {
+                    it.set(Calendar.HOUR_OF_DAY, 0); it.set(Calendar.MINUTE, 0)
+                    it.set(Calendar.SECOND, 0); it.set(Calendar.MILLISECOND, 0)
+                }
             }
+            // End is guaranteed > start by the pickers; clamp defensively.
+            val durationMin = (((endCal.timeInMillis - cal.timeInMillis) / 60_000L).toInt())
+                .coerceAtLeast(if (allDay) 1440 else 1)
             val freq = repeatOptions[repeatSpinner.selectedItemPosition].second
             val event = (existing ?: CalendarEvent(
                 id = UUID.randomUUID().toString(),
@@ -307,5 +343,15 @@ object CalendarEventEditor {
             lp.width = (context.resources.displayMetrics.widthPixels * 0.92f).toInt()
             dialog.window?.attributes = lp
         }
+    }
+
+    /** Bottom in-app snackbar matching the app's themed style (surface fill, themed text). */
+    private fun snackbar(anchor: View, palette: CalendarTheme.Palette, text: String) {
+        val snack = com.google.android.material.snackbar.Snackbar.make(
+            anchor, text, com.google.android.material.snackbar.Snackbar.LENGTH_SHORT)
+        snack.view.setBackgroundColor(Color.parseColor("#F6C7C7"))
+        snack.setTextColor(Color.parseColor("#7A1F1F"))
+        snack.setActionTextColor(Color.parseColor("#7A1F1F"))
+        snack.show()
     }
 }

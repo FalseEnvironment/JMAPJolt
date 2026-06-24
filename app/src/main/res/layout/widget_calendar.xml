@@ -34,15 +34,15 @@
             android:ellipsize="end"
             android:textSize="15sp"
             android:textStyle="bold"
-            android:text="@string/widget_inbox_title" />
+            android:text="@string/widget_calendar_title" />
 
         <ImageView
-            android:id="@+id/widgetCompose"
+            android:id="@+id/widgetAdd"
             android:layout_width="32dp"
             android:layout_height="32dp"
-            android:padding="6dp"
-            android:src="@android:drawable/ic_menu_edit"
-            android:contentDescription="@string/widget_compose" />
+            android:padding="4dp"
+            android:src="@drawable/ic_widget_plus"
+            android:contentDescription="@string/widget_calendar_add" />
 
         <ImageView
             android:id="@+id/widgetRefresh"
@@ -70,7 +70,7 @@
         android:gravity="center"
         android:padding="16dp"
         android:textSize="13sp"
-        android:text="@string/widget_empty" />
+        android:text="@string/widget_calendar_empty" />
 
     <ListView
         android:id="@+id/widgetList"

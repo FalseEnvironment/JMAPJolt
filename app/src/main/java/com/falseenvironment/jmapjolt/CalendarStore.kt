@@ -35,6 +35,7 @@ object CalendarStore {
         val arr = JSONArray()
         events.forEach { arr.put(it.toJson()) }
         prefs(context).edit().putString(KEY_EVENTS, arr.toString()).apply()
+        CalendarWidgetProvider.refreshAll(context)
     }
 
     @Synchronized

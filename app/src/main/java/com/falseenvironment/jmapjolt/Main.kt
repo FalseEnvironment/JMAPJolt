@@ -395,6 +395,10 @@ class MainActivity : AppCompatActivity() {
     private var pendingWidgetEmailId: String? = null
     private var pendingWidgetAccount: String? = null
     private var widgetSwitchAttempted = false
+    // Pending request from the calendar widget: open calendar (WEEK) once the UI/session is ready.
+    private var pendingOpenCalendar = false
+    private var pendingCalendarNewEvent = false
+    private var pendingCalendarEventStart = 0L
     internal var isSearchActive = false
     private var wasImeVisible = false
     private lateinit var selectionBarContainer: LinearLayout
@@ -731,6 +735,9 @@ class MainActivity : AppCompatActivity() {
             // active (it may have been cancelled by a past push registration).
             EmailSyncWorker.schedule(this)
         }
+        // After the session restore decided the initial screen, honor a pending calendar
+        // widget tap so it lands on the calendar (WEEK) instead of the inbox.
+        applyPendingCalendarIntent()
         emailInput.addTextChangedListener(simpleWatcher)
         passwordInput.addTextChangedListener(simpleWatcher)
         serverUrlInput.addTextChangedListener(simpleWatcher)
@@ -2029,6 +2036,11 @@ body{background:$bg;padding:20px}
 
     /** Captures a widget tap so the target email opens once its data is available. */
     private fun handleWidgetIntent(intent: Intent?) {
+        intent?.getStringExtra(InboxWidgetProvider.EXTRA_OPEN_INBOX)?.let { selection ->
+            intent.removeExtra(InboxWidgetProvider.EXTRA_OPEN_INBOX)
+            openWidgetInbox(selection)
+            return
+        }
         val id = intent?.getStringExtra(InboxWidgetProvider.EXTRA_OPEN_EMAIL_ID) ?: return
         if (id.isBlank()) return
         pendingWidgetEmailId = id
@@ -2039,6 +2051,21 @@ body{background:$bg;padding:20px}
         // On a warm start data is already loaded; on cold start the session-restore
         // load path will call tryOpenPendingWidgetEmail once emails arrive.
         if (baseEmails.isNotEmpty()) tryOpenPendingWidgetEmail()
+    }
+
+    /** Navigates to the inbox the inbox-widget header represents (single account or unified). */
+    private fun openWidgetInbox(selection: String) {
+        if (composeContainer.visibility == View.VISIBLE) hideCompose()
+        if (selection == WidgetSupport.UNIFIED || savedAccounts.size <= 1) {
+            selectedFolder = if (savedAccounts.size > 1) R.id.nav_unified_inbox else R.id.nav_inbox
+            showMailboxScreen()
+            applyFolderFilterAndRefresh()
+            navigationView.post { rebuildDrawerMenu() }
+            return
+        }
+        val account = savedAccounts.firstOrNull { it.email.equals(selection, ignoreCase = true) }
+        if (account != null) switchToSavedAccount(account, forceInbox = true)
+        else showMailboxScreen()
     }
 
     /** Opens a pending widget email when its account is active and the message is loaded. */
@@ -5337,16 +5364,44 @@ body{background:$bg;padding:20px}
         handleMailtoIntent(intent)
         handleWidgetIntent(intent)
         handleCalendarIntent(intent)
+        applyPendingCalendarIntent()
     }
 
     private fun handleCalendarIntent(intent: Intent?) {
         if (intent?.getBooleanExtra(EXTRA_OPEN_CALENDAR, false) == true) {
             intent.removeExtra(EXTRA_OPEN_CALENDAR)
-            showCalendarScreen()
+            pendingOpenCalendar = true
+            pendingCalendarNewEvent = intent.getBooleanExtra(EXTRA_NEW_EVENT, false)
+            intent.removeExtra(EXTRA_NEW_EVENT)
+            pendingCalendarEventStart = intent.getLongExtra(EXTRA_OPEN_EVENT_START, 0L)
+            intent.removeExtra(EXTRA_OPEN_EVENT_START)
         }
         if (intent?.getBooleanExtra(EXTRA_OPEN_DRAWER, false) == true) {
             intent.removeExtra(EXTRA_OPEN_DRAWER)
             drawerLayout.post { drawerLayout.openDrawer(GravityCompat.START) }
+        }
+    }
+
+    /**
+     * Apply a pending calendar-widget request. Called after the mailbox/session UI is ready
+     * (end of onCreate, or onNewIntent) so the calendar screen is not overwritten by the
+     * session restore that runs after the intent is parsed.
+     */
+    private fun applyPendingCalendarIntent() {
+        if (!pendingOpenCalendar) return
+        pendingOpenCalendar = false
+        val newEvent = pendingCalendarNewEvent
+        val eventStart = pendingCalendarEventStart
+        pendingCalendarNewEvent = false
+        pendingCalendarEventStart = 0L
+        showCalendarScreen()
+        calendarPanelView?.post {
+            val panel = calendarPanelView ?: return@post
+            when {
+                newEvent -> { panel.goToWeekOf(System.currentTimeMillis()); panel.startNewEvent() }
+                eventStart > 0L -> panel.goToWeekOf(eventStart)
+                else -> panel.goToWeekOf(System.currentTimeMillis())
+            }
         }
     }
 
@@ -5392,6 +5447,8 @@ body{background:$bg;padding:20px}
         internal const val TAG = "MainActivity"
         internal const val PREFS_NAME = "mail_prefs"
         internal const val EXTRA_OPEN_CALENDAR = "open_calendar"
+        internal const val EXTRA_NEW_EVENT = "open_calendar_new_event"
+        internal const val EXTRA_OPEN_EVENT_START = "open_calendar_event_start"
         internal const val EXTRA_OPEN_DRAWER = "open_drawer"
 
         // Pull-to-refresh trigger distance (default is ~64dp; raised to avoid

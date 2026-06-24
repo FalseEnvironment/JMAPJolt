@@ -165,6 +165,14 @@
     <string name="widget_compose">Compose</string>
     <string name="label_wrong_account">Switch to %1$s to label this email</string>
     <string name="widget_more">+ More</string>
+    <string name="widget_calendar_title">Agenda</string>
+    <string name="widget_calendar_description">Shows your upcoming calendar events.</string>
+    <string name="widget_calendar_empty">No upcoming events</string>
+    <string name="widget_calendar_add">Add event</string>
+    <string name="calendar_no_title">(no title)</string>
+    <string name="calendar_all_day">All day</string>
+    <string name="calendar_today_prefix">Today · %1$s</string>
+    <string name="calendar_tomorrow_prefix">Tomorrow · %1$s</string>
     <string name="widget_config_title">Inbox widget</string>
     <string name="widget_config_subtitle">Choose which inbox this widget shows.</string>
     <string name="widget_config_no_accounts">Sign in to an account first, then add the widget again.</string>
