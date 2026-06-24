@@ -33,8 +33,10 @@ JMAPJolt was born from a simple thought: there are far too few mobile apps with 
 | **Custom themes** | Legacy gray, light snow, purple iris, and dark OLED, plus an accent color picker |
 | **Swipe actions** | Configurable per direction (delete, archive, mark read, spam) |
 | **Compose** | Rich text editor with a formatting toolbar and attachments |
+| **Calendar** | JMAP Calendar or DAVx5 support |
 | **Labels** | Custom color-coded labels stored as JMAP keywords, with drawer filtering |
 | **Notification** | Push notifications with JMAP JSON meta or UnifiedPush |
+| **Widgets** | Android home-widget for Inbox / Unified Inbox and Calendar |
 
 ## Download
 
