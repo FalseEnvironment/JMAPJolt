@@ -9,7 +9,7 @@ data class AccountEntry(
     val accountId: String
 ) {
     override fun toString() =
-        "AccountEntry(email=$email, serverUrl=$serverUrl, accountId=$accountId)"
+        "AccountEntry(email=<redacted>, serverUrl=$serverUrl, accountId=$accountId)"
 }
 
 data class EmailAttachmentInfo(

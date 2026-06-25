@@ -714,6 +714,9 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
         }
 
         val base = withScheme.removeSuffix("/jmap").removeSuffix("/jmap/session").removeSuffix("/")
+        // Reject if the URL is structurally invalid after scheme normalisation.
+        val parsed = base.toHttpUrlOrNull() ?: return emptyList()
+        if (parsed.scheme != "https") return emptyList()
         return listOf(
             "$base/",
             "$base/.well-known/jmap",
@@ -1128,7 +1131,9 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
         internal fun isTrustedServerUrl(url: String, sessionUrl: String): Boolean {
             val u = url.toHttpUrlOrNull() ?: return false
             val s = sessionUrl.toHttpUrlOrNull() ?: return false
-            return u.scheme == "https" && u.host.equals(s.host, ignoreCase = true)
+            return u.scheme == "https" &&
+                u.host.equals(s.host, ignoreCase = true) &&
+                u.port == s.port
         }
     }
 }
