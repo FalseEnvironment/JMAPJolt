@@ -16,8 +16,23 @@ object FaviconRepository {
     private const val NEGATIVE_CACHE_TTL_MS = 24L * 60 * 60 * 1000
     private const val NEGATIVE_CACHE_MAX_SIZE = 2000
     private const val MAX_ICON_BYTES = 512 * 1024
+    // Favicons render in a small avatar slot; decoding at full resolution wastes
+    // heap. Cap the decoded edge so a 512px .ico doesn't sit in memory at 512px.
+    private const val MAX_ICON_PX = 96
 
     private data class CacheEntry(val bitmap: Bitmap, val fetchedAt: Long)
+
+    /** Decodes [bytes] downsampled so the longest edge is <= [MAX_ICON_PX]. */
+    private fun decodeDownsampled(bytes: ByteArray): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        val longest = maxOf(bounds.outWidth, bounds.outHeight)
+        if (longest <= 0) return null
+        var sample = 1
+        while (longest / (sample * 2) >= MAX_ICON_PX) sample *= 2
+        val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
+    }
 
     private val cacheLock = Any()
     private val cache = object : LinkedHashMap<String, CacheEntry>(16, 0.75f, true) {
@@ -472,7 +487,7 @@ object FaviconRepository {
             return@withContext null
         }
 
-        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+        val bitmap = decodeDownsampled(bytes)
         if (bitmap == null) {
             synchronized(negCacheLock) { negativeCache[domain] = System.currentTimeMillis() }
             writeNegativeToDisk(domain)
