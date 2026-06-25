@@ -38,6 +38,9 @@ data class DisplayEmail(
     @JvmField var threadCount: Int = 1,
     @JvmField var isThreadHeadRow: Boolean = false,
     @JvmField var isThreadChildRow: Boolean = false,
+    // Synthetic "+N more" row that reveals the next page of hidden thread members.
+    @JvmField var isThreadMoreRow: Boolean = false,
+    @JvmField var threadHiddenCount: Int = 0,
     @JvmField var threadKey: String = ""
 ) {
     override fun equals(other: Any?): Boolean {

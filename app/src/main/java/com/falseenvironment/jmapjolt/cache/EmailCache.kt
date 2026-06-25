@@ -29,7 +29,8 @@ data class CachedEmailRow(
     @ColumnInfo(name = "to_email") val toEmail: String,
     @ColumnInfo(name = "account_email") val accountEmail: String,
     @ColumnInfo(name = "attachments_json") val attachmentsJson: String,
-    @ColumnInfo(name = "labels_json") val labelsJson: String
+    @ColumnInfo(name = "labels_json") val labelsJson: String,
+    @ColumnInfo(name = "thread_id", defaultValue = "") val threadId: String = ""
 )
 
 @Dao
@@ -44,7 +45,7 @@ interface CachedEmailDao {
     suspend fun clearBucket(bucket: String)
 }
 
-@Database(entities = [CachedEmailRow::class], version = 1, exportSchema = false)
+@Database(entities = [CachedEmailRow::class], version = 2, exportSchema = false)
 abstract class EmailCacheDatabase : RoomDatabase() {
     abstract fun cachedEmailDao(): CachedEmailDao
 }

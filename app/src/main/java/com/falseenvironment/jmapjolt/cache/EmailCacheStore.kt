@@ -98,7 +98,8 @@ object EmailCacheStore {
         toEmail = toEmail,
         accountEmail = accountEmail,
         attachmentsJson = encodeAttachments(attachments),
-        labelsJson = JSONArray(labels).toString()
+        labelsJson = JSONArray(labels).toString(),
+        threadId = threadId
     )
 
     private fun CachedEmailRow.toDisplayEmail() = DisplayEmail(
@@ -114,7 +115,8 @@ object EmailCacheStore {
         toEmail = toEmail,
         attachments = decodeAttachments(attachmentsJson),
         accountEmail = accountEmail,
-        labels = decodeStringList(labelsJson)
+        labels = decodeStringList(labelsJson),
+        threadId = threadId
     )
 
     private fun encodeAttachments(list: List<EmailAttachmentInfo>): String {

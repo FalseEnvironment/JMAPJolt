@@ -311,6 +311,11 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
         val dp = holder.itemView.resources.displayMetrics.density
         val isLight = activity.currentTheme == "light"
 
+        if (item.isThreadMoreRow) {
+            bindMoreRow(holder, item, dp)
+            return
+        }
+
         // --- Conversation threading row decoration ---
         val isHead = item.isThreadHeadRow
         val isChild = item.isThreadChildRow
@@ -433,6 +438,8 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
             }
         }
 
+        holder.starButton.visibility = android.view.View.VISIBLE
+        holder.avatarContainer.visibility = android.view.View.VISIBLE
         holder.starButton.imageTintList = ColorStateList.valueOf(
             if (item.isFavorite) activity.currentAccentColor.toColorInt()
             else if (isLight) "#CCCCCC".toColorInt() else "#444444".toColorInt()
@@ -567,6 +574,31 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
                 activity.showEmailDetail(item)
             }
         }
+    }
+
+    /** Renders the synthetic "+N more" row that pages an expanded conversation. */
+    private fun bindMoreRow(holder: EmailHolder, item: DisplayEmail, dp: Float) {
+        val accent = activity.currentAccentColor.toColorInt()
+        holder.chevron.visibility = android.view.View.GONE
+        holder.chevron.setOnClickListener(null)
+        holder.threadPill.visibility = android.view.View.GONE
+        holder.colorStrip.visibility = android.view.View.GONE
+        holder.starButton.visibility = android.view.View.GONE
+        holder.avatarContainer.visibility = android.view.View.GONE
+        for (i in 0..4) holder.labelRow.getChildAt(i).visibility = android.view.View.GONE
+        // Indent to align with child rows so it reads as part of the thread.
+        holder.contentLayout.setPadding(
+            (34 * dp).toInt(), (12 * dp).toInt(), (12 * dp).toInt(), (12 * dp).toInt())
+        holder.itemView.alpha = 1f
+        holder.itemView.translationY = 0f
+        holder.senderText.text = ""
+        holder.subtitle.text = ""
+        holder.dateText.text = ""
+        holder.title.text = activity.getString(R.string.thread_more_messages, item.threadHiddenCount)
+        holder.title.setTypeface(null, Typeface.BOLD)
+        holder.title.setTextColor(accent)
+        holder.itemView.setOnLongClickListener(null)
+        holder.itemView.setOnClickListener { activity.showMoreThread(item.threadKey) }
     }
 }
 

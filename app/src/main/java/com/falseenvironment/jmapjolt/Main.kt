@@ -154,6 +154,8 @@ class MainActivity : AppCompatActivity() {
     internal lateinit var settingsInfoArrow: ImageView
     internal lateinit var loadImagesSwitch: SwitchCompat
     internal lateinit var loadFaviconsSwitch: SwitchCompat
+    // Guards the favicon switch listener against re-entry while we toggle it programmatically.
+    private var suppressFaviconToggle = false
     internal var themeIdx: Int = 0
     internal lateinit var themeDropdown: LinearLayout
     private lateinit var themeDropdownText: TextView
@@ -342,10 +344,43 @@ class MainActivity : AppCompatActivity() {
     internal val threadMembers = LinkedHashMap<String, List<DisplayEmail>>()
     // Expanded thread keys: their child messages are shown indented under the head row.
     internal val expandedThreads = mutableSetOf<String>()
+    // Per-thread cap on how many child messages are currently revealed. Grows by
+    // THREAD_PAGE each time the user taps the "+N more" row.
+    internal val threadChildLimit = HashMap<String, Int>()
 
-    /** Stable grouping key: real JMAP threadId, or a per-id singleton when absent. */
-    internal fun threadKeyOf(e: DisplayEmail): String =
-        if (e.threadId.isBlank()) "__single_${e.id}" else e.threadId
+    /**
+     * Stable grouping key. Conversations are grouped by normalized subject (Re:/Fwd:
+     * prefixes stripped) so a forwarded/replied chain collapses into one chat even when
+     * the server hands out a fresh threadId per message. Falls back to threadId, then to
+     * a per-id singleton for blank subjects.
+     */
+    internal fun threadKeyOf(e: DisplayEmail): String {
+        // Only reply/forward messages collapse into a subject-based conversation; plain
+        // mails keep their own thread (server threadId) so unrelated same-subject mails
+        // are never lumped together.
+        if (hasReplyForwardPrefix(e.subject)) {
+            val norm = normalizeSubject(e.subject)
+            if (norm.isNotBlank()) return "__subj_$norm"
+        }
+        return if (e.threadId.isNotBlank()) e.threadId else "__single_${e.id}"
+    }
+
+    private val replyForwardPrefix =
+        Regex("^\\s*(re|fwd|fw|r|i|aw|sv|antw)\\s*(\\[\\d+])?\\s*:\\s*", RegexOption.IGNORE_CASE)
+
+    private fun hasReplyForwardPrefix(subject: String): Boolean =
+        replyForwardPrefix.containsMatchIn(subject.trim())
+
+    /** Lowercased subject with leading reply/forward markers and surrounding noise removed. */
+    private fun normalizeSubject(subject: String): String {
+        var s = subject.trim()
+        while (true) {
+            val stripped = s.replaceFirst(replyForwardPrefix, "")
+            if (stripped == s) break
+            s = stripped
+        }
+        return s.trim().lowercase().replace(Regex("\\s+"), " ")
+    }
 
     internal fun isThreadExpanded(key: String): Boolean = expandedThreads.contains(key)
 
@@ -368,15 +403,31 @@ class MainActivity : AppCompatActivity() {
             head.threadCount = members.size
             head.isThreadHeadRow = multi
             head.isThreadChildRow = false
+            head.isThreadMoreRow = false
             out.add(head)
             if (multi && expandedThreads.contains(key)) {
-                for (i in 1 until members.size) {
+                val childCount = members.size - 1
+                val limit = (threadChildLimit[key] ?: THREAD_PAGE).coerceAtMost(childCount)
+                for (i in 1..limit) {
                     val child = members[i]
                     child.threadKey = key
                     child.threadCount = members.size
                     child.isThreadHeadRow = false
                     child.isThreadChildRow = true
+                    child.isThreadMoreRow = false
                     out.add(child)
+                }
+                if (limit < childCount) {
+                    // Synthetic "+N more" row: reveals the next THREAD_PAGE on tap.
+                    val more = head.copy(id = "__more_$key").apply {
+                        threadKey = key
+                        threadCount = members.size
+                        isThreadHeadRow = false
+                        isThreadChildRow = false
+                        isThreadMoreRow = true
+                        threadHiddenCount = childCount - limit
+                    }
+                    out.add(more)
                 }
             }
         }
@@ -386,6 +437,18 @@ class MainActivity : AppCompatActivity() {
     /** Toggles a conversation's expanded state and rebuilds the visible list. */
     internal fun toggleThread(key: String) {
         if (!expandedThreads.add(key)) expandedThreads.remove(key)
+        // Reopening a conversation always starts from the first page again.
+        threadChildLimit[key] = THREAD_PAGE
+        rebuildThreadedList()
+    }
+
+    /** Reveals the next page of hidden messages in an expanded conversation. */
+    internal fun showMoreThread(key: String) {
+        threadChildLimit[key] = (threadChildLimit[key] ?: THREAD_PAGE) + THREAD_PAGE
+        rebuildThreadedList()
+    }
+
+    private fun rebuildThreadedList() {
         val display = buildThreadedView(baseEmails)
         emails.clear()
         emails.addAll(display)
@@ -2305,17 +2368,25 @@ body{background:$bg;padding:20px}
             }
         }
         loadFaviconsSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressFaviconToggle) return@setOnCheckedChangeListener
             if (isChecked) {
+                // Hold the switch off until the user confirms; the dialog is async, so a
+                // bare isChecked=false here would re-enter this listener and save "off".
+                suppressFaviconToggle = true
+                loadFaviconsSwitch.isChecked = false
+                suppressFaviconToggle = false
                 showThemedConfirmDialog(
                     title = "Auto-load favicons",
                     message = "This feature uses DuckDuckGo's external service (icons.duckduckgo.com) to fetch favicons for email senders. No personal data is sent, only the domain name.",
                     confirmLabel = "Enable"
                 ) {
+                    suppressFaviconToggle = true
+                    loadFaviconsSwitch.isChecked = true
+                    suppressFaviconToggle = false
                     saveGeneralPreferences()
                     emailAdapter.loadFaviconsEnabled = true
                     emailAdapter.notifyDataSetChanged()
                 }
-                loadFaviconsSwitch.isChecked = false
             } else {
                 saveGeneralPreferences()
                 emailAdapter.loadFaviconsEnabled = false
@@ -3522,6 +3593,8 @@ body{background:$bg;padding:20px}
                                     a.from == b.from &&
                                     a.isThreadHeadRow == b.isThreadHeadRow &&
                                     a.isThreadChildRow == b.isThreadChildRow &&
+                                    a.isThreadMoreRow == b.isThreadMoreRow &&
+                                    a.threadHiddenCount == b.threadHiddenCount &&
                                     a.threadCount == b.threadCount
                         }
                     }
@@ -4343,7 +4416,7 @@ body{background:$bg;padding:20px}
                                 val allAccounts = BackgroundEmailSyncReceiver.readAllAccounts(this@MainActivity)
                                 val merged = allAccounts.flatMap { acc ->
                                     try {
-                                        jmapClient.fetchEmails(acc, limit = emailLimit).map { e ->
+                                        val base = jmapClient.fetchEmails(acc, limit = emailLimit).map { e ->
                                             DisplayEmail(
                                                 e.id, e.subject, e.from, e.fromEmail,
                                                 e.preview, e.fullBody, e.seen, e.isStarred,
@@ -4354,6 +4427,24 @@ body{background:$bg;padding:20px}
                                                 threadId = e.threadId
                                             )
                                         }
+                                        // Chat-style threading: pull replies from other mailboxes
+                                        // (e.g. Sent) so a conversation groups under one head, same
+                                        // as the single-account inbox does.
+                                        val threadIds = base.mapNotNull { it.threadId.ifBlank { null } }.toSet()
+                                        val haveIds = base.map { it.id }.toSet()
+                                        val extra = try {
+                                            jmapClient.fetchThreadMembers(acc, threadIds, haveIds).map {
+                                                DisplayEmail(
+                                                    it.id, it.subject, it.from, it.fromEmail, it.preview,
+                                                    it.fullBody, it.seen, it.isStarred, it.receivedAt, it.toEmail,
+                                                    attachments = it.attachments, accountEmail = acc.email,
+                                                    labels = it.keywords.toList(), threadId = it.threadId
+                                                )
+                                            }
+                                        } catch (e: kotlinx.coroutines.CancellationException) {
+                                            throw e
+                                        } catch (_: Exception) { emptyList() }
+                                        base + extra
                                     } catch (e: kotlinx.coroutines.CancellationException) {
                                         throw e
                                     } catch (_: Exception) {
@@ -5445,6 +5536,8 @@ body{background:$bg;padding:20px}
 
     companion object {
         internal const val TAG = "MainActivity"
+        // Chat-thread expansion reveals messages this many at a time.
+        internal const val THREAD_PAGE = 5
         internal const val PREFS_NAME = "mail_prefs"
         internal const val EXTRA_OPEN_CALENDAR = "open_calendar"
         internal const val EXTRA_NEW_EVENT = "open_calendar_new_event"

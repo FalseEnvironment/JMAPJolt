@@ -81,6 +81,7 @@
     <string name="settings_unifiedpush_success">UnifiedPush connected successfully!</string>
     <string name="settings_unifiedpush_error">UnifiedPush connection failed.</string>
     <string name="status_sync_ok">Synced: %1$d emails.</string>
+    <string name="thread_more_messages">+%1$d more messages</string>
     <string name="status_sync_ok_empty">Connected to %1$s, but no emails were returned.</string>
     <string name="status_sync_not_connected">No active account session. Please login again.</string>
     <string name="status_sync_contacting">Syncing with %1$s…</string>
