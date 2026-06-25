@@ -1,9 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">JMAPJolt</string>
-    <string name="welcome_title">Welcome</string>
-    <string name="alpha_warning">Warning: this is an alpha version and may be unstable.</string>
-    <string name="continue_text">Continue</string>
     <string name="login_title">JMAP Login</string>
     <string name="email_hint">Email Address</string>
     <string name="password_hint">Password</string>
@@ -11,15 +8,11 @@
     <string name="login_button">Login</string>
     <string name="status_initial">Enter your credentials to continue.</string>
     <string name="status_idle">Idle…</string>
-    <string name="status_ready">Credentials captured. Connection setup will be implemented next.</string>
     <string name="status_connecting">Connecting to JMAP…</string>
-    <string name="status_connected">Connected to JMAP.</string>
     <string name="status_connected_with_endpoint">Connected to JMAP (%1$s).</string>
     <string name="status_connection_failed">JMAP connection failed.</string>
     <string name="status_connection_failed_verbose">Connection failed: %1$s | Tried: %2$s</string>
     <string name="status_invalid_email">Insert a valid JMAP email (example: mail@jmap.com).</string>
-    <string name="mailbox_title">Mailbox</string>
-    <string name="mailbox_welcome">Mailbox for %1$s</string>
     <string name="folder_inbox">Inbox</string>
     <string name="folder_favourite">Favourite</string>
     <string name="folder_archive">Archive</string>
@@ -31,10 +24,6 @@
     <string name="drawer_close">Close navigation menu</string>
     <string name="settings_title">Settings</string>
     <string name="calendar_title">Calendar</string>
-    <string name="settings_categories">Category</string>
-    <string name="settings_saved">Settings saved.</string>
-    <string name="settings_default_category">Default category: %1$s</string>
-    <string name="settings_category_name_hint">Custom category name</string>
     <string name="settings_swipe_actions">Swipe behavior</string>
     <string name="settings_swipe_right">Swipe right action</string>
     <string name="settings_swipe_left">Swipe left action</string>
@@ -48,37 +37,20 @@
     <string name="settings_sse_subtitle">Shows a persistent notification while active</string>
     <string name="settings_unifiedpush_subtitle">Checks for new emails every 10 minutes as fallback</string>
     <string name="sse_notification_text">Listening for new emails…</string>
-    <string name="settings_unifiedpush_link_hint">UnifiedPush link</string>
-    <string name="settings_unifiedpush_save_test">Save and test</string>
-    <string name="settings_unifiedpush_send_test">Send test notification</string>
-    <string name="settings_unifiedpush_invalid_link">Insert a valid ntfy server, e.g. ntfy.example.net.</string>
     <string name="settings_unifiedpush_test_sent">Test notification sent.</string>
     <string name="settings_unifiedpush_test_title">JMAPJolt test</string>
     <string name="settings_unifiedpush_waiting_endpoint">UnifiedPush endpoint not ready yet. Registration started; retry in a few seconds.</string>
     <string name="settings_unifiedpush_error_with_code">UnifiedPush connection failed (HTTP %1$d).</string>
     <string name="settings_unifiedpush_test_body">JMAPJolt test notification</string>
-    <string name="settings_force_background_fetch">Force background fetch</string>
-    <string name="settings_background_fetch_interval">Time:</string>
-    <string name="background_fetch_5_min">5 min</string>
-    <string name="background_fetch_10_min">10 min</string>
-    <string name="background_fetch_20_min">20 min</string>
-    <string name="background_fetch_30_min">30 min</string>
-    <string name="background_fetch_60_min">1 hour</string>
     <string name="background_sync_notification_channel">New email checks</string>
     <string name="background_sync_status_channel">Email sync status</string>
     <string name="background_sync_notification_group">%1$d new emails</string>
     <string name="background_sync_updating_title">Updating mailbox</string>
     <string name="background_sync_updating_text">Checking for new email…</string>
-    <string name="settings_discard_changes">Discard changes</string>
-    <string name="settings_save_changes">Save changes</string>
-    <string name="settings_unsaved_title">Unsaved changes</string>
-    <string name="settings_unsaved_message">Do you want to save your changes before leaving?</string>
-    <string name="settings_changes_discarded">Changes discarded.</string>
     <string name="mailbox_refreshing">Refreshing mailbox…</string>
     <string name="settings_unifiedpush_disabled">UnifiedPush disabled.</string>
     <string name="settings_unifiedpush_registered">UnifiedPush registered (%1$s).</string>
     <string name="settings_unifiedpush_failed">UnifiedPush auto registration failed. Insert manual link/id and retry.</string>
-    <string name="settings_unifiedpush_success">UnifiedPush connected successfully!</string>
     <string name="settings_unifiedpush_error">UnifiedPush connection failed.</string>
     <string name="status_sync_ok">Synced: %1$d emails.</string>
     <string name="thread_more_messages">+%1$d more messages</string>
@@ -86,10 +58,7 @@
     <string name="status_sync_not_connected">No active account session. Please login again.</string>
     <string name="status_sync_contacting">Syncing with %1$s…</string>
     <string name="status_sync_failed">Sync failed: %1$s</string>
-    <string name="drawer_add_account">Accounts</string>
     <string name="drawer_add_account_action">Add account</string>
-    <string name="drawer_edit_profile">Edit profile</string>
-    <string name="drawer_change_photo">Change photo</string>
     <string name="drawer_change_name">Change name</string>
     <string name="drawer_display_name_hint">Display name</string>
     <string name="action_save">Save</string>
@@ -102,14 +71,11 @@
     <string name="settings_theme_oled">Dark OLED</string>
     <string name="settings_theme_violet">Iris</string>
     <string name="settings_general">Display</string>
-    <string name="settings_general_header">Display:</string>
     <string name="settings_labels">Labels</string>
     <string name="settings_edit_labels">Manage Labels</string>
     <string name="settings_edit_labels_button">Edit</string>
     <string name="settings_calendar">Calendar</string>
     <string name="settings_cal_enable">Enable calendar</string>
-    <string name="settings_cal_remove_account_title">Remove account</string>
-    <string name="settings_cal_remove_account_msg">Remove %1$s? This deletes the DAVx5 account and its synced events from this device.</string>
     <string name="settings_cal_provider">Select provider</string>
     <string name="settings_cal_provider_jmap">JMAP Calendar</string>
     <string name="settings_cal_provider_davx5">DAVx5 (CalDAV)</string>
@@ -120,8 +86,6 @@
     <string name="calendar_jmap_unsupported">Server has no JMAP calendar — events stored locally</string>
     <string name="settings_import_ics">Import events (.ics)</string>
     <string name="settings_export_ics">Export events (.ics)</string>
-    <string name="settings_appearance_header">Appearance:</string>
-    <string name="settings_unifiedpush_header">Unified push:</string>
     <string name="settings_load_images">Auto-load images</string>
     <string name="settings_load_favicons">Auto-load favicons</string>
 
@@ -129,7 +93,6 @@
     <string name="onboarding_welcome_title">Welcome to\nJMAPJolt</string>
     <string name="onboarding_welcome_subtitle">Open source JMAP email client</string>
     <string name="onboarding_features_title">What\'s inside</string>
-    <string name="onboarding_features_subtitle">Open source JMAP email client</string>
     <string name="feature_jmap_title">Modern JMAP email</string>
     <string name="feature_jmap_desc">Built on the JMAP protocol for reliable, modern email.</string>
     <string name="feature_push_title">Private push notifications</string>
@@ -141,23 +104,14 @@
     <string name="feature_custom_title">Make it yours</string>
     <string name="feature_custom_desc">Custom themes, accent colors and swipe actions.</string>
     <string name="onboarding_next">Next</string>
-    <string name="onboarding_get_started">Get started</string>
 
     <!-- Onboarding: notification permission screen -->
-    <string name="perm_title">Enable notifications</string>
-    <string name="perm_body">JMAPJolt delivers mail alerts through UnifiedPush. Android needs the notification permission to show them on your device.</string>
-    <string name="perm_required_note">Notifications are required to alert you about incoming email. Without this permission mail will arrive silently.</string>
-    <string name="perm_grant">Grant</string>
-    <string name="perm_skip">Skip for now</string>
 
     <string name="about_title">Information</string>
     <string name="about_source_code">Source code</string>
     <string name="about_close">Close</string>
 
     <!-- Login field labels -->
-    <string name="login_label_email">Email</string>
-    <string name="login_label_password">Password</string>
-    <string name="login_label_server">JMAP URL</string>
     <string name="widget_inbox_title">Inbox</string>
     <string name="widget_unified_inbox">Unified inbox</string>
     <string name="widget_inbox_description">Shows your inbox or unified inbox.</string>
