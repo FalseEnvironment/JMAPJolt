@@ -309,6 +309,8 @@ class MainActivity : AppCompatActivity() {
     internal val labelNavIds = linkedMapOf<Int, String>()
     internal lateinit var detailLabelRowView: LinearLayout
     internal val isDetailLabelRowViewInit: Boolean get() = ::detailLabelRowView.isInitialized
+    internal fun debugTs(): String =
+        java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
     internal var labelDragHelper: ItemTouchHelper? = null
 
     internal val categoryOrder =
@@ -1574,7 +1576,7 @@ class MainActivity : AppCompatActivity() {
                         try {
                             if (folderCache[currentFolderId] == null) {
                                 status.text =
-                                        getString(R.string.status_sync_contacting, account.apiUrl)
+                                        getString(R.string.status_sync_contacting, folderTitle, debugTs())
                             }
 
                             if (isUnifiedInbox) {
@@ -1620,8 +1622,8 @@ class MainActivity : AppCompatActivity() {
                                 updateEmailsList(merged)
                                 persistOfflineCache(currentFolderId, merged)
                                 status.text = if (merged.isEmpty())
-                                    getString(R.string.status_sync_ok_empty, folderTitle)
-                                else getString(R.string.status_sync_ok, merged.size)
+                                    getString(R.string.status_sync_ok_empty, folderTitle, debugTs())
+                                else getString(R.string.status_sync_ok, merged.size, debugTs(), folderTitle)
                                 delay(10000)
                                 continue
                             }
@@ -1687,13 +1689,13 @@ class MainActivity : AppCompatActivity() {
 
                             status.text =
                                     if (fresh.isEmpty())
-                                            getString(R.string.status_sync_ok_empty, folderTitle)
-                                    else getString(R.string.status_sync_ok, fresh.size)
+                                            getString(R.string.status_sync_ok_empty, folderTitle, debugTs())
+                                    else getString(R.string.status_sync_ok, fresh.size, debugTs(), folderTitle)
                         } catch (_: CancellationException) {
                             return@launch
                         } catch (e: Throwable) {
                             Log.e(TAG, "Sync failed", e)
-                            status.text = getString(R.string.status_sync_failed, e.message ?: "-")
+                            status.text = getString(R.string.status_sync_failed, e.message ?: "-", debugTs())
                             if (pendingMailboxShow) {
                                 pendingMailboxShow = false
                                 showMailboxScreen(skipRefresh = true)
@@ -2476,7 +2478,7 @@ class MainActivity : AppCompatActivity() {
 
         // Show UI immediately, load cache async, then start live sync
         showMailboxScreen(skipRefresh = true)
-        status.text = "Fetching new emails..."
+        status.text = getString(R.string.status_fetch_new, debugTs())
         if (JmapEventSourceService.isEnabled(this)) {
             JmapEventSourceService.stop(this)
             JmapEventSourceService.start(this)

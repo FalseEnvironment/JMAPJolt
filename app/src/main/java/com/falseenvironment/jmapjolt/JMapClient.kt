@@ -1106,13 +1106,12 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
      * per-call session round trip. The library invalidates the cached session itself
      * when a response carries a new sessionState.
      */
-    private fun newClient(account: ConnectedAccount): JmapClient =
-        clientCache.getOrPut(account.email) {
-            val url = account.sessionUrl.toHttpUrlOrNull()
-                ?: throw IllegalStateException("Invalid session URL")
-            JmapClient(account.email, account.password, url)
-                .apply { setSessionCache(sessionCache) }
-        }
+    private fun newClient(account: ConnectedAccount): JmapClient {
+        val url = account.sessionUrl.toHttpUrlOrNull()
+            ?: throw IllegalStateException("Invalid session URL")
+        return JmapClient(account.email, account.password, url)
+            .apply { setSessionCache(sessionCache) }
+    }
 
     companion object {
         private const val TAG = "JMapClient"
@@ -1120,11 +1119,9 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
         /** Default page size for email queries. UI grows this for infinite scroll. */
         const val DEFAULT_EMAIL_LIMIT = 50L
 
+        // Shared session cache: avoids a session round-trip on every call without
+        // sharing the JmapClient instance itself (which is not thread-safe).
         private val sessionCache = rs.ltt.jmap.client.session.InMemorySessionCache()
-
-        // Keyed by account email: reuses the underlying OkHttpClient connection pool
-        // and session state across calls instead of allocating a new instance each time.
-        private val clientCache = java.util.concurrent.ConcurrentHashMap<String, JmapClient>()
 
         // One shared client: reuses connection pool and dispatcher threads across
         // uploads/downloads instead of allocating a fresh stack per call.

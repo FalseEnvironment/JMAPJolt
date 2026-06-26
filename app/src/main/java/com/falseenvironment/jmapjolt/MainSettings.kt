@@ -353,6 +353,7 @@ internal fun MainActivity.showAboutDialog() {
     val bgColor = getDialogBackgroundColor()
     val textColor = if (currentTheme == "light") "#212121".toColorInt() else Color.WHITE
     val subColor = if (currentTheme == "light") "#757575".toColorInt() else "#BDBDBD".toColorInt()
+    val accentInt = currentAccentColor.toColorInt()
 
     val view = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
@@ -417,6 +418,53 @@ internal fun MainActivity.showAboutDialog() {
         .create()
     dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
 
+    val prefs = getSharedPreferences(MainActivity.PREFS_NAME, Context.MODE_PRIVATE)
+    val offThumb = if (currentTheme == "light") Color.parseColor("#BDBDBD") else Color.parseColor("#757575")
+    val offTrack = if (currentTheme == "light") Color.parseColor("#DDDDDD") else Color.parseColor("#444444")
+    val accentAlpha = Color.argb(77, Color.red(accentInt), Color.green(accentInt), Color.blue(accentInt))
+    val thumbStates = android.content.res.ColorStateList(
+        arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+        intArrayOf(accentInt, offThumb)
+    )
+    val trackStates = android.content.res.ColorStateList(
+        arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+        intArrayOf(accentAlpha, offTrack)
+    )
+    val rippleStates = android.content.res.ColorStateList(
+        arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+        intArrayOf(accentAlpha, Color.argb(40, Color.red(offThumb), Color.green(offThumb), Color.blue(offThumb)))
+    )
+    val debugSwitch = androidx.appcompat.widget.SwitchCompat(activity).apply {
+        isChecked = prefs.getBoolean("debug_mode", false)
+        textOff = ""
+        textOn = ""
+        thumbTintList = thumbStates
+        trackTintList = trackStates
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            background = android.graphics.drawable.RippleDrawable(
+                rippleStates, null, null
+            )
+        }
+    }
+    view.addView(LinearLayout(activity).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = android.view.Gravity.CENTER_VERTICAL
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ).also { it.bottomMargin = (12 * dp).toInt() }
+        addView(TextView(activity).apply {
+            text = "Debug mode"
+            setTextColor(textColor)
+            textSize = 15f
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        })
+        addView(debugSwitch)
+    })
+    debugSwitch.setOnCheckedChangeListener { _, enabled ->
+        prefs.edit().putBoolean("debug_mode", enabled).apply()
+        status.visibility = if (enabled) android.view.View.VISIBLE else android.view.View.GONE
+    }
+
     view.addView(Button(this).apply {
         text = getString(R.string.about_close)
         isAllCaps = false
@@ -437,6 +485,7 @@ internal fun MainActivity.showAboutDialog() {
 
 internal fun MainActivity.loadGeneralPreferences() {
     val prefs = getSharedPreferences(MainActivity.PREFS_NAME, Context.MODE_PRIVATE)
+    status.visibility = if (prefs.getBoolean("debug_mode", false)) android.view.View.VISIBLE else android.view.View.GONE
     loadImagesSwitch.isChecked = prefs.getBoolean("load_images", false)
     loadFaviconsSwitch.isChecked = prefs.getBoolean("load_favicons", false)
 }

@@ -265,7 +265,7 @@ internal fun MainActivity.bindPullToRefresh() {
         (MainActivity.PULL_TO_REFRESH_TRIGGER_DP * resources.displayMetrics.density).toInt()
     )
     mailSwipeRefresh.setOnRefreshListener {
-        status.text = getString(R.string.mailbox_refreshing)
+        status.text = getString(R.string.mailbox_refreshing, debugTs())
         refreshInboxNow { mailSwipeRefresh.isRefreshing = false }
     }
 }
@@ -323,7 +323,7 @@ internal fun MainActivity.refreshInboxNow(onDone: (() -> Unit)? = null) {
     val account = connectedAccount
     if (account == null) {
         Log.w(MainActivity.TAG,"refreshInboxNow: no connected account")
-        status.text = getString(R.string.status_sync_not_connected)
+        status.text = getString(R.string.status_sync_not_connected, debugTs())
         onDone?.invoke()
         return
     }
@@ -359,9 +359,9 @@ internal fun MainActivity.registerUnifiedPushAuto(manualDistributor: String) {
         // Schedule the periodic fallback immediately so background sync works
         // even with no distributor installed or before an endpoint arrives.
         EmailSyncWorker.schedule(this)
-        status.text = getString(R.string.settings_unifiedpush_registered, selected ?: "auto")
+        status.text = getString(R.string.settings_unifiedpush_registered, debugTs(), selected ?: "auto")
     } catch (_: Throwable) {
-        status.text = getString(R.string.settings_unifiedpush_failed)
+        status.text = getString(R.string.settings_unifiedpush_failed, debugTs())
     }
 }
 

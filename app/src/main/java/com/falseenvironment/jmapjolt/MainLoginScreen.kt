@@ -60,7 +60,7 @@ internal fun MainActivity.connectAndOpenMailbox() {
 
     loginButton.isEnabled = false
     loginButton.alpha = 0.5f
-    status.text = getString(R.string.status_connecting)
+    status.text = getString(R.string.status_connecting, debugTs())
     loadingOverlay.visibility = View.VISIBLE
 
     lifecycleScope.launch {
@@ -78,7 +78,8 @@ internal fun MainActivity.connectAndOpenMailbox() {
             status.text =
                     getString(
                             R.string.status_connected_with_endpoint,
-                            result.resolvedSessionUrl ?: "-"
+                            result.resolvedSessionUrl ?: "-",
+                            debugTs()
                     )
             pendingMailboxShow = true
             refreshInboxNow {
@@ -96,6 +97,7 @@ internal fun MainActivity.connectAndOpenMailbox() {
             status.text =
                     getString(
                             R.string.status_connection_failed_verbose,
+                            debugTs(),
                             result.errorMessage ?: getString(R.string.status_connection_failed),
                             attempted
                     )
