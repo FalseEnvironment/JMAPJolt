@@ -176,9 +176,12 @@ internal fun MainActivity.showMoreThread(key: String) {
 }
 
 internal fun MainActivity.rebuildThreadedList() {
-    val display = buildThreadedView(baseEmails)
-    emails.clear()
-    emails.addAll(display)
-    emailAdapter.notifyDataSetChanged()
+    val snapshot = baseEmails.toList()
+    lifecycleScope.launch {
+        val display = withContext(Dispatchers.Default) { buildThreadedView(snapshot) }
+        emails.clear()
+        emails.addAll(display)
+        emailAdapter.notifyDataSetChanged()
+    }
 }
 
