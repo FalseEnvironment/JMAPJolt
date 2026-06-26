@@ -30,6 +30,7 @@ class EmailSyncWorker(context: Context, params: WorkerParameters) : CoroutineWor
             }
             Result.success()
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Log.e(TAG, "Email sync worker failed", e)
             if (runAttemptCount < 3) Result.retry() else Result.failure()
         }

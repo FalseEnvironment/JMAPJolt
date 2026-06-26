@@ -96,6 +96,7 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
                         )
                     }
                 } catch (error: Throwable) {
+                    if (error is kotlinx.coroutines.CancellationException) throw error
                     lastError = error.message
                 }
             }

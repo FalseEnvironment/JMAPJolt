@@ -497,7 +497,7 @@ internal fun MainActivity.onDetailSwipeEnd(dx: Float, velocityX: Float) {
 
     detailSwipeAnimating = true
     val exitX = if (forward) -w else w
-    prepareDetailPreview(target!!, forward)
+    prepareDetailPreview(target ?: return, forward)
     val panel = ensureDetailPreviewPanel().also {
         it.visibility = View.VISIBLE
         // Pure fling with no drag events yet: start from fully off-screen.
