@@ -79,9 +79,12 @@ class JmapEventSourceService : Service() {
                 try {
                     val sseUrl = resolveEventSourceUrl(account)
                     if (sseUrl == null) {
-                        Log.w(TAG, "No eventSourceUrl for ${account.email} — loop stopped")
-                        break
+                        Log.w(TAG, "No eventSourceUrl for ${account.email} — retrying in ${backoffMs}ms")
+                        delay(backoffMs)
+                        backoffMs = minOf(backoffMs * 2, BACKOFF_MAX_MS)
+                        continue
                     }
+                    backoffMs = BACKOFF_INITIAL_MS
                     Log.d(TAG, "Connecting SSE for ${account.email}: $sseUrl")
                     connectAndListen(account, sseUrl)
                     backoffMs = BACKOFF_INITIAL_MS
