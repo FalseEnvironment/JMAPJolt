@@ -220,7 +220,7 @@ class JmapEventSourceService : Service() {
                 PendingIntent.getService(this, 1, restartIntent, flags)
             }
             getSystemService(AlarmManager::class.java)
-                .set(AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime() + 5_000L, restart)
+                .set(AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + 5_000L, restart)
         }
         super.onTaskRemoved(rootIntent)
     }
