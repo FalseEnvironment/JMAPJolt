@@ -238,7 +238,7 @@ class JmapEventSourceService : Service() {
         private const val CHANNEL_ID = "background_email_sync_status"
         private const val PING_SECONDS = 90
         private const val BACKOFF_INITIAL_MS = 5_000L
-        private const val BACKOFF_MAX_MS = 300_000L
+        private const val BACKOFF_MAX_MS = 60_000L
         const val KEY_SSE_ENABLED = "sse_enabled"
         private const val PREFS_NAME = "jmap_service_prefs"
 

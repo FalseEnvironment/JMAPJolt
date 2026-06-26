@@ -41,7 +41,7 @@ class EmailSyncWorker(context: Context, params: WorkerParameters) : CoroutineWor
         const val KEY_ACCOUNT_EMAIL = "account_email"
 
         fun schedule(context: Context) {
-            val request = PeriodicWorkRequestBuilder<EmailSyncWorker>(10, TimeUnit.MINUTES)
+            val request = PeriodicWorkRequestBuilder<EmailSyncWorker>(15, TimeUnit.MINUTES)
                 .setConstraints(
                     Constraints.Builder()
                         .setRequiredNetworkType(NetworkType.CONNECTED)
@@ -49,8 +49,8 @@ class EmailSyncWorker(context: Context, params: WorkerParameters) : CoroutineWor
                 )
                 .build()
             WorkManager.getInstance(context)
-                .enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.KEEP, request)
-            Log.d(TAG, "Scheduled periodic email sync (10 min fallback)")
+                .enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.UPDATE, request)
+            Log.d(TAG, "Scheduled periodic email sync (15 min fallback)")
         }
 
         fun cancel(context: Context) {
