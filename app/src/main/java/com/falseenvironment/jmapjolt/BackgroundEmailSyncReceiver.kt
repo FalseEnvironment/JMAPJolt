@@ -114,6 +114,93 @@ class BackgroundEmailSyncReceiver {
             )
         }
 
+        // Server-generated previews of forwarded/replied mail are cluttered with
+        // boilerplate: dashed "Forwarded message" / "Original Message" separators,
+        // reply intros, quoted ">" lines, and the forwarded header block
+        // (From:/To:/Date:/Subject:/...). Drop those lines and keep the real body.
+        private val FORWARD_SEPARATOR = Regex("^-+\\s*(forwarded|original)\\b.*", RegexOption.IGNORE_CASE)
+        private val REPLY_INTRO = Regex("^On .+wrote:\\s*$", RegexOption.IGNORE_CASE)
+        private val BEGIN_FORWARD = Regex("^begin forwarded message:?\\s*$", RegexOption.IGNORE_CASE)
+        private val HEADER_LINE = Regex(
+            "^(from|to|cc|bcc|date|sent|subject|reply-to)\\s*:.*",
+            RegexOption.IGNORE_CASE
+        )
+
+        // Generic local-parts that carry no sender identity — fall back to the
+        // domain's main label (noreply@bethesda.net -> Bethesda).
+        private val GENERIC_LOCALPARTS = setOf(
+            "noreply", "no-reply", "donotreply", "do-not-reply", "info", "mail",
+            "mailer", "contact", "hello", "support", "notifications", "notification",
+            "news", "newsletter", "team", "account", "accounts", "service", "admin"
+        )
+
+        // Best-effort human-friendly sender name: prefer the display name, else
+        // derive from the email (local-part, or the domain label if generic).
+        private fun senderName(displayName: String, emailAddr: String): String {
+            displayName.trim().takeIf { it.isNotBlank() }?.let { return it }
+            val at = emailAddr.indexOf('@')
+            if (at <= 0) return emailAddr
+            val local = emailAddr.substring(0, at).lowercase()
+            val domain = emailAddr.substring(at + 1)
+            val label = if (local in GENERIC_LOCALPARTS) {
+                domain.split('.').let { p -> if (p.size >= 2) p[p.size - 2] else p.firstOrNull() ?: domain }
+            } else {
+                local
+            }
+            return label.replace(Regex("[._-]+"), " ")
+                .split(' ')
+                .filter { it.isNotBlank() }
+                .joinToString(" ") { it.replaceFirstChar(Char::uppercaseChar) }
+                .ifBlank { emailAddr }
+        }
+
+        // Strip repeated "Fwd:" / "Re:" / "Fw:" prefixes from a subject.
+        private val SUBJECT_PREFIX = Regex("^\\s*(fwd?|re|aw|wg|r|i)\\s*:\\s*", RegexOption.IGNORE_CASE)
+
+        private fun cleanSubject(raw: String): String {
+            var s = raw.trim()
+            while (SUBJECT_PREFIX.containsMatchIn(s)) {
+                s = SUBJECT_PREFIX.replaceFirst(s, "").trim()
+            }
+            return s.ifBlank { raw.trim() }
+        }
+
+        // Expanded notification body: subject line, then the message, slightly
+        // separated. Collapsed body just shows the message.
+        private fun notificationBody(email: JMapClient.EmailSummary): String {
+            val subject = cleanSubject(email.subject)
+            val message = cleanPreview(email.preview)
+            return when {
+                subject.isBlank() -> message
+                message.isBlank() -> subject
+                else -> "$subject\n\n$message"
+            }
+        }
+
+        private fun cleanPreview(raw: String): String {
+            val cleaned = raw.lineSequence()
+                .map { it.trim() }
+                .filterNot { t ->
+                    t.isEmpty() ||
+                        t.startsWith(">") ||
+                        FORWARD_SEPARATOR.matches(t) ||
+                        BEGIN_FORWARD.matches(t) ||
+                        REPLY_INTRO.matches(t) ||
+                        HEADER_LINE.matches(t)
+                }
+                .joinToString(" ")
+                // Strip leaked CSS: brace blocks ({ margin:0; padding:0; }) and any
+                // leftover "property: value;" declarations.
+                .replace(Regex("\\{[^{}]*\\}"), " ")
+                .replace(Regex("[.#@]?[\\w-]+\\s*\\{[^{}]*", RegexOption.IGNORE_CASE), " ")
+                .replace(Regex("[a-zA-Z-]+\\s*:\\s*[^;{}\\n]+;"), " ")
+                .replace(Regex("<https?://[^>]*>", RegexOption.IGNORE_CASE), " ")
+                .replace(Regex("https?://\\S+", RegexOption.IGNORE_CASE), " ")
+                .replace(Regex("\\s+"), " ")
+                .trim()
+            return cleaned.ifBlank { raw.trim() }
+        }
+
         private fun showNewEmailNotification(
             context: Context,
             newEmails: List<JMapClient.EmailSummary>
@@ -123,58 +210,56 @@ class BackgroundEmailSyncReceiver {
             val appIntent = openAppIntent(context, 0)
 
             try {
-                if (newEmails.size == 1) {
-                    val email = newEmails[0]
-                    nm.notify(EMAIL_NOTIFICATION_ID, buildEmailNotification(context, email, appIntent))
-                } else {
-                    // Individual notifications (silent — summary carries the sound)
-                    newEmails.forEachIndexed { index, email ->
-                        val n = NotificationCompat.Builder(context, EMAIL_CHANNEL_ID)
-                            .setSmallIcon(R.drawable.ic_notification)
-                            .setContentTitle(email.from.ifBlank { email.fromEmail })
-                            .setContentText(email.subject)
-                            .setStyle(NotificationCompat.BigTextStyle()
-                                .bigText(email.preview.ifBlank { email.subject }))
-                            .setContentIntent(appIntent)
-                            .setAutoCancel(true)
-                            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-                            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
-                            .setGroup(EMAIL_GROUP_KEY)
-                            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY)
-                            .setWhen(email.receivedAt.takeIf { it > 0L } ?: System.currentTimeMillis())
-                            .setShowWhen(true)
-                            .build()
-                        nm.notify(EMAIL_INDIVIDUAL_BASE + index, n)
-                    }
-
-                    // Summary — carries sound/vibration and shows InboxStyle when expanded
-                    val inboxStyle = NotificationCompat.InboxStyle()
-                        .setSummaryText(context.getString(
-                            R.string.background_sync_notification_group, newEmails.size))
-                    newEmails.take(6).forEach { email ->
-                        val sender = email.from.ifBlank { email.fromEmail }
-                        val line = SpannableString("$sender  ${email.subject}")
-                        line.setSpan(StyleSpan(Typeface.BOLD), 0, sender.length,
-                            Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-                        inboxStyle.addLine(line)
-                    }
-
-                    val summary = NotificationCompat.Builder(context, EMAIL_CHANNEL_ID)
+                // Each email gets its own stable notification ID derived from its
+                // server ID so re-syncs don't create duplicates.
+                newEmails.forEach { email ->
+                    val notifId = EMAIL_INDIVIDUAL_BASE + (email.id.hashCode() and 0x7FFFFFFF) % 10_000
+                    val n = NotificationCompat.Builder(context, EMAIL_CHANNEL_ID)
                         .setSmallIcon(R.drawable.ic_notification)
-                        .setContentTitle(context.getString(
-                            R.string.background_sync_notification_group, newEmails.size))
-                        .setContentText(newEmails.joinToString(", ") {
-                            it.from.ifBlank { it.fromEmail } })
-                        .setStyle(inboxStyle)
+                        .setContentTitle(senderName(email.from, email.fromEmail))
+                        .setContentText(cleanSubject(email.subject))
+                        .setStyle(NotificationCompat.BigTextStyle().bigText(notificationBody(email)))
                         .setContentIntent(appIntent)
                         .setAutoCancel(true)
                         .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                         .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+                        .setAllowSystemGeneratedContextualActions(false)
                         .setGroup(EMAIL_GROUP_KEY)
-                        .setGroupSummary(true)
+                        .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY)
+                        .setWhen(email.receivedAt.takeIf { it > 0L } ?: System.currentTimeMillis())
+                        .setShowWhen(true)
                         .build()
-                    nm.notify(EMAIL_NOTIFICATION_ID, summary)
+                    nm.notify(notifId, n)
                 }
+
+                // Group summary — always required on Android 7+ to bundle the group;
+                // carries the sound/vibration.
+                val inboxStyle = NotificationCompat.InboxStyle()
+                    .setSummaryText(context.getString(
+                        R.string.background_sync_notification_group, newEmails.size))
+                newEmails.take(6).forEach { email ->
+                    val sender = senderName(email.from, email.fromEmail)
+                    val line = SpannableString("$sender  ${cleanSubject(email.subject)}")
+                    line.setSpan(StyleSpan(Typeface.BOLD), 0, sender.length,
+                        Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    inboxStyle.addLine(line)
+                }
+                val summary = NotificationCompat.Builder(context, EMAIL_CHANNEL_ID)
+                    .setSmallIcon(R.drawable.ic_notification)
+                    .setContentTitle(context.getString(
+                        R.string.background_sync_notification_group, newEmails.size))
+                    .setContentText(newEmails.joinToString(", ") {
+                        senderName(it.from, it.fromEmail) })
+                    .setStyle(inboxStyle)
+                    .setContentIntent(appIntent)
+                    .setAutoCancel(true)
+                    .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                    .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+                    .setAllowSystemGeneratedContextualActions(false)
+                    .setGroup(EMAIL_GROUP_KEY)
+                    .setGroupSummary(true)
+                    .build()
+                nm.notify(EMAIL_NOTIFICATION_ID, summary)
             } catch (securityError: SecurityException) {
                 Log.w(TAG, "Notification permission missing", securityError)
             }
@@ -186,14 +271,14 @@ class BackgroundEmailSyncReceiver {
             appIntent: android.app.PendingIntent
         ) = NotificationCompat.Builder(context, EMAIL_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(email.from.ifBlank { email.fromEmail })
-            .setContentText(email.subject)
-            .setStyle(NotificationCompat.BigTextStyle()
-                .bigText(email.preview.take(160).ifBlank { email.subject }))
+            .setContentTitle(senderName(email.from, email.fromEmail))
+            .setContentText(cleanSubject(email.subject))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(notificationBody(email)))
             .setContentIntent(appIntent)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setAllowSystemGeneratedContextualActions(false)
             .setWhen(email.receivedAt.takeIf { it > 0L } ?: System.currentTimeMillis())
             .setShowWhen(true)
             .build()

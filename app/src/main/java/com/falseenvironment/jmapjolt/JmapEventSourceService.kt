@@ -28,14 +28,23 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 
 class JmapEventSourceService : Service() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    // No read timeout on the base client; each SSE call overrides it per stream.
+    private val sharedSseClient: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .retryOnConnectionFailure(true)
+            .build()
+    }
     // Tracks emails of accounts that already have a running loop in this instance.
     private val activeLoops = ConcurrentHashMap.newKeySet<String>()
 
@@ -131,18 +140,33 @@ class JmapEventSourceService : Service() {
 
     private suspend fun connectAndListen(account: JMapClient.ConnectedAccount, url: String) =
         withContext(Dispatchers.IO) {
-            val conn = URL(url).openConnection() as HttpURLConnection
-            conn.setRequestProperty("Authorization", basicAuth(account))
-            conn.setRequestProperty("Accept", "text/event-stream")
-            conn.setRequestProperty("Cache-Control", "no-cache")
-            conn.connectTimeout = 15_000
-            conn.readTimeout = (PING_SECONDS * 2500)
+            // HttpURLConnection does not reliably stream a chunked SSE body (its
+            // transparent gzip buffers and readLine blocks). OkHttp streams the
+            // response source line-by-line. readTimeout is set just above the
+            // server ping interval so a stale half-open connection is detected
+            // within seconds and the outer loop reconnects.
+            val client = sharedSseClient.newBuilder()
+                .readTimeout((PING_SECONDS + 30).toLong(), TimeUnit.SECONDS)
+                .build()
+            val request = Request.Builder()
+                .url(url)
+                .header("Authorization", basicAuth(account))
+                .header("Accept", "text/event-stream")
+                .header("Cache-Control", "no-cache")
+                .header("Accept-Encoding", "identity")
+                .build()
+            val call = client.newCall(request)
+            val response = call.execute()
             try {
-                val reader = conn.inputStream.bufferedReader()
+                if (!response.isSuccessful) {
+                    throw java.io.IOException("SSE HTTP ${response.code}")
+                }
+                val source = response.body?.source()
+                    ?: throw java.io.IOException("SSE empty body")
                 var data = StringBuilder()
                 var eventType = ""
                 while (true) {
-                    val line = reader.readLine() ?: break
+                    val line = source.readUtf8Line() ?: break
                     when {
                         line.startsWith("event:") -> eventType = line.removePrefix("event:").trim()
                         line.startsWith("data:")  -> data.append(line.removePrefix("data:").trim())
@@ -154,7 +178,7 @@ class JmapEventSourceService : Service() {
                     }
                 }
             } finally {
-                try { conn.disconnect() } catch (_: Throwable) {}
+                try { response.close() } catch (_: Throwable) {}
             }
         }
 
@@ -222,8 +246,13 @@ class JmapEventSourceService : Service() {
             } else {
                 PendingIntent.getService(this, 1, restartIntent, flags)
             }
-            getSystemService(AlarmManager::class.java)
-                .set(AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + 5_000L, restart)
+            val alarmManager = getSystemService(AlarmManager::class.java)
+            val triggerAt = SystemClock.elapsedRealtime() + 5_000L
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, restart)
+            } else {
+                alarmManager.setExact(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, restart)
+            }
         }
         super.onTaskRemoved(rootIntent)
     }

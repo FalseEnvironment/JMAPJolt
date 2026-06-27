@@ -2666,6 +2666,10 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         onboardingPermRefresh?.invoke()
+        if (JmapEventSourceService.isEnabled(this) &&
+            BackgroundEmailSyncReceiver.readCurrentAccount(this) != null) {
+            JmapEventSourceService.start(this)
+        }
     }
 
     override fun onPause() {
