@@ -49,6 +49,16 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
         return h
     }
 
+    /**
+     * Rebinds only the rows whose email id is in [ids]. Row count and positions must be
+     * unchanged — callers that add/remove/reorder rows still need a full refresh.
+     */
+    fun notifyItemsChangedByIds(ids: Collection<String>) {
+        if (ids.isEmpty()) return
+        val set = if (ids is Set<String>) ids else ids.toSet()
+        activity.emails.forEachIndexed { i, e -> if (e.id in set) notifyItemChanged(i) }
+    }
+
     // Cached preference: reading SharedPreferences on every onBindViewHolder
     // costs a map lookup + potential lock per row while scrolling.
     var loadFaviconsEnabled: Boolean = activity

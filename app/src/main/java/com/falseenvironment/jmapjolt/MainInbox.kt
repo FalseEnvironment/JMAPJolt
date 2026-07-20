@@ -136,6 +136,19 @@ internal fun MainActivity.attachLabelDrag() {
     var dragMinDY = -Float.MAX_VALUE
     var dragMaxDY = Float.MAX_VALUE
 
+    // Neighbor rows shifted out of the way during a drag, with their applied offset.
+    // Animated manually via translationY: the adapter is Menu-backed, so
+    // notifyItemMoved-driven animations desync RecyclerView from the Menu (the old
+    // flicker/revert bug) — pure view translation stays outside the adapter entirely.
+    val shiftedRows = mutableMapOf<android.view.View, Float>()
+    // Net slots the dragged row has moved (as a translationY), so on drop it can be
+    // parked directly in its new slot instead of sliding back to the original one.
+    var draggedNetShift = 0f
+    // Last clamped drag translation, captured per-frame in onChildDraw — ItemTouchHelper's
+    // zero-length recovery wipes the view's translation before clearView runs, so this is
+    // the only record of where the finger actually released the row.
+    var lastDragDY = 0f
+
     val callback = object : ItemTouchHelper.Callback() {
         override fun isLongPressDragEnabled() = true
         override fun isItemViewSwipeEnabled() = false
@@ -168,17 +181,40 @@ internal fun MainActivity.attachLabelDrag() {
         ): Boolean {
             val fromId = itemIdOf(viewHolder) ?: return false
             val toId = itemIdOf(target) ?: return false
+            // With data-only swaps the layout never changes under the drag, so the same
+            // crossing keeps re-firing onMove every frame. Gate on visual position: only
+            // swap when the data order doesn't already match where the finger has put
+            // the row relative to the target — makes repeated calls no-ops instead of
+            // an A/B oscillation.
+            val selVisCenter = viewHolder.itemView.let { it.top + it.translationY + it.height / 2f }
+            val tgtVisCenter = target.itemView.let { it.top + it.translationY + it.height / 2f }
+            val shouldBeAbove = selVisCenter < tgtVisCenter
+            fun orderAlreadyCorrect(from: Int, to: Int): Boolean =
+                if (shouldBeAbove) from < to else from > to
+            // Slide the target row into the slot the dragged row is vacating.
+            fun animateTargetShift() {
+                val v = target.itemView
+                val shift = if (shouldBeAbove) viewHolder.itemView.height.toFloat()
+                            else -viewHolder.itemView.height.toFloat()
+                val newTy = (shiftedRows[v] ?: 0f) + shift
+                shiftedRows[v] = newTy
+                draggedNetShift -= shift
+                v.animate().translationY(newTy).setDuration(150).start()
+            }
             // Labels
             val fromKw = labelNavIds[fromId]
             val toKw = labelNavIds[toId]
             if (fromKw != null && toKw != null) {
                 val from = labels.indexOfFirst { it.keyword == fromKw }
                 val to = labels.indexOfFirst { it.keyword == toKw }
-                if (from < 0 || to < 0 || from == to) return false
+                if (from < 0 || to < 0 || from == to || orderAlreadyCorrect(from, to)) return false
+                // Data-only swap: the adapter is Menu-backed, so notifyItemMoved would
+                // animate rows the underlying Menu never reorders — RecyclerView and
+                // ItemTouchHelper desync and long drags cancel out in pairs. The static
+                // layout keeps every crossing test deterministic; clearView's menu
+                // rebuild applies the new order visually on drop.
                 labels.add(to, labels.removeAt(from))
-                recyclerView.adapter?.notifyItemMoved(
-                    viewHolder.bindingAdapterPosition, target.bindingAdapterPosition
-                )
+                animateTargetShift()
                 return true
             }
             // Subfolders
@@ -187,11 +223,10 @@ internal fun MainActivity.attachLabelDrag() {
             if (fromMbId != null && toMbId != null) {
                 val from = subfolderDisplayOrder.indexOf(fromMbId)
                 val to = subfolderDisplayOrder.indexOf(toMbId)
-                if (from < 0 || to < 0 || from == to) return false
+                if (from < 0 || to < 0 || from == to || orderAlreadyCorrect(from, to)) return false
+                // Data-only swap — same rationale as the labels branch above.
                 subfolderDisplayOrder.add(to, subfolderDisplayOrder.removeAt(from))
-                recyclerView.adapter?.notifyItemMoved(
-                    viewHolder.bindingAdapterPosition, target.bindingAdapterPosition
-                )
+                animateTargetShift()
                 return true
             }
             return false
@@ -204,6 +239,7 @@ internal fun MainActivity.attachLabelDrag() {
                     android.view.HapticFeedbackConstants.LONG_PRESS
                 )
                 viewHolder.itemView.alpha = 0.7f
+                draggedNetShift = 0f
 
                 // Snapshot the section's row bounds once, before any swap animation begins.
                 dragMinDY = -Float.MAX_VALUE
@@ -244,19 +280,72 @@ internal fun MainActivity.attachLabelDrag() {
             viewHolder.itemView.alpha = 1f
             dragMinDY = -Float.MAX_VALUE
             dragMaxDY = Float.MAX_VALUE
+            // Recovery animation is zero-length (getAnimationDuration), so ItemTouchHelper
+            // has just snapped the dragged row back to its layout slot. Restore it to
+            // where the finger released it, then swoosh it into the slot its data now
+            // occupies; neighbors hold their shifted positions until the rebuild.
+            viewHolder.itemView.translationY = lastDragDY
             saveLabels()
             saveSubfolderOrder()
-            // NavigationView's adapter is Menu-backed: notifyItemMoved during drag is
-            // purely cosmetic and the row reverts on any relayout unless the underlying
-            // Menu itself is rebuilt in the new order — so this rebuild is required, not optional.
-            // clearView() fires while the RecyclerView is still finishing its own layout
-            // pass (menu.clear() -> notifyDataSetChanged crashes with "Cannot call this
-            // method while RecyclerView is computing a layout or scrolling"), so defer
-            // one frame.
-            recyclerView.post { rebuildDrawerMenu() }
+            // NavigationView's adapter is Menu-backed: the row order reverts on any
+            // relayout unless the underlying Menu itself is rebuilt in the new order —
+            // so this rebuild is required, not optional. It runs from the animation's
+            // end callback (a safe frame, outside any RecyclerView layout pass), in the
+            // same frame all manual translations are zeroed, so the rebuilt layout takes
+            // over exactly where the animation ended.
+            viewHolder.itemView.animate()
+                .translationY(draggedNetShift)
+                .setDuration(180)
+                .withEndAction {
+                    shiftedRows.keys.forEach { it.animate().cancel(); it.translationY = 0f }
+                    shiftedRows.clear()
+                    viewHolder.itemView.translationY = 0f
+                    rebuildDrawerMenu()
+                }
+                .start()
         }
 
         override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {}
+
+        // Kill the drop "recovery" slide — by default ItemTouchHelper animates the
+        // released row back to its layout slot (the pre-drag position), which reads
+        // as a flick to the old spot right before the rebuild snaps it to the new one.
+        override fun getAnimationDuration(
+            recyclerView: RecyclerView,
+            animationType: Int,
+            animateDx: Float,
+            animateDy: Float
+        ): Long = 0L
+
+        // Default chooseDropTarget is asymmetric: upward swaps use strict comparisons
+        // against neighbors that are mid-swap-animation, so dragging up would flicker
+        // or intermittently revert while dragging down worked. Symmetric rule instead:
+        // swap with whichever candidate's center the dragged row's center has crossed.
+        override fun chooseDropTarget(
+            selected: RecyclerView.ViewHolder,
+            dropTargets: MutableList<RecyclerView.ViewHolder>,
+            curX: Int,
+            curY: Int
+        ): RecyclerView.ViewHolder? {
+            val selectedCenter = curY + selected.itemView.height / 2
+            var best: RecyclerView.ViewHolder? = null
+            var bestDist = Int.MAX_VALUE
+            for (target in dropTargets) {
+                // A neighbor mid-swap-animation has its layout `top` already updated
+                // while its visual position lags in translationY — compare against the
+                // on-screen center, or the crossing test fires against a position the
+                // row isn't actually at yet and the swap oscillates.
+                val visualTop = target.itemView.top + target.itemView.translationY
+                val targetCenter = (visualTop + target.itemView.height / 2f).toInt()
+                val movingUp = targetCenter < selected.itemView.top + selected.itemView.height / 2
+                val crossed = if (movingUp) selectedCenter <= targetCenter
+                              else selectedCenter >= targetCenter
+                if (!crossed) continue
+                val dist = kotlin.math.abs(selectedCenter - targetCenter)
+                if (dist < bestDist) { bestDist = dist; best = target }
+            }
+            return best
+        }
 
         // Clamp the visual drag translation so a dragged row can't be pulled past
         // the boundaries of its own section (labels only travel within labels,
@@ -273,7 +362,7 @@ internal fun MainActivity.attachLabelDrag() {
             isCurrentlyActive: Boolean
         ) {
             val clampedDY = if (actionState == ItemTouchHelper.ACTION_STATE_DRAG) {
-                dY.coerceIn(dragMinDY, dragMaxDY)
+                dY.coerceIn(dragMinDY, dragMaxDY).also { if (isCurrentlyActive) lastDragDY = it }
             } else dY
             super.onChildDraw(c, recyclerView, viewHolder, dX, clampedDY, actionState, isCurrentlyActive)
         }

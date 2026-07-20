@@ -1031,7 +1031,7 @@ class MainActivity : AppCompatActivity() {
             if (account != null) {
                 // 1. Optimistic local UI update
                 email.seen = true
-                emailAdapter.notifyDataSetChanged()
+                emailAdapter.notifyItemsChangedByIds(listOf(email.id))
                 saveEmailCache()
 
                 // 2. Asynchronous JMAP server update
@@ -1200,7 +1200,7 @@ class MainActivity : AppCompatActivity() {
                 // visible there (an email can be both favourited and archived).
                 if (action == "archive" && selectedFolder == R.id.nav_favourite) {
                     clearSelection()
-                    emailAdapter.notifyDataSetChanged()
+                    emailAdapter.notifyItemsChangedByIds(ids)
                     Snackbar.make(drawerLayout, "Archived", Snackbar.LENGTH_SHORT).show()
                     lifecycleScope.launch {
                         try {
@@ -1270,7 +1270,7 @@ class MainActivity : AppCompatActivity() {
                 emails.forEach { if (it.id in ids) it.seen = newState }
                 baseEmails.forEach { if (it.id in ids) it.seen = newState }
                 clearSelection()
-                emailAdapter.notifyDataSetChanged()
+                emailAdapter.notifyItemsChangedByIds(ids)
                 saveEmailCache()
                 lifecycleScope.launch {
                     try {
@@ -1471,7 +1471,7 @@ class MainActivity : AppCompatActivity() {
                             val allSeen = ids.all { id -> emails.find { e -> e.id == id }?.seen == true }
                             val newState = !allSeen
                             emails.forEach { if (it.id in ids) it.seen = newState }
-                            emailAdapter.notifyDataSetChanged()
+                            emailAdapter.notifyItemsChangedByIds(ids)
                             saveEmailCache()
 
                             lifecycleScope.launch {
@@ -1490,8 +1490,9 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 override fun onDestroyActionMode(mode: androidx.appcompat.view.ActionMode) {
+                    val wasSelected = selectedEmails.toList()
                     selectedEmails.clear()
-                    emailAdapter.notifyDataSetChanged()
+                    emailAdapter.notifyItemsChangedByIds(wasSelected)
                 }
             }
 
@@ -3213,11 +3214,14 @@ class MainActivity : AppCompatActivity() {
             clearSelection()
             // Removing a favourite while viewing Favourites drops it from the list now.
             if (!newState && selectedFolder == R.id.nav_favourite) {
+                // Rows were removed, positions shifted — full refresh required.
                 emails.removeAll { it.id in ids }
                 baseEmails.removeAll { it.id in ids }
                 folderCache[R.id.nav_favourite] = emails.toList()
+                emailAdapter.notifyDataSetChanged()
+            } else {
+                emailAdapter.notifyItemsChangedByIds(ids)
             }
-            emailAdapter.notifyDataSetChanged()
             emptyStateView.visibility = if (emails.isEmpty()) View.VISIBLE else View.GONE
             emailsRecyclerView.visibility = if (emails.isEmpty()) View.GONE else View.VISIBLE
             saveEmailCache()

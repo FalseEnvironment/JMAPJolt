@@ -603,7 +603,7 @@ internal fun MainActivity.showEditLabelDialog(label: EmailLabel, onSaved: () -> 
         label.colorHex = hsvHex(pendingHsv)
         saveLabels()
         rebuildDrawerMenuPublic()
-        emailAdapter.notifyDataSetChanged()
+        emailAdapter.notifyItemsChangedByIds(emails.filter { label.keyword in it.labels }.map { it.id })
         updateDetailLabelIcon()
         onSaved()
         true
@@ -630,7 +630,7 @@ internal fun MainActivity.applyLabelToEmails(ids: List<String>, label: EmailLabe
             if (det.id == id) det.labels = patched(det.labels)
         }
     }
-    emailAdapter.notifyDataSetChanged()
+    emailAdapter.notifyItemsChangedByIds(ids)
     updateDetailLabelIcon()
     saveEmailCache()
     val fallback = connectedAccount ?: return
@@ -737,7 +737,7 @@ internal fun MainActivity.showLabelEditorDialog() {
                         label.colorHex = hex
                         saveLabels()
                         rebuildDrawerMenuPublic()
-                        emailAdapter.notifyDataSetChanged()
+                        emailAdapter.notifyItemsChangedByIds(emails.filter { label.keyword in it.labels }.map { it.id })
                         updateDetailLabelIcon()
                         rebuildRows()
                     }
@@ -785,7 +785,7 @@ internal fun MainActivity.showLabelEditorDialog() {
                         selectedFolder = R.id.nav_inbox
                     }
                     rebuildDrawerMenuPublic()
-                    emailAdapter.notifyDataSetChanged()
+                    emailAdapter.notifyItemsChangedByIds(emails.filter { label.keyword in it.labels }.map { it.id })
                     updateDetailLabelIcon()
                     rebuildRows()
                 }
