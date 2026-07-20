@@ -18,6 +18,8 @@ import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.toColorInt
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -220,6 +222,37 @@ internal fun MainActivity.showFolderEditorDialog() {
             })
             row.addView(iconBtn(R.drawable.ic_lucide_pencil, accentInt) {
                 showEditFolderDialog(mbox, meta) { rebuildRows() }
+            })
+            row.addView(iconBtn(R.drawable.ic_lucide_trash, "#D32F2F".toColorInt()) {
+                showThemedConfirmDialog(
+                    title = "Delete folder",
+                    message = "Delete \"${folderDisplayName(mbox)}\"? Emails inside will also be deleted.",
+                    confirmLabel = "Delete",
+                    isDangerous = true
+                ) {
+                    val account = connectedAccount
+                    if (account == null) {
+                        rebuildRows()
+                        return@showThemedConfirmDialog
+                    }
+                    lifecycleScope.launch {
+                        val ok = jmapClient.deleteMailbox(account, mbox.id)
+                        if (ok) {
+                            mailboxCache = mailboxCache?.filterNot { it.id == mbox.id }
+                            folderMeta.remove(meta)
+                            saveFolderMeta()
+                            subfolderDisplayOrder.remove(mbox.id)
+                            saveSubfolderOrder()
+                            if (subfolderNavIds[selectedFolder] == mbox.id) {
+                                selectedFolder = R.id.nav_inbox
+                            }
+                            rebuildDrawerMenuPublic()
+                        } else {
+                            showThemedSnackbar("Could not delete folder")
+                        }
+                        rebuildRows()
+                    }
+                }
             })
             list.addView(row)
         }

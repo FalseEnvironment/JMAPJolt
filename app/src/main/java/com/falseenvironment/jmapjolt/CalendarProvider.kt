@@ -96,6 +96,7 @@ object CalendarProvider {
             ContentUris.appendId(this, to)
         }.build()
         val out = mutableListOf<EventOccurrence>()
+        val rowIds = mutableSetOf<Long>()
         runCatching {
             context.contentResolver.query(uri, cols, null, null, "${CalendarContract.Instances.BEGIN} ASC")
                 ?.use { c ->
@@ -105,8 +106,10 @@ object CalendarProvider {
                         val allDay = c.getInt(4) == 1
                         val dur = ((end - begin) / 60_000L).toInt().coerceAtLeast(0)
                         val color = c.getInt(7)
+                        val rowId = c.getLong(0)
+                        rowIds += rowId
                         val event = CalendarEvent(
-                            id = eventId(c.getLong(0)),
+                            id = eventId(rowId),
                             calendarId = c.getLong(9).toString(),
                             title = c.getString(3) ?: "(no title)",
                             description = c.getString(6) ?: "",
@@ -120,6 +123,35 @@ object CalendarProvider {
                         out += EventOccurrence(event, begin, end)
                     }
                 }
+        }
+        if (rowIds.isEmpty()) return out
+        val reminders = reminderMinutesByEventId(context, rowIds)
+        if (reminders.isEmpty()) return out
+        return out.map { occ ->
+            val mins = reminders[rowId(occ.event.id)] ?: return@map occ
+            occ.copy(event = occ.event.copy(reminderMinutes = mins))
+        }
+    }
+
+    /** Earliest reminder (minutes-before-start) per event row id, for events that have one. */
+    private fun reminderMinutesByEventId(context: Context, eventRowIds: Set<Long>): Map<Long, Int> {
+        val out = mutableMapOf<Long, Int>()
+        runCatching {
+            val placeholders = eventRowIds.joinToString(",") { "?" }
+            context.contentResolver.query(
+                CalendarContract.Reminders.CONTENT_URI,
+                arrayOf(CalendarContract.Reminders.EVENT_ID, CalendarContract.Reminders.MINUTES),
+                "${CalendarContract.Reminders.EVENT_ID} IN ($placeholders)",
+                eventRowIds.map { it.toString() }.toTypedArray(),
+                null
+            )?.use { c ->
+                while (c.moveToNext()) {
+                    val id = c.getLong(0)
+                    val mins = c.getInt(1)
+                    val current = out[id]
+                    if (current == null || mins < current) out[id] = mins
+                }
+            }
         }
         return out
     }

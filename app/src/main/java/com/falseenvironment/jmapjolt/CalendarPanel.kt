@@ -1,5 +1,6 @@
 package com.falseenvironment.jmapjolt
 
+import android.content.res.ColorStateList
 import android.graphics.PorterDuff
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
@@ -154,22 +155,35 @@ class CalendarPanel(private val activity: MainActivity) : FrameLayout(activity) 
 
         var popupRef: android.widget.PopupWindow? = null
 
-        fun row(label: String, action: () -> Unit): LinearLayout =
+        fun row(label: String, iconRes: Int, action: () -> Unit): LinearLayout =
             LinearLayout(activity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 layoutParams = LinearLayout.LayoutParams(dp(200), dp(48))
                 val hp = dp(16)
                 setPadding(hp, 0, hp, 0)
+                addView(ImageView(activity).apply {
+                    setImageResource(iconRes)
+                    imageTintList = ColorStateList.valueOf(palette.onAccent)
+                    val sz = dp(18)
+                    layoutParams = LinearLayout.LayoutParams(sz, sz).also { it.marginEnd = dp(12) }
+                })
                 addView(TextView(activity).apply {
                     text = label; textSize = 14f; setTextColor(palette.onAccent)
                 })
                 setOnClickListener { popupRef?.dismiss(); action() }
             }
 
-        container.addView(row("Go to…") { showGoToDatePicker() })
-        container.addView(row("Import calendar .ics") { activity.launchCalendarIcsImport() })
-        container.addView(row("Add CalDAV account") { CalendarDavx5.launch(activity) })
+        fun divider() = View(activity).apply {
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1)
+            setBackgroundColor(0x22FFFFFF)
+        }
+
+        container.addView(row("Go to…", R.drawable.ic_lucide_chevron_right) { showGoToDatePicker() })
+        container.addView(divider())
+        container.addView(row("Import calendar .ics", R.drawable.ic_lucide_download) { activity.launchCalendarIcsImport() })
+        container.addView(divider())
+        container.addView(row("Add CalDAV account", R.drawable.ic_lucide_user) { CalendarDavx5.launch(activity) })
 
         val pw = android.widget.PopupWindow(
             container,

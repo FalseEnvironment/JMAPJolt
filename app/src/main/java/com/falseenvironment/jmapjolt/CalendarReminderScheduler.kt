@@ -62,7 +62,7 @@ object CalendarReminderScheduler {
         if (!canScheduleExact(context)) return
 
         val now = System.currentTimeMillis()
-        val occs = CalendarStore.occurrences(context, now, now + WINDOW_AHEAD_MS)
+        val occs = CalendarRepository.occurrences(context, now, now + WINDOW_AHEAD_MS)
         val am = alarmManager(context)
         val codes = JSONArray()
 

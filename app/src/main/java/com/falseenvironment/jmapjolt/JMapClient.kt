@@ -686,6 +686,39 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
         }
     }
 
+    /** Destroys a mailbox (folder) on the server. */
+    suspend fun deleteMailbox(
+        connectedAccount: ConnectedAccount,
+        mailboxId: String
+    ): Boolean = withContext(Dispatchers.IO) {
+        val client = newClient(connectedAccount)
+        client.use { jmapClient ->
+            val session = jmapClient.getSession().get(12, TimeUnit.SECONDS)
+            val accountId = session.getPrimaryAccount(MailAccountCapability::class.java)
+                ?: return@withContext false
+
+            val setCall = rs.ltt.jmap.common.method.call.mailbox.SetMailboxMethodCall.builder()
+                .accountId(accountId)
+                .destroy(arrayOf(mailboxId))
+                .build()
+
+            try {
+                val response = jmapClient.call(setCall).get()
+                    .getMain(rs.ltt.jmap.common.method.response.mailbox.SetMailboxMethodResponse::class.java)
+                val notDestroyed = response.notDestroyed?.get(mailboxId)
+                if (notDestroyed != null) {
+                    Log.e(TAG, "deleteMailbox '$mailboxId' not destroyed: type=${notDestroyed.type} desc=${notDestroyed.description}")
+                    false
+                } else {
+                    true
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "deleteMailbox '$mailboxId' failed", e)
+                false
+            }
+        }
+    }
+
     suspend fun resolveMailboxIdByRole(
         connectedAccount: ConnectedAccount,
         role: String
