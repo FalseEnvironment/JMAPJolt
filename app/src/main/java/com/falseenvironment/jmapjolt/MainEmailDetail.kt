@@ -675,7 +675,9 @@ internal fun MainActivity.showDetailAddressDialog() {
     row("FROM", listOf(email.from, email.fromEmail).filter { it.isNotBlank() }.distinct().joinToString(" · "))
     row("TO", email.toEmail.ifBlank { email.accountEmail.ifBlank { "me" } })
     if (email.receivedAt > 0) {
-        row("DATE", java.text.DateFormat.getDateTimeInstance().format(java.util.Date(email.receivedAt)))
+        row("DATE", java.text.DateFormat.getDateTimeInstance(
+            java.text.DateFormat.LONG, java.text.DateFormat.SHORT, java.util.Locale.ENGLISH
+        ).format(java.util.Date(email.receivedAt)))
     }
 
     val pw = android.widget.PopupWindow(

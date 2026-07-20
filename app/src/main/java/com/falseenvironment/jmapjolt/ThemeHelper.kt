@@ -303,6 +303,15 @@ internal fun MainActivity.applyAccentColor() {
     settingsEditLabelsButton.setTextColor(Color.WHITE)
     settingsEditLabelsButton.gravity = android.view.Gravity.CENTER
     settingsEditLabelsButton.setPadding((14 * d).toInt(), (8 * d).toInt(), (14 * d).toInt(), (8 * d).toInt())
+    settingsEditFoldersButton.background = GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        cornerRadius = 999 * d
+        setColor(dropdownBg)
+        setStroke(d.toInt(), dropdownStroke)
+    }
+    settingsEditFoldersButton.setTextColor(Color.WHITE)
+    settingsEditFoldersButton.gravity = android.view.Gravity.CENTER
+    settingsEditFoldersButton.setPadding((14 * d).toInt(), (8 * d).toInt(), (14 * d).toInt(), (8 * d).toInt())
     settingsCalAddProviderButton.background = GradientDrawable().apply {
         shape = GradientDrawable.RECTANGLE
         cornerRadius = 999 * d

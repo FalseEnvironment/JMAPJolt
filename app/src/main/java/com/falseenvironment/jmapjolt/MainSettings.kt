@@ -522,6 +522,12 @@ internal fun MainActivity.bindSettingsActions() {
     settingsEditLabelsButton.apply {
         setOnClickListener { showLabelEditorDialog() }
     }
+    findViewById<LinearLayout>(R.id.settingsEditFoldersRow).setOnClickListener {
+        showFolderEditorDialog()
+    }
+    settingsEditFoldersButton.apply {
+        setOnClickListener { showFolderEditorDialog() }
+    }
 
     unifiedPushSwitch.setOnCheckedChangeListener { _: CompoundButton, enabled: Boolean ->
         saveUnifiedPushEnabled(enabled)

@@ -428,6 +428,49 @@ internal fun MainActivity.rebuildDrawerMenu() {
         item.isCheckable = true
     }
 
+    // User-created folders (mailboxes without a JMAP role, sorted in tree order)
+    val userFolders = mailboxCache?.filter { it.role == null } ?: emptyList()
+    if (userFolders.isNotEmpty()) {
+        val knownMailboxIds = userFolders.map { it.id }.toSet()
+        subfolderNavIds.keys.retainAll { subfolderNavIds[it] in knownMailboxIds }
+        val ordered = mutableListOf<Pair<JMapClient.MailboxInfo, Int>>()
+        fun addTree(items: List<JMapClient.MailboxInfo>, depth: Int) {
+            items.sortedBy { it.name }.forEach { mbox ->
+                ordered.add(mbox to depth)
+                addTree(userFolders.filter { it.parentId == mbox.id }, depth + 1)
+            }
+        }
+        addTree(userFolders.filter { it.parentId == null }, 0)
+        // Ensure display order is always populated so drag reorder works immediately.
+        if (subfolderDisplayOrder.isEmpty()) {
+            subfolderDisplayOrder = ordered.map { it.first.id }.toMutableList()
+        } else {
+            // Append any new mailboxes that aren't tracked yet.
+            val known = subfolderDisplayOrder.toSet()
+            ordered.forEach { (mbox, _) -> if (mbox.id !in known) subfolderDisplayOrder.add(mbox.id) }
+        }
+        val displayOrdered = ordered.sortedBy { (mbox, _) ->
+            subfolderDisplayOrder.indexOf(mbox.id).let { if (it < 0) Int.MAX_VALUE else it }
+        }
+        displayOrdered.forEach { (mbox, depth) ->
+            val navId = subfolderNavIds.entries.find { it.value == mbox.id }?.key
+                ?: View.generateViewId().also { subfolderNavIds[it] = mbox.id }
+            val indent = "    ".repeat(depth)
+            val displayName = "$indent${folderDisplayName(mbox)}"
+            val title: CharSequence = if (navId == selectedFolder) {
+                android.text.SpannableString(displayName).apply {
+                    setSpan(android.text.style.StyleSpan(Typeface.BOLD), 0, displayName.length, 0)
+                }
+            } else {
+                displayName
+            }
+            val item = menu.add(0, navId, orderIdx++, title)
+            item.setIcon(R.drawable.ic_lucide_folder)
+            item.icon?.mutate()?.setTint(folderIconColor(mbox.id, defaultIconTint))
+            item.isCheckable = true
+        }
+    }
+
     val calendarEnabled = CalendarPrefs.isEnabled(this)
     val calendarItem = if (calendarEnabled) {
         menu.add(0, R.id.nav_calendar, orderIdx, getString(R.string.calendar_title)).apply {

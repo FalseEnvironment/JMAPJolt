@@ -198,6 +198,7 @@ class MainActivity : AppCompatActivity() {
     internal lateinit var customTopBar: LinearLayout
     internal lateinit var topBarAccentArea: LinearLayout
     internal lateinit var settingsEditLabelsButton: TextView
+    internal lateinit var settingsEditFoldersButton: TextView
     internal lateinit var folderLabel: TextView
     internal lateinit var searchBarMenuIcon: ImageView
     internal lateinit var searchBarTitle: TextView
@@ -306,12 +307,18 @@ class MainActivity : AppCompatActivity() {
     /** User labels (ordered) + drawer menu ids assigned to each label keyword. */
     internal val labels = mutableListOf<EmailLabel>()
     internal val accountLabelsCache = mutableMapOf<String, List<EmailLabel>>()
+    internal val folderMeta = mutableListOf<FolderMeta>()
+    internal val accountFolderMetaCache = mutableMapOf<String, List<FolderMeta>>()
     internal val labelNavIds = linkedMapOf<Int, String>()
+    /** navId → mailbox server ID for user-defined subfolders (no JMAP role). */
+    internal val subfolderNavIds = linkedMapOf<Int, String>()
     internal lateinit var detailLabelRowView: LinearLayout
     internal val isDetailLabelRowViewInit: Boolean get() = ::detailLabelRowView.isInitialized
     internal fun debugTs(): String =
         java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
     internal var labelDragHelper: ItemTouchHelper? = null
+    /** mailboxIds in user-defined display order for the Folders section of the drawer. */
+    internal var subfolderDisplayOrder: MutableList<String> = mutableListOf()
 
     internal val categoryOrder =
             mutableListOf(
@@ -552,6 +559,7 @@ class MainActivity : AppCompatActivity() {
         quoteIndicatorRemove = findViewById(R.id.quoteIndicatorRemove)
         quoteIndicatorDivider = findViewById(R.id.quoteIndicatorDivider)
         settingsEditLabelsButton = findViewById(R.id.settingsEditLabelsButton)
+        settingsEditFoldersButton = findViewById(R.id.settingsEditFoldersButton)
         quoteIndicatorRemove.setOnClickListener { clearPendingQuote() }
         val drawerHeader = navigationView.getHeaderView(0)
         drawerAccountName = drawerHeader.findViewById(R.id.drawerAccountName)
@@ -588,6 +596,8 @@ class MainActivity : AppCompatActivity() {
         setupComposeView()
         loadCategoryPreferences()
         loadLabels()
+        loadSubfolderOrder()
+        loadFolderMeta()
         setupAdapters()
         setupSwipeSpinners()
         setupThemeSpinner()
@@ -1564,13 +1574,24 @@ class MainActivity : AppCompatActivity() {
         val isInbox = selectedFolder == R.id.nav_inbox
         val isUnifiedInbox = selectedFolder == R.id.nav_unified_inbox
         val labelKeyword = labelNavIds[selectedFolder]
+        val subfolderMailboxId = subfolderNavIds[selectedFolder]
         val folderTitle = getCurrentMailboxTitle()
 
         syncJob =
                 lifecycleScope.launch {
-                    // Warm the mailbox cache so the "Move to" sheet opens without waiting on the network.
-                    if (mailboxCache == null) {
-                        runCatching { mailboxCache = jmapClient.fetchMailboxes(account) }
+                    // Refresh mailbox list each sync cycle so new/deleted folders appear promptly.
+                    // Compare by id set, not list equality: the server may return mailboxes
+                    // in a different order each call, and a list-equality check would then
+                    // force a menu rebuild every cycle — fighting the user's local drag
+                    // reorder (subfolderDisplayOrder) with a visible flicker/reset.
+                    runCatching {
+                        val fresh = jmapClient.fetchMailboxes(account)
+                        val freshIds = fresh.map { it.id to it.name to it.parentId to it.role }.toSet()
+                        val cachedIds = mailboxCache?.map { it.id to it.name to it.parentId to it.role }?.toSet()
+                        mailboxCache = fresh
+                        if (freshIds != cachedIds) {
+                            navigationView.post { rebuildDrawerMenu() }
+                        }
                     }
                     while (true) {
                         try {
@@ -1634,6 +1655,8 @@ class MainActivity : AppCompatActivity() {
                             val fresh =
                                     if (labelKeyword != null) {
                                         jmapClient.fetchEmailsByKeyword(account, labelKeyword, emailLimit)
+                                    } else if (subfolderMailboxId != null) {
+                                        jmapClient.fetchEmails(account, subfolderMailboxId, emailLimit)
                                     } else if (isFav) {
                                         jmapClient.fetchStarredEmails(account, emailLimit)
                                     } else if (isInbox) {
@@ -2473,6 +2496,8 @@ class MainActivity : AppCompatActivity() {
         )
         currentAccountEmail = account.email
         loadLabels()
+        loadSubfolderOrder()
+        loadFolderMeta()
         saveAccounts()
         renderAccountHeader()
 
@@ -2685,6 +2710,9 @@ class MainActivity : AppCompatActivity() {
     internal fun getCurrentMailboxTitle(): String {
         labelNavIds[selectedFolder]?.let { kw ->
             labelByKeyword(kw)?.let { return it.name }
+        }
+        subfolderNavIds[selectedFolder]?.let { mailboxId ->
+            mailboxCache?.find { it.id == mailboxId }?.let { return folderDisplayName(it) }
         }
         return categoryNames[selectedFolder]?.takeIf { it.isNotBlank() }
                 ?: getDefaultCategoryTitle(selectedFolder)
@@ -2974,13 +3002,16 @@ class MainActivity : AppCompatActivity() {
 
         var dialog: AlertDialog? = null
 
-        mailboxes.forEach { mbox ->
+        // System folders first (have a role), then user-created folders (role == null), sorted by name.
+        val sortedMailboxes = mailboxes.sortedWith(compareBy({ it.role == null }, { it.name }))
+        sortedMailboxes.forEach { mbox ->
             val iconRes = when (mbox.role?.lowercase()) {
                 "inbox" -> R.drawable.ic_lucide_inbox
                 "archive" -> R.drawable.ic_lucide_archive
                 "sent" -> R.drawable.ic_lucide_send
                 "junk", "spam" -> R.drawable.ic_lucide_ban
                 "starred", "flagged" -> R.drawable.ic_lucide_star
+                null -> R.drawable.ic_lucide_folder_input
                 else -> R.drawable.ic_lucide_tag
             }
             val isDisabled = mbox.role?.lowercase() in disabledRoles

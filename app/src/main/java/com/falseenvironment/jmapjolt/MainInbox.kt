@@ -130,6 +130,12 @@ internal fun MainActivity.attachLabelDrag() {
         return (itemView.itemData as? MenuItem)?.itemId
     }
 
+    // Section drag bounds are computed once when a drag starts, not per-frame —
+    // recomputing from live child positions during the swap animation feeds back
+    // into the clamp and causes visible jitter as neighbors are mid-transition.
+    var dragMinDY = -Float.MAX_VALUE
+    var dragMaxDY = Float.MAX_VALUE
+
     val callback = object : ItemTouchHelper.Callback() {
         override fun isLongPressDragEnabled() = true
         override fun isItemViewSwipeEnabled() = false
@@ -139,7 +145,7 @@ internal fun MainActivity.attachLabelDrag() {
             viewHolder: RecyclerView.ViewHolder
         ): Int {
             val id = itemIdOf(viewHolder) ?: return 0
-            return if (labelNavIds.containsKey(id))
+            return if (labelNavIds.containsKey(id) || subfolderNavIds.containsKey(id))
                 makeMovementFlags(ItemTouchHelper.UP or ItemTouchHelper.DOWN, 0)
             else 0
         }
@@ -149,8 +155,10 @@ internal fun MainActivity.attachLabelDrag() {
             current: RecyclerView.ViewHolder,
             target: RecyclerView.ViewHolder
         ): Boolean {
-            val id = itemIdOf(target) ?: return false
-            return labelNavIds.containsKey(id)
+            val fromId = itemIdOf(current) ?: return false
+            val toId = itemIdOf(target) ?: return false
+            return (labelNavIds.containsKey(fromId) && labelNavIds.containsKey(toId)) ||
+                   (subfolderNavIds.containsKey(fromId) && subfolderNavIds.containsKey(toId))
         }
 
         override fun onMove(
@@ -158,41 +166,136 @@ internal fun MainActivity.attachLabelDrag() {
             viewHolder: RecyclerView.ViewHolder,
             target: RecyclerView.ViewHolder
         ): Boolean {
-            val fromKw = itemIdOf(viewHolder)?.let { labelNavIds[it] } ?: return false
-            val toKw = itemIdOf(target)?.let { labelNavIds[it] } ?: return false
-            val from = labels.indexOfFirst { it.keyword == fromKw }
-            val to = labels.indexOfFirst { it.keyword == toKw }
-            if (from < 0 || to < 0 || from == to) return false
-            labels.add(to, labels.removeAt(from))
-            // Don't save on every step – only on drop (clearView).
-            recyclerView.adapter?.notifyItemMoved(
-                viewHolder.bindingAdapterPosition, target.bindingAdapterPosition
-            )
-            return true
+            val fromId = itemIdOf(viewHolder) ?: return false
+            val toId = itemIdOf(target) ?: return false
+            // Labels
+            val fromKw = labelNavIds[fromId]
+            val toKw = labelNavIds[toId]
+            if (fromKw != null && toKw != null) {
+                val from = labels.indexOfFirst { it.keyword == fromKw }
+                val to = labels.indexOfFirst { it.keyword == toKw }
+                if (from < 0 || to < 0 || from == to) return false
+                labels.add(to, labels.removeAt(from))
+                recyclerView.adapter?.notifyItemMoved(
+                    viewHolder.bindingAdapterPosition, target.bindingAdapterPosition
+                )
+                return true
+            }
+            // Subfolders
+            val fromMbId = subfolderNavIds[fromId]
+            val toMbId = subfolderNavIds[toId]
+            if (fromMbId != null && toMbId != null) {
+                val from = subfolderDisplayOrder.indexOf(fromMbId)
+                val to = subfolderDisplayOrder.indexOf(toMbId)
+                if (from < 0 || to < 0 || from == to) return false
+                subfolderDisplayOrder.add(to, subfolderDisplayOrder.removeAt(from))
+                recyclerView.adapter?.notifyItemMoved(
+                    viewHolder.bindingAdapterPosition, target.bindingAdapterPosition
+                )
+                return true
+            }
+            return false
         }
 
         override fun onSelectedChanged(viewHolder: RecyclerView.ViewHolder?, actionState: Int) {
             super.onSelectedChanged(viewHolder, actionState)
-            if (actionState == ItemTouchHelper.ACTION_STATE_DRAG) {
-                viewHolder?.itemView?.performHapticFeedback(
+            if (actionState == ItemTouchHelper.ACTION_STATE_DRAG && viewHolder != null) {
+                viewHolder.itemView.performHapticFeedback(
                     android.view.HapticFeedbackConstants.LONG_PRESS
                 )
-                viewHolder?.itemView?.alpha = 0.7f
+                viewHolder.itemView.alpha = 0.7f
+
+                // Snapshot the section's row bounds once, before any swap animation begins.
+                dragMinDY = -Float.MAX_VALUE
+                dragMaxDY = Float.MAX_VALUE
+                val id = itemIdOf(viewHolder)
+                val sectionIds: Set<Int>? = when {
+                    id != null && labelNavIds.containsKey(id) -> labelNavIds.keys
+                    id != null && subfolderNavIds.containsKey(id) -> subfolderNavIds.keys
+                    else -> null
+                }
+                if (sectionIds != null) {
+                    var minTop = Float.MAX_VALUE
+                    var maxBottom = -Float.MAX_VALUE
+                    for (i in 0 until rv.childCount) {
+                        val child = rv.getChildAt(i)
+                        val childId = itemIdOf(rv.getChildViewHolder(child))
+                        if (childId != null && childId in sectionIds) {
+                            minTop = minOf(minTop, child.top.toFloat())
+                            maxBottom = maxOf(maxBottom, child.bottom.toFloat())
+                        }
+                    }
+                    if (minTop != Float.MAX_VALUE) {
+                        val itemHeight = viewHolder.itemView.height
+                        // Half-item slack past the section edges: ItemTouchHelper's
+                        // chooseDropTarget uses strict comparisons for upward swaps, so
+                        // clamping exactly at the boundary makes the top-most swap
+                        // trigger only intermittently (down was fine, up flickered).
+                        val slack = itemHeight / 2f
+                        dragMinDY = minTop - viewHolder.itemView.top - slack
+                        dragMaxDY = maxBottom - itemHeight - viewHolder.itemView.top + slack
+                    }
+                }
             }
         }
 
         override fun clearView(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder) {
             super.clearView(recyclerView, viewHolder)
             viewHolder.itemView.alpha = 1f
-            // Persist new order and immediately re-sync the drawer menu (no post{}
-            // so there is no visible delay between releasing the drag and the menu updating).
+            dragMinDY = -Float.MAX_VALUE
+            dragMaxDY = Float.MAX_VALUE
             saveLabels()
-            rebuildDrawerMenu()
+            saveSubfolderOrder()
+            // NavigationView's adapter is Menu-backed: notifyItemMoved during drag is
+            // purely cosmetic and the row reverts on any relayout unless the underlying
+            // Menu itself is rebuilt in the new order — so this rebuild is required, not optional.
+            // clearView() fires while the RecyclerView is still finishing its own layout
+            // pass (menu.clear() -> notifyDataSetChanged crashes with "Cannot call this
+            // method while RecyclerView is computing a layout or scrolling"), so defer
+            // one frame.
+            recyclerView.post { rebuildDrawerMenu() }
         }
 
         override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {}
+
+        // Clamp the visual drag translation so a dragged row can't be pulled past
+        // the boundaries of its own section (labels only travel within labels,
+        // folders only within folders) even though canDropOver already blocks the
+        // actual reorder — without this the row still visually escapes into the
+        // adjacent section while following the finger.
+        override fun onChildDraw(
+            c: android.graphics.Canvas,
+            recyclerView: RecyclerView,
+            viewHolder: RecyclerView.ViewHolder,
+            dX: Float,
+            dY: Float,
+            actionState: Int,
+            isCurrentlyActive: Boolean
+        ) {
+            val clampedDY = if (actionState == ItemTouchHelper.ACTION_STATE_DRAG) {
+                dY.coerceIn(dragMinDY, dragMaxDY)
+            } else dY
+            super.onChildDraw(c, recyclerView, viewHolder, dX, clampedDY, actionState, isCurrentlyActive)
+        }
     }
     labelDragHelper = ItemTouchHelper(callback).also { it.attachToRecyclerView(rv) }
+}
+
+internal fun MainActivity.saveSubfolderOrder() {
+    val email = currentAccountEmail ?: return
+    val arr = JSONArray().apply { subfolderDisplayOrder.forEach { put(it) } }
+    getSharedPreferences(MainActivity.PREFS_NAME, android.content.Context.MODE_PRIVATE)
+        .edit().putString("subfolder_display_order_$email", arr.toString()).apply()
+}
+
+internal fun MainActivity.loadSubfolderOrder() {
+    val email = currentAccountEmail ?: return
+    val raw = getSharedPreferences(MainActivity.PREFS_NAME, android.content.Context.MODE_PRIVATE)
+        .getString("subfolder_display_order_$email", null) ?: return
+    runCatching {
+        subfolderDisplayOrder = (0 until JSONArray(raw).length())
+            .map { JSONArray(raw).getString(it) }.toMutableList()
+    }
 }
 
 internal fun MainActivity.attachMailSwipe() {
@@ -545,7 +648,11 @@ internal fun MainActivity.applyFolderFilterAndRefresh() {
 internal fun MainActivity.cacheBucket(folderId: Int): String? {
     val scope = if (folderId == R.id.nav_unified_inbox) "unified"
         else connectedAccount?.email ?: return null
-    return com.falseenvironment.jmapjolt.cache.EmailCacheStore.bucket(scope, folderId)
+    // Subfolders use a stable server mailboxId so the cache survives app restarts
+    // (the navId is dynamically generated and changes each session).
+    val stableKey = subfolderNavIds[folderId]?.let { "subfolder_$it" }
+    return if (stableKey != null) "$scope#$stableKey"
+    else com.falseenvironment.jmapjolt.cache.EmailCacheStore.bucket(scope, folderId)
 }
 
 internal fun MainActivity.loadOfflineCache(folderId: Int) {

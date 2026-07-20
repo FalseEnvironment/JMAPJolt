@@ -75,6 +75,8 @@
     <string name="settings_labels">Labels</string>
     <string name="settings_edit_labels">Manage Labels</string>
     <string name="settings_edit_labels_button">Edit</string>
+    <string name="settings_edit_folders">Manage Folders</string>
+    <string name="settings_edit_folders_button">Edit</string>
     <string name="settings_calendar">Calendar</string>
     <string name="settings_cal_enable">Enable calendar</string>
     <string name="settings_cal_provider">Select provider</string>

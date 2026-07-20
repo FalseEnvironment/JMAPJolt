@@ -613,7 +613,7 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
 // Hoisted from onBindViewHolder: compiling a regex / date formatter per bound row
 // is measurable jank while scrolling.
 private val EMAIL_IN_TEXT_REGEX = "[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}".toRegex()
-private val MONTH_DAY_FORMAT = SimpleDateFormat("MMM dd", Locale.getDefault())
+private val MONTH_DAY_FORMAT = SimpleDateFormat("MMM dd", Locale.ENGLISH)
 
 internal fun formatRelativeDate(timestamp: Long): String {
     val diff = System.currentTimeMillis() - timestamp

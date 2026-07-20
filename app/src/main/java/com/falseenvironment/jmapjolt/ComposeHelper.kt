@@ -168,7 +168,7 @@ private fun MainActivity.selectComposeAccount(accountEmail: String) {
 }
 
 private fun composeQuoteDate(receivedAt: Long): String =
-    java.text.SimpleDateFormat("MMM d, yyyy 'at' h:mm a", java.util.Locale.getDefault())
+    java.text.SimpleDateFormat("MMM d, yyyy 'at' h:mm a", java.util.Locale.ENGLISH)
         .format(java.util.Date(receivedAt))
 
 /**

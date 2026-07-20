@@ -1067,6 +1067,32 @@
                                         android:paddingStart="12dp" />
                                 </LinearLayout>
 
+                                <LinearLayout
+                                    android:id="@+id/settingsEditFoldersRow"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="48dp"
+                                    android:gravity="center_vertical"
+                                    android:orientation="horizontal"
+                                    android:clickable="true"
+                                    android:focusable="true"
+                                    android:background="?attr/selectableItemBackground">
+
+                                    <TextView
+                                        android:layout_width="0dp"
+                                        android:layout_height="wrap_content"
+                                        android:layout_weight="1"
+                                        android:text="@string/settings_edit_folders"
+                                        android:textSize="15sp" />
+
+                                    <TextView
+                                        android:id="@+id/settingsEditFoldersButton"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="@string/settings_edit_folders_button"
+                                        android:textSize="14sp"
+                                        android:paddingStart="12dp" />
+                                </LinearLayout>
+
                             </LinearLayout>
 
                         </LinearLayout>

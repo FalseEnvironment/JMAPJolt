@@ -138,19 +138,50 @@ class CalendarPanel(private val activity: MainActivity) : FrameLayout(activity) 
     }
 
     private fun showOverflowMenu(anchorView: View) {
-        val menu = android.widget.PopupMenu(activity, anchorView)
-        menu.menu.add(0, 1, 0, "Go to…")
-        menu.menu.add(0, 2, 1, "Import calendar .ics")
-        menu.menu.add(0, 3, 2, "Add CalDAV account")
-        menu.setOnMenuItemClickListener { item ->
-            when (item.itemId) {
-                1 -> { showGoToDatePicker(); true }
-                2 -> { activity.launchCalendarIcsImport(); true }
-                3 -> { CalendarDavx5.launch(activity); true }
-                else -> false
+        val darker = activity.darkenColor(palette.accent)
+
+        val container = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 8 * density
+                setColor(darker)
             }
+            val vp = (4 * density).toInt()
+            setPadding(0, vp, 0, vp)
+            elevation = 8 * density
         }
-        menu.show()
+
+        var popupRef: android.widget.PopupWindow? = null
+
+        fun row(label: String, action: () -> Unit): LinearLayout =
+            LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                layoutParams = LinearLayout.LayoutParams(dp(200), dp(48))
+                val hp = dp(16)
+                setPadding(hp, 0, hp, 0)
+                addView(TextView(activity).apply {
+                    text = label; textSize = 14f; setTextColor(palette.onAccent)
+                })
+                setOnClickListener { popupRef?.dismiss(); action() }
+            }
+
+        container.addView(row("Go to…") { showGoToDatePicker() })
+        container.addView(row("Import calendar .ics") { activity.launchCalendarIcsImport() })
+        container.addView(row("Add CalDAV account") { CalendarDavx5.launch(activity) })
+
+        val pw = android.widget.PopupWindow(
+            container,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            true
+        ).also {
+            it.elevation = 10 * density
+            it.isOutsideTouchable = true
+        }
+        popupRef = pw
+        pw.showAsDropDown(anchorView, -dp(180), 0)
     }
 
     private fun showGoToDatePicker() {

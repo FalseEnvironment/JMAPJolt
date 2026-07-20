@@ -143,9 +143,7 @@ private class InboxWidgetFactory(
 
     private fun formatDate(ts: Long): String {
         if (ts <= 0L) return ""
-        return DateUtils.getRelativeTimeSpanString(
-            ts, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS
-        ).toString()
+        return formatRelativeDate(ts)
     }
 
     override fun getLoadingView(): RemoteViews? = null

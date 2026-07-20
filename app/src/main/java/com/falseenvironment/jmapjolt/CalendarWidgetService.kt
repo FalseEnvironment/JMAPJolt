@@ -130,11 +130,17 @@ private class CalendarWidgetFactory(
         return "$start\n$end"
     }
 
+    private val englishContext: Context by lazy {
+        val config = android.content.res.Configuration(context.resources.configuration)
+        config.setLocale(java.util.Locale.ENGLISH)
+        context.createConfigurationContext(config)
+    }
+
     private fun dayLabel(ts: Long): String {
         val today = startOfToday()
         val flags = DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_SHOW_WEEKDAY or
             DateUtils.FORMAT_ABBREV_ALL
-        val date = DateUtils.formatDateTime(context, ts, flags)
+        val date = DateUtils.formatDateTime(englishContext, ts, flags)
         return when (dayStart(ts)) {
             today -> context.getString(R.string.calendar_today_prefix, date)
             today + DAY_MS -> context.getString(R.string.calendar_tomorrow_prefix, date)

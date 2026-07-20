@@ -33,8 +33,8 @@ android {
         applicationId = "com.falseenvironment.jmapjolt"
         minSdk = 24
         targetSdk = 35
-        versionCode = 9
-        versionName = "0.18"
+        versionCode = 10
+        versionName = "0.19"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
