@@ -391,7 +391,6 @@ class MainActivity : AppCompatActivity() {
     private var pendingCalendarNewEvent = false
     private var pendingCalendarEventStart = 0L
     internal var isSearchActive = false
-    private var wasImeVisible = false
     internal lateinit var selectionBarContainer: LinearLayout
     internal lateinit var selectionCountText: TextView
     internal lateinit var selectionCloseBtn: ImageView
@@ -624,7 +623,14 @@ class MainActivity : AppCompatActivity() {
                     calendarPanelView?.visibility == View.VISIBLE ->
                         if (calendarPanelView?.onBackPressed() != true) showMailboxScreen()
                     selectedEmails.isNotEmpty() -> clearSelection()
-                    isSearchActive -> deactivateSearch()
+                    isSearchActive -> {
+                        // First back press only dismisses the keyboard so results stay
+                        // visible; a second press (or the back-arrow icon) exits search.
+                        val insets = androidx.core.view.ViewCompat.getRootWindowInsets(drawerLayout)
+                        val imeVisible = insets
+                            ?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true
+                        if (imeVisible) hideKeyboard() else deactivateSearch()
+                    }
                     isShowingEmailDetail -> closeEmailDetail()
                     settingsContainer.visibility == View.VISIBLE -> {
                         if (currentSettingsSection != SettingsSection.ROOT) attemptLeaveSettingsSubmenu()
@@ -641,24 +647,6 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         })
-
-        // Closing the keyboard (single back press) also exits search: chips and
-        // input disappear without needing a second back press.
-        // Note: an OnApplyWindowInsetsListener on an inner view never fires here
-        // because the window is not edge-to-edge; root insets polled on layout
-        // changes are reliable regardless of fitsSystemWindows.
-        drawerLayout.viewTreeObserver.addOnGlobalLayoutListener {
-            val insets = androidx.core.view.ViewCompat.getRootWindowInsets(drawerLayout)
-            val imeVisible =
-                insets?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true
-            if (wasImeVisible && !imeVisible && isSearchActive) {
-                // Global layout fires mid-layout-pass: mutating the RecyclerView
-                // adapter here corrupts child state ("Called attach on a child
-                // which is not detached"). Defer past the layout pass.
-                drawerLayout.post { if (isSearchActive) deactivateSearch() }
-            }
-            wasImeVisible = imeVisible
-        }
 
         setupOnboardingPager()
         drawerAccountRow.setOnClickListener {

@@ -41,7 +41,11 @@ data class DisplayEmail(
     // Synthetic "+N more" row that reveals the next page of hidden thread members.
     @JvmField var isThreadMoreRow: Boolean = false,
     @JvmField var threadHiddenCount: Int = 0,
-    @JvmField var threadKey: String = ""
+    @JvmField var threadKey: String = "",
+    // Transient search-only tag: the drawer navId of the folder this row was pulled
+    // from when building the cross-folder "All" search union. Used only to show the
+    // origin-folder badge on search result rows.
+    @JvmField var originFolderId: Int = 0
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true

@@ -427,6 +427,7 @@ internal fun MainActivity.handleNavigationClick() {
             else showMailboxScreen()
         }
         isShowingEmailDetail -> closeEmailDetail()
+        isSearchActive -> deactivateSearch()
     }
 }
 

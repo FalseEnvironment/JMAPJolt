@@ -680,12 +680,23 @@ internal fun MainActivity.updateEmailsList(rawList: List<DisplayEmail>) {
     val firstChanged = emails.firstOrNull()?.id != display.firstOrNull()?.id
     baseEmails.clear()
     baseEmails.addAll(newList)
+
+    // A background periodic sync landing while the user is searching must not blow
+    // away their search results/scroll position. baseEmails/folderCache (source data
+    // for search) are still refreshed above/by the caller — just re-run the active
+    // filter instead of replacing `emails` with the plain folder view.
+    if (isSearchActive) {
+        applySearchFilter(searchInput.text?.toString() ?: "")
+        saveEmailCache()
+        return
+    }
+
     emails.clear()
     emails.addAll(display)
     if (diffResult != null) diffResult.dispatchUpdatesTo(emailAdapter)
     else emailAdapter.notifyDataSetChanged()
 
-    if (firstChanged && !isSearchActive) {
+    if (firstChanged) {
         emailsRecyclerView.post { emailsRecyclerView.scrollToPosition(0) }
     }
 
@@ -835,6 +846,14 @@ internal fun MainActivity.setupSelectionBarListeners() {
         }
         override fun afterTextChanged(s: android.text.Editable?) {}
     })
+    searchInput.setOnEditorActionListener { _, actionId, event ->
+        val isEnterKey = event?.keyCode == android.view.KeyEvent.KEYCODE_ENTER
+        if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH ||
+            actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE || isEnterKey) {
+            hideKeyboard()
+            true
+        } else false
+    }
 
     searchClearBtn.setOnClickListener { deactivateSearch() }
 }

@@ -97,11 +97,16 @@ internal fun MainActivity.activateSearch() {
     // If an email is open, leave it first so the search results are actually visible.
     if (isShowingEmailDetail) closeEmailDetail()
     isSearchActive = true
+    setDrawerIndicator(false)
     searchBarTitle.visibility = View.GONE
     searchInput.visibility = View.VISIBLE
     searchClearBtn.visibility = View.GONE
-    // Scope chips: default to the current folder when it maps to a chip, else All.
-    searchScope = searchScopes.firstOrNull { it.second == selectedFolder }?.second
+    // Default scope is always "All" so search covers every folder (including
+    // subfolders) without the user having to pick a chip first.
+    searchScope = null
+    // Warm folderCache with any folder/subfolder not yet loaded this session (from
+    // the persisted offline snapshot) so the "All" union actually includes them.
+    warmSearchFolderCache()
     refreshSearchChips()
     searchChipsScroll.animate().cancel()
     searchChipsScroll.layoutParams = searchChipsScroll.layoutParams.also {
@@ -123,6 +128,7 @@ internal fun MainActivity.activateSearch() {
 
 internal fun MainActivity.deactivateSearch() {
     isSearchActive = false
+    setDrawerIndicator(true)
     searchInput.text.clear()
     searchInput.visibility = View.GONE
     searchBarTitle.visibility = View.VISIBLE
@@ -130,8 +136,10 @@ internal fun MainActivity.deactivateSearch() {
     animateChipsBarOut()
     searchScope = null
     hideKeyboard()
+    // Recompute the threaded view rather than dumping baseEmails flat: baseEmails
+    // holds the raw per-folder list, not thread head/child grouping.
     emails.clear()
-    emails.addAll(baseEmails)
+    emails.addAll(buildThreadedView(baseEmails))
     emailAdapter.notifyDataSetChanged()
     emptyStateView.visibility = if (emails.isEmpty()) View.VISIBLE else View.GONE
     emailsRecyclerView.visibility = if (emails.isEmpty()) View.GONE else View.VISIBLE
@@ -164,6 +172,45 @@ internal fun MainActivity.animateChipsBarOut() {
     anim.start()
 }
 
+/** Search scope chips: the static drawer folders plus every known user-created subfolder. */
+internal fun MainActivity.allSearchScopes(): List<Pair<String, Int?>> {
+    val subfolderChips = subfolderNavIds.entries
+        .sortedBy { subfolderDisplayOrder.indexOf(it.value).let { i -> if (i < 0) Int.MAX_VALUE else i } }
+        .mapNotNull { (navId, mailboxId) ->
+            val mbox = mailboxCache?.find { it.id == mailboxId } ?: return@mapNotNull null
+            folderDisplayName(mbox) to (navId as Int?)
+        }
+    return searchScopes + subfolderChips
+}
+
+/** Loads the persisted offline snapshot for any folder/subfolder not yet cached this
+ *  session, so the "All" search union covers folders the user hasn't opened yet. */
+internal fun MainActivity.warmSearchFolderCache() {
+    val activity = this
+    val allFolderIds = searchScopes.mapNotNull { it.second } + subfolderNavIds.keys
+    allFolderIds.filter { folderCache[it] == null }.forEach { folderId ->
+        val bucket = cacheBucket(folderId) ?: return@forEach
+        lifecycleScope.launch {
+            val cached = runCatching {
+                com.falseenvironment.jmapjolt.cache.EmailCacheStore.load(activity, bucket)
+            }.getOrDefault(emptyList())
+            if (cached.isNotEmpty() && folderCache[folderId] == null) {
+                folderCache[folderId] = cached
+                if (isSearchActive && searchScope == null) {
+                    // Never mutate the adapter from inside this callback directly: it
+                    // can land mid-layout-pass and corrupt RecyclerView child state
+                    // ("Called attach on a child which is not detached"). Defer past it.
+                    emailsRecyclerView.post {
+                        if (isSearchActive && searchScope == null) {
+                            applySearchFilter(searchInput.text?.toString() ?: "")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 internal fun MainActivity.refreshSearchChips() {
     val dp = resources.displayMetrics.density
     searchChipsRow.removeAllViews()
@@ -171,7 +218,7 @@ internal fun MainActivity.refreshSearchChips() {
     val isLight = currentTheme == "light"
     val tonalBg = if (isLight) "#E8E8EC".toColorInt() else "#2A2A2A".toColorInt()
     val tonalText = if (isLight) "#1A1A1A".toColorInt() else "#EBEBF0".toColorInt()
-    searchScopes.forEach { (label, scope) ->
+    allSearchScopes().forEach { (label, scope) ->
         val selected = scope == searchScope
         searchChipsRow.addView(TextView(this).apply {
             text = label
@@ -203,14 +250,19 @@ internal fun MainActivity.searchSourceEmails(): List<DisplayEmail> {
     val scope = searchScope
     return when {
         scope == null -> {
-            // All: union of every cached folder plus the current list, newest first.
+            // All: union of every cached folder (including subfolders) plus the
+            // current list, newest first. Each row is tagged with the folder it came
+            // from so search results can show a per-row origin-folder badge.
             val seen = HashSet<String>()
-            (folderCache.values.flatten() + baseEmails)
-                .filter { seen.add(it.id) }
-                .sortedByDescending { it.receivedAt }
+            val result = ArrayList<DisplayEmail>()
+            folderCache.forEach { (folderId, list) ->
+                list.forEach { e -> if (seen.add(e.id)) { e.originFolderId = folderId; result.add(e) } }
+            }
+            baseEmails.forEach { e -> if (seen.add(e.id)) { e.originFolderId = selectedFolder; result.add(e) } }
+            result.sortedByDescending { it.receivedAt }
         }
-        scope == selectedFolder -> baseEmails.toList()
-        else -> folderCache[scope] ?: emptyList()
+        scope == selectedFolder -> baseEmails.onEach { it.originFolderId = scope }
+        else -> (folderCache[scope] ?: emptyList()).onEach { it.originFolderId = scope }
     }
 }
 
@@ -223,7 +275,16 @@ internal fun MainActivity.applySearchFilter(query: String) {
         labelsOf(it).any { label -> label.name.contains(query, ignoreCase = true) }
     }
     emails.clear()
-    emails.addAll(filtered.distinctBy { it.id })
+    // Search is always a flat list — never threaded — but these DisplayEmail
+    // instances are shared with baseEmails/folderCache, so they can carry stale
+    // isThreadHeadRow/isThreadChildRow flags from the last time buildThreadedView()
+    // used them as a conversation head/child in the normal inbox view. Clear them
+    // here or the chevron/reply-count pill leaks into search results.
+    emails.addAll(filtered.distinctBy { it.id }.onEach {
+        it.isThreadHeadRow = false
+        it.isThreadChildRow = false
+        it.isThreadMoreRow = false
+    })
     emailAdapter.notifyDataSetChanged()
     emptyStateView.visibility = if (emails.isEmpty()) View.VISIBLE else View.GONE
     emailsRecyclerView.visibility = if (emails.isEmpty()) View.GONE else View.VISIBLE

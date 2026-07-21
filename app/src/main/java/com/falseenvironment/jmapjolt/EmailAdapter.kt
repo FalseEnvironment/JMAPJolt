@@ -281,6 +281,16 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
             }
             visibility = android.view.View.GONE
         })
+        // Child index 5: origin-folder badge, shown only during search for rows
+        // pulled from a subfolder (tints to that folder's assigned color).
+        labelRowView.addView(ImageView(activity).apply {
+            setImageResource(R.drawable.ic_lucide_folder)
+            val sz = (14 * dp).toInt()
+            layoutParams = LinearLayout.LayoutParams(sz, sz)
+                .apply { marginEnd = (4 * dp).toInt() }
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            visibility = android.view.View.GONE
+        })
         val dateRow = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL or Gravity.END
@@ -447,6 +457,17 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
                 visibility = android.view.View.GONE
             }
         }
+        // Origin-folder badge: only while searching, only for rows from a subfolder.
+        (holder.labelRow.getChildAt(5) as ImageView).apply {
+            val subfolderMailboxId = activity.subfolderNavIds[item.originFolderId]
+            if (activity.isSearchActive && subfolderMailboxId != null) {
+                imageTintList = ColorStateList.valueOf(
+                    activity.folderIconColor(subfolderMailboxId, mutedColor))
+                visibility = android.view.View.VISIBLE
+            } else {
+                visibility = android.view.View.GONE
+            }
+        }
 
         holder.starButton.visibility = android.view.View.VISIBLE
         holder.avatarContainer.visibility = android.view.View.VISIBLE
@@ -595,7 +616,7 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
         holder.colorStrip.visibility = android.view.View.GONE
         holder.starButton.visibility = android.view.View.GONE
         holder.avatarContainer.visibility = android.view.View.GONE
-        for (i in 0..4) holder.labelRow.getChildAt(i).visibility = android.view.View.GONE
+        for (i in 0..5) holder.labelRow.getChildAt(i).visibility = android.view.View.GONE
         // Indent to align with child rows so it reads as part of the thread.
         holder.contentLayout.setPadding(
             (34 * dp).toInt(), (12 * dp).toInt(), (12 * dp).toInt(), (12 * dp).toInt())
