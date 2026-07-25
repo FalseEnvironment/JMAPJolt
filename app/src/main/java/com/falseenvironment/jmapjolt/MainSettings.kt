@@ -150,26 +150,11 @@ internal fun MainActivity.bindSettingsMenuNavigation() {
         }
     }
 
-    settingsGeneralHeader.setOnClickListener {
-        toggleSettingsSection(settingsGeneralContent, settingsGeneralChevron)
-    }
-    settingsLabelsHeader.setOnClickListener {
-        toggleSettingsSection(settingsLabelsContent, settingsLabelsChevron)
-    }
-    settingsThemeHeader.setOnClickListener {
-        toggleSettingsSection(settingsThemeContent, settingsThemeChevron)
-    }
-    settingsUnifiedPushHeader.setOnClickListener {
-        toggleSettingsSection(settingsUnifiedPushContent, settingsUnifiedPushChevron)
-    }
-    val settingsCalendarHeader = findViewById<LinearLayout>(R.id.settingsCalendarHeader)
-    val settingsCalendarContent = findViewById<LinearLayout>(R.id.settingsCalendarContent)
+    // Sections are always-expanded M3 grouped-list cards now; headers are static
+    // labels (no more accordion expand/collapse).
     settingsCalendarChevron = findViewById(R.id.settingsCalendarChevron)
     settingsImportIcsRow = findViewById(R.id.settingsImportIcsRow)
     settingsExportIcsRow = findViewById(R.id.settingsExportIcsRow)
-    settingsCalendarHeader.setOnClickListener {
-        toggleSettingsSection(settingsCalendarContent, settingsCalendarChevron)
-    }
     settingsCalProviderDropdown.setOnClickListener {
         val options = listOf(
             getString(R.string.settings_cal_provider_jmap),
@@ -293,59 +278,6 @@ internal fun MainActivity.showInAppMessage(text: String) {
     ).show()
 }
 
-internal fun MainActivity.toggleSettingsSection(content: LinearLayout, chevron: ImageView) {
-    val open = content.visibility != View.VISIBLE
-    chevron.animate().rotation(if (open) 180f else 0f).setDuration(220).start()
-    if (open) {
-        // Expand: measure target height, then grow from 0 with a fade.
-        content.visibility = View.VISIBLE
-        content.measure(
-            View.MeasureSpec.makeMeasureSpec(settingsContainer.width, View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-        )
-        val target = content.measuredHeight
-        content.layoutParams.height = 0
-        content.alpha = 0f
-        android.animation.ValueAnimator.ofInt(0, target).apply {
-            duration = 260
-            interpolator = android.view.animation.DecelerateInterpolator(2f)
-            addUpdateListener {
-                content.layoutParams.height = it.animatedValue as Int
-                content.alpha = it.animatedFraction
-                content.requestLayout()
-            }
-            addListener(object : android.animation.AnimatorListenerAdapter() {
-                override fun onAnimationEnd(animation: android.animation.Animator) {
-                    content.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
-                    content.alpha = 1f
-                    content.requestLayout()
-                }
-            })
-            start()
-        }
-    } else {
-        // Collapse: shrink from current height to 0 with a fade.
-        val start = content.height
-        android.animation.ValueAnimator.ofInt(start, 0).apply {
-            duration = 220
-            interpolator = android.view.animation.AccelerateInterpolator(1.5f)
-            addUpdateListener {
-                content.layoutParams.height = it.animatedValue as Int
-                content.alpha = 1f - it.animatedFraction
-                content.requestLayout()
-            }
-            addListener(object : android.animation.AnimatorListenerAdapter() {
-                override fun onAnimationEnd(animation: android.animation.Animator) {
-                    content.visibility = View.GONE
-                    content.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
-                    content.alpha = 1f
-                    content.requestLayout()
-                }
-            })
-            start()
-        }
-    }
-}
 
 internal fun MainActivity.showAboutDialog() {
         val activity = this
