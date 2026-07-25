@@ -508,16 +508,16 @@ internal fun MainActivity.rebuildDrawerMenu() {
     val g = android.graphics.Color.green(accentInt)
     val b = android.graphics.Color.blue(accentInt)
     val cornerR = 999 * dp
-    // Round only the trailing (right) corners; flat at the left screen edge -> tab/arrow shape.
-    // Inset on the right so the accent bar does not run the full item width.
-    val rightInset = (40 * dp).toInt()
+    // M3-style floating pill: rounded on all corners, inset from both edges so it
+    // reads as a distinct selected chip rather than a full-bleed tab/arrow bar.
+    val sideInset = (12 * dp).toInt()
     fun accentShape(alpha: Int): android.graphics.drawable.Drawable {
         val shape = android.graphics.drawable.GradientDrawable().apply {
             this.shape = android.graphics.drawable.GradientDrawable.RECTANGLE
             setColor(android.graphics.Color.argb(alpha, r, g, b))
-            cornerRadii = floatArrayOf(0f, 0f, cornerR, cornerR, cornerR, cornerR, 0f, 0f)
+            cornerRadius = cornerR
         }
-        return android.graphics.drawable.InsetDrawable(shape, 0, 0, rightInset, 0)
+        return android.graphics.drawable.InsetDrawable(shape, sideInset, 0, sideInset, 0)
     }
     val stateList = android.graphics.drawable.StateListDrawable().apply {
         addState(intArrayOf(android.R.attr.state_checked), accentShape(255))
@@ -526,5 +526,32 @@ internal fun MainActivity.rebuildDrawerMenu() {
         addState(intArrayOf(), android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
     }
     navigationView.post { navigationView.itemBackground = stateList }
+    navigationView.post { applyDrawerScrollbarStyle() }
+}
+
+/** Slim, accent-tinted overlay scrollbar for the drawer's item list (default is thick/grey). */
+internal fun MainActivity.applyDrawerScrollbarStyle() {
+    val recycler = (0 until navigationView.childCount)
+        .map { navigationView.getChildAt(it) }
+        .filterIsInstance<androidx.recyclerview.widget.RecyclerView>()
+        .firstOrNull() ?: return
+    val dp = resources.displayMetrics.density
+    recycler.isVerticalScrollBarEnabled = true
+    recycler.scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
+    recycler.scrollBarSize = (3 * dp).toInt()
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        val accentInt = currentAccentColor.toColorInt()
+        val thumb = android.graphics.drawable.GradientDrawable().apply {
+            shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+            cornerRadius = 999 * dp
+            setColor(android.graphics.Color.argb(
+                160,
+                android.graphics.Color.red(accentInt),
+                android.graphics.Color.green(accentInt),
+                android.graphics.Color.blue(accentInt)
+            ))
+        }
+        recycler.setVerticalScrollbarThumbDrawable(thumb)
+    }
 }
 

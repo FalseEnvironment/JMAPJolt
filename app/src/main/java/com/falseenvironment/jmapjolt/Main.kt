@@ -1962,7 +1962,6 @@ class MainActivity : AppCompatActivity() {
                 if (currentTheme == "light") "#5A5A5A".toColorInt() else "#BDBDBD".toColorInt()
         val accentInt = currentAccentColor.toColorInt()
         val logoutRed = "#E53935".toColorInt()
-        val addGreen = "#43A047".toColorInt()
 
         // Keep the header background in sync with the active theme (was hardcoded dark).
         val headerBg = when (currentTheme) {
@@ -1972,6 +1971,9 @@ class MainActivity : AppCompatActivity() {
             else     -> "#212126".toColorInt()
         }
         (drawerAccountRow.parent as? View)?.setBackgroundColor(headerBg)
+        findViewById<View>(R.id.drawerHeaderDivider)?.setBackgroundColor(
+            android.graphics.Color.argb(40, android.graphics.Color.red(textInt), android.graphics.Color.green(textInt), android.graphics.Color.blue(textInt))
+        )
 
         // Header: avatar + display name (bold, primary) + email (secondary).
         drawerAccountName.setCompoundDrawablesRelative(null, null, null, null)
@@ -2087,30 +2089,27 @@ class MainActivity : AppCompatActivity() {
             drawerAccountsList.addView(row)
         }
 
-        // Compact green "+" button to add the account you are currently logged into elsewhere.
-        drawerAccountsList.addView(LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
+        // Small text link (not a button) to add another account, tinted with the accent color.
+        drawerAccountsList.addView(TextView(this).apply {
+            text = getString(R.string.drawer_add_account_action)
+            setTextColor(accentInt)
+            textSize = 13f
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            isClickable = true
+            isFocusable = true
+            background = android.util.TypedValue().let { tv ->
+                theme.resolveAttribute(android.R.attr.selectableItemBackground, tv, true)
+                ContextCompat.getDrawable(this@MainActivity, tv.resourceId)
+            }
             layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = (8 * dp).toInt() }
-            addView(ImageView(this@MainActivity).apply {
-                setImageResource(R.drawable.ic_lucide_plus)
-                imageTintList = ColorStateList.valueOf(addGreen)
-                val sz = (40 * dp).toInt()
-                layoutParams = LinearLayout.LayoutParams(sz, sz)
-                setPadding((9 * dp).toInt(), (9 * dp).toInt(), (9 * dp).toInt(), (9 * dp).toInt())
-                background = GradientDrawable().apply {
-                    shape = GradientDrawable.OVAL
-                    setColor(android.graphics.Color.argb(40, Color.red(addGreen), Color.green(addGreen), Color.blue(addGreen)))
-                }
-                contentDescription = getString(R.string.drawer_add_account_action)
-                setOnClickListener {
-                    showAddAccountDialog()
-                    closeAccountsList()
-                    drawerLayout.closeDrawer(GravityCompat.START)
-                }
-            })
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = (10 * dp).toInt() }
+            setPadding((4 * dp).toInt(), (6 * dp).toInt(), (10 * dp).toInt(), (6 * dp).toInt())
+            setOnClickListener {
+                showAddAccountDialog()
+                closeAccountsList()
+                drawerLayout.closeDrawer(GravityCompat.START)
+            }
         })
     }
 
@@ -3070,7 +3069,7 @@ class MainActivity : AppCompatActivity() {
                 scaleType = ImageView.ScaleType.FIT_CENTER
             })
             row.addView(TextView(this).apply {
-                text = mbox.name
+                text = folderDisplayName(mbox)
                 textSize = 15f
                 setTextColor(textColor)
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
