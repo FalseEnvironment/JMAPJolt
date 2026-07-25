@@ -270,48 +270,90 @@ internal fun MainActivity.bindPullToRefresh() {
     }
 }
 
+/**
+ * M3-style pill toast: centered, floats well clear of the bottom edge/nav bar,
+ * and follows the app's own theme palette instead of Material's default
+ * Snackbar surface (which stayed a stock light/dark gray regardless of the
+ * Iris/OLED/Snow theme picked in Settings).
+ */
 internal fun MainActivity.showThemedSnackbar(
     message: String,
     actionLabel: String? = null,
     actionIcon: Int? = null,
     action: (() -> Unit)? = null
 ) {
-    val hasAction = actionLabel != null && action != null
-    val sb = Snackbar.make(
-        drawerLayout, message,
-        if (hasAction) Snackbar.LENGTH_LONG else Snackbar.LENGTH_SHORT
-    )
+    val root = window.decorView.findViewById<ViewGroup>(android.R.id.content)
     val dp = resources.displayMetrics.density
-    val isLight = currentTheme == "light"
-    val bg = if (isLight) "#FFFFFF".toColorInt() else "#2A2A2E".toColorInt()
-    val fg = if (isLight) "#212121".toColorInt() else Color.WHITE
+    val hasAction = actionLabel != null && action != null
+    val bg = when (currentTheme) {
+        "light"  -> "#FFFFFF".toColorInt()
+        "oled"   -> "#1C1C1E".toColorInt()
+        "violet" -> "#2C1F46".toColorInt()
+        else     -> "#333338".toColorInt()
+    }
+    val fg = if (currentTheme == "light") "#1B1B1F".toColorInt() else Color.WHITE
     val accent = currentAccentColor.toColorInt()
-    sb.setTextColor(fg)
-    sb.setActionTextColor(accent)
-    sb.view.background = GradientDrawable().apply {
-        shape = GradientDrawable.RECTANGLE
-        cornerRadius = 12 * dp
-        setColor(bg)
-    }
-    if (hasAction) {
-        sb.setAction(actionLabel) { action() }
-        if (actionIcon != null) {
-            sb.view.post {
-                val actionView = sb.view.findViewById<Button>(
-                    com.google.android.material.R.id.snackbar_action
-                )
-                actionView?.let { btn ->
-                    val d = ContextCompat.getDrawable(this, actionIcon)?.mutate()
-                    d?.setTint(accent)
-                    val size = (18 * dp).toInt()
-                    d?.setBounds(0, 0, size, size)
-                    btn.setCompoundDrawables(d, null, null, null)
-                    btn.compoundDrawablePadding = (6 * dp).toInt()
-                }
-            }
+
+    val pill = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        elevation = 6 * dp
+        background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = 999 * dp
+            setColor(bg)
         }
+        setPadding((20 * dp).toInt(), (14 * dp).toInt(), (18 * dp).toInt(), (14 * dp).toInt())
     }
-    sb.show()
+    pill.addView(TextView(this).apply {
+        text = message
+        setTextColor(fg)
+        textSize = 14f
+        maxLines = 2
+        layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+    })
+    if (hasAction) {
+        pill.addView(TextView(this).apply {
+            text = actionLabel
+            setTextColor(accent)
+            textSize = 14f
+            typeface = Typeface.DEFAULT_BOLD
+            isClickable = true
+            isFocusable = true
+            setPadding((14 * dp).toInt(), 0, 0, 0)
+            actionIcon?.let { iconRes ->
+                val d = ContextCompat.getDrawable(this@showThemedSnackbar, iconRes)?.mutate()
+                d?.setTint(accent)
+                val size = (18 * dp).toInt()
+                d?.setBounds(0, 0, size, size)
+                setCompoundDrawables(d, null, null, null)
+                compoundDrawablePadding = (6 * dp).toInt()
+            }
+            setOnClickListener { action?.invoke(); dismissThemedPill(pill) }
+        })
+    }
+
+    root.addView(pill, FrameLayout.LayoutParams(
+        ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+    ).apply {
+        gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+        bottomMargin = (56 * dp).toInt()
+    })
+
+    pill.alpha = 0f
+    pill.translationY = 24 * dp
+    pill.animate().alpha(1f).translationY(0f).setDuration(180)
+        .setInterpolator(android.view.animation.DecelerateInterpolator(2f)).start()
+
+    pill.postDelayed({ dismissThemedPill(pill) }, if (hasAction) 3500L else 2200L)
+}
+
+private fun MainActivity.dismissThemedPill(pill: LinearLayout) {
+    if (pill.parent == null) return
+    val dp = resources.displayMetrics.density
+    pill.animate().alpha(0f).translationY(24 * dp).setDuration(160)
+        .withEndAction { (pill.parent as? ViewGroup)?.removeView(pill) }
+        .start()
 }
 
 internal fun MainActivity.attemptLeaveSettingsSubmenu() {

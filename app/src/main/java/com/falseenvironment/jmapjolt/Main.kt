@@ -76,7 +76,6 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.viewpager2.widget.ViewPager2
 import coil.load
 import com.google.android.material.navigation.NavigationView
-import com.google.android.material.snackbar.Snackbar
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -134,7 +133,7 @@ class MainActivity : AppCompatActivity() {
     internal lateinit var settingsGeneralHeader: LinearLayout
     internal lateinit var settingsGeneralContent: LinearLayout
     internal lateinit var settingsGeneralChevron: ImageView
-    private lateinit var settingsLabelsContainer: LinearLayout
+    internal lateinit var settingsLabelsContainer: LinearLayout
     internal lateinit var settingsLabelsHeader: LinearLayout
     internal lateinit var settingsLabelsContent: LinearLayout
     internal lateinit var settingsLabelsChevron: ImageView
@@ -148,6 +147,7 @@ class MainActivity : AppCompatActivity() {
     internal lateinit var settingsThemeHeader: LinearLayout
     internal lateinit var settingsThemeContent: LinearLayout
     internal lateinit var settingsThemeChevron: ImageView
+    internal lateinit var settingsCalendarContainer: LinearLayout
     internal lateinit var settingsCalendarChevron: ImageView
     internal lateinit var settingsImportIcsRow: TextView
     internal lateinit var settingsExportIcsRow: TextView
@@ -461,6 +461,7 @@ class MainActivity : AppCompatActivity() {
         settingsThemeHeader = findViewById(R.id.settingsThemeHeader)
         settingsThemeContent = findViewById(R.id.settingsThemeContent)
         settingsThemeChevron = findViewById(R.id.settingsThemeChevron)
+        settingsCalendarContainer = findViewById(R.id.settingsCalendarContainer)
         settingsInfoRow = findViewById(R.id.settingsInfoRow)
         settingsInfoIcon = findViewById(R.id.settingsInfoIcon)
         settingsInfoArrow = findViewById(R.id.settingsInfoArrow)
@@ -1175,7 +1176,7 @@ class MainActivity : AppCompatActivity() {
         if (ids.isEmpty()) return
 
         if (selectedFolder == R.id.nav_drafts && (action == "archive" || action == "toggleRead")) {
-            Snackbar.make(drawerLayout, "Not available for drafts", Snackbar.LENGTH_SHORT).show()
+            showThemedSnackbar("Not available for drafts")
             clearSelection()
             return
         }
@@ -1192,7 +1193,7 @@ class MainActivity : AppCompatActivity() {
                 if (action == "archive" && selectedFolder == R.id.nav_favourite) {
                     clearSelection()
                     emailAdapter.notifyItemsChangedByIds(ids)
-                    Snackbar.make(drawerLayout, "Archived", Snackbar.LENGTH_SHORT).show()
+                    showThemedSnackbar("Moved to Archive")
                     lifecycleScope.launch {
                         try {
                             ids.forEach { id ->
@@ -3039,6 +3040,7 @@ class MainActivity : AppCompatActivity() {
                         onPicked?.invoke()
                         removeEmailsAnimated(ids)
                         saveEmailCache()
+                        showThemedSnackbar("Moved to ${folderDisplayName(mbox)}")
                         lifecycleScope.launch {
                             try {
                                 ids.forEach { id ->

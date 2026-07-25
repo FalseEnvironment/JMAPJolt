@@ -74,7 +74,6 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.viewpager2.widget.ViewPager2
 import coil.load
 import com.google.android.material.navigation.NavigationView
-import com.google.android.material.snackbar.Snackbar
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -507,7 +506,7 @@ internal fun MainActivity.attachMailSwipe() {
                     if (selectedFolder == R.id.nav_drafts &&
                         (action == MainActivity.SwipeAction.MARK_READ || action == MainActivity.SwipeAction.ARCHIVE)) {
                         emailAdapter.notifyItemChanged(position)
-                        Snackbar.make(drawerLayout, "Not available for drafts", Snackbar.LENGTH_SHORT).show()
+                        showThemedSnackbar("Not available for drafts")
                         return
                     }
 
@@ -523,7 +522,7 @@ internal fun MainActivity.attachMailSwipe() {
                     // Snap the row back instead of removing it.
                     if (selectedFolder == R.id.nav_favourite && action == MainActivity.SwipeAction.ARCHIVE) {
                         emailAdapter.notifyItemChanged(position)
-                        Snackbar.make(drawerLayout, "Archived", Snackbar.LENGTH_SHORT).show()
+                        showThemedSnackbar("Moved to Archive")
                         lifecycleScope.launch {
                             try {
                                 val archiveId = jmapClient.resolveMailboxIdByRole(account, "archive")

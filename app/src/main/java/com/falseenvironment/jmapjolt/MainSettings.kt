@@ -272,10 +272,7 @@ internal fun MainActivity.doExportIcs(uri: android.net.Uri) {
 }
 
 internal fun MainActivity.showInAppMessage(text: String) {
-    com.google.android.material.snackbar.Snackbar.make(
-        findViewById(android.R.id.content), text,
-        com.google.android.material.snackbar.Snackbar.LENGTH_LONG
-    ).show()
+    showThemedSnackbar(text)
 }
 
 

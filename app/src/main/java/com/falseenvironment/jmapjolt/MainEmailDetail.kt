@@ -74,7 +74,6 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.viewpager2.widget.ViewPager2
 import coil.load
 import com.google.android.material.navigation.NavigationView
-import com.google.android.material.snackbar.Snackbar
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -610,7 +609,7 @@ internal fun MainActivity.unarchiveDetailEmail(email: DisplayEmail) {
     closeEmailDetail()
     removeEmailsAnimated(listOf(email.id))
     saveEmailCache()
-    Snackbar.make(drawerLayout, "Moved to Inbox", Snackbar.LENGTH_SHORT).show()
+    showThemedSnackbar("Moved to Inbox")
     lifecycleScope.launch {
         try {
             val inboxId = resolveMailboxIdByRole(acc, "inbox")
@@ -936,7 +935,7 @@ internal fun MainActivity.archiveDetailEmail(email: DisplayEmail) {
     closeEmailDetail()
     removeEmailsAnimated(listOf(email.id))
     saveEmailCache()
-    Snackbar.make(drawerLayout, "Archived", Snackbar.LENGTH_SHORT).show()
+    showThemedSnackbar("Moved to Archive")
     lifecycleScope.launch {
         try {
             val archiveId = resolveOrCreateArchive(acc)
@@ -957,7 +956,6 @@ internal fun MainActivity.trashDetailEmail(email: DisplayEmail) {
     closeEmailDetail()
     removeEmailsAnimated(listOf(email.id))
     saveEmailCache()
-    Snackbar.make(drawerLayout, "Moved to Trash", Snackbar.LENGTH_SHORT).show()
     lifecycleScope.launch {
         try {
             val trashId = jmapClient.resolveMailboxIdByRole(acc, "trash")

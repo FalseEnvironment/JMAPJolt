@@ -48,7 +48,7 @@
     <string name="background_sync_updating_title">Updating mailbox</string>
     <string name="background_sync_updating_text">Checking for new email…</string>
     <string name="mailbox_refreshing">[%1$s] Refreshing mailbox…</string>
-    <string name="settings_unifiedpush_disabled">[%1$s] UnifiedPush disabled.</string>
+    <string name="settings_unifiedpush_disabled">UnifiedPush disabled.</string>
     <string name="settings_unifiedpush_registered">[%1$s] UnifiedPush OK — distributor: %2$s</string>
     <string name="settings_unifiedpush_failed">[%1$s] UnifiedPush registration failed.</string>
     <string name="settings_unifiedpush_error">UnifiedPush connection failed.</string>

@@ -291,6 +291,21 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
             scaleType = ImageView.ScaleType.FIT_CENTER
             visibility = android.view.View.GONE
         })
+        // Child index 6: trash status badge, shown only during search for rows
+        // pulled from the Trash folder.
+        labelRowView.addView(ImageView(activity).apply {
+            setImageResource(R.drawable.ic_lucide_trash)
+            val sz = (14 * dp).toInt()
+            layoutParams = LinearLayout.LayoutParams(sz, sz)
+                .apply { marginEnd = (4 * dp).toInt() }
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            imageTintList = ColorStateList.valueOf(
+                com.google.android.material.color.MaterialColors.getColor(
+                    activity, com.google.android.material.R.attr.colorError, Color.RED
+                )
+            )
+            visibility = android.view.View.GONE
+        })
         val dateRow = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL or Gravity.END
@@ -468,6 +483,13 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
                 visibility = android.view.View.GONE
             }
         }
+        // Trash status badge: only while searching, only for rows pulled from Trash.
+        (holder.labelRow.getChildAt(6) as ImageView).visibility =
+            if (activity.isSearchActive && item.originFolderId == R.id.nav_trash) {
+                android.view.View.VISIBLE
+            } else {
+                android.view.View.GONE
+            }
 
         holder.starButton.visibility = android.view.View.VISIBLE
         holder.avatarContainer.visibility = android.view.View.VISIBLE

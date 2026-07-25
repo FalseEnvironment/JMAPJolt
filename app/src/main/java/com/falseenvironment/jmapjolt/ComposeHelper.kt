@@ -34,7 +34,6 @@ import androidx.core.content.ContextCompat
 import androidx.core.graphics.toColorInt
 import androidx.drawerlayout.widget.DrawerLayout
 import androidx.lifecycle.lifecycleScope
-import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -115,7 +114,7 @@ internal fun MainActivity.performSend() {
     val jmapAttachments = pendingAttachments.mapNotNull { att ->
         try {
             if (att.size > MAX_ATTACHMENT_BYTES) {
-                Snackbar.make(drawerLayout, "${att.name} too large (max ${MAX_ATTACHMENT_BYTES / 1048576}MB)", Snackbar.LENGTH_SHORT).show()
+                showThemedSnackbar("${att.name} too large (max ${MAX_ATTACHMENT_BYTES / 1048576}MB)")
                 return@mapNotNull null
             }
             val bytes = contentResolver.openInputStream(att.uri)?.use { it.readBytes() } ?: return@mapNotNull null
@@ -135,9 +134,9 @@ internal fun MainActivity.performSend() {
             composeToInput.text.clear()
             composeSubjectInput.text.clear()
             composeBodyInput.text.clear()
-            Snackbar.make(drawerLayout, "Email sent", Snackbar.LENGTH_SHORT).show()
+            showThemedSnackbar("Email sent")
         } else {
-            Snackbar.make(drawerLayout, "Failed to send email", Snackbar.LENGTH_LONG).show()
+            showThemedSnackbar("Failed to send email")
         }
     }
 }
@@ -612,14 +611,14 @@ internal fun MainActivity.saveDraftFromCompose() {
     } ?: connectedAccount
 
     if (accountToUse == null) {
-        Snackbar.make(drawerLayout, "No active account", Snackbar.LENGTH_SHORT).show()
+        showThemedSnackbar("No active account")
         return
     }
 
     val jmapAttachments = pendingAttachments.mapNotNull { att ->
         try {
             if (att.size > MAX_ATTACHMENT_BYTES) {
-                Snackbar.make(drawerLayout, "${att.name} too large (max ${MAX_ATTACHMENT_BYTES / 1048576}MB)", Snackbar.LENGTH_SHORT).show()
+                showThemedSnackbar("${att.name} too large (max ${MAX_ATTACHMENT_BYTES / 1048576}MB)")
                 return@mapNotNull null
             }
             val bytes = contentResolver.openInputStream(att.uri)?.use { it.readBytes() } ?: return@mapNotNull null
@@ -641,11 +640,7 @@ internal fun MainActivity.saveDraftFromCompose() {
         if (ok && oldDraftId != null) {
             jmapClient.destroyEmail(accountToUse, oldDraftId)
         }
-        Snackbar.make(
-            drawerLayout,
-            if (ok) "Draft saved" else "Failed to save draft",
-            Snackbar.LENGTH_SHORT
-        ).show()
+        showThemedSnackbar(if (ok) "Draft saved" else "Failed to save draft")
     }
 }
 

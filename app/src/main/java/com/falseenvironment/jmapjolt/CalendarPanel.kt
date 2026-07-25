@@ -597,12 +597,7 @@ class CalendarPanel(private val activity: MainActivity) : FrameLayout(activity) 
     }
 
     private fun showInAppMessage(text: String) {
-        val snack = com.google.android.material.snackbar.Snackbar.make(
-            this, text, com.google.android.material.snackbar.Snackbar.LENGTH_LONG)
-        snack.view.setBackgroundColor(palette.surface)
-        snack.setTextColor(palette.text)
-        snack.setActionTextColor(palette.accent)
-        snack.show()
+        activity.showThemedSnackbar(text)
     }
 
     private fun maybePromptExactAlarm() {

@@ -118,6 +118,33 @@ internal fun MainActivity.applyTheme() {
     // Recursively update text colors in settings container
     updateContainerTextColors(settingsContainer, textInt, secondaryTextInt)
 
+    // Settings grouped-list cards: tint per theme instead of a single fixed gray,
+    // so Iris/OLED/Snow read as their own surface instead of borrowing the app's
+    // static Material3 colorSurfaceVariant.
+    val cardBg = when (currentTheme) {
+        "light"  -> "#EAEAEF".toColorInt()
+        "oled"   -> "#141416".toColorInt()
+        "violet" -> "#271C3E".toColorInt()
+        else     -> null // Legacy keeps the original bg_settings_card drawable.
+    }
+    if (cardBg != null) {
+        val d = resources.displayMetrics.density
+        val cardDrawable = { GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = 20 * d
+            setColor(cardBg)
+        } }
+        listOf(
+            settingsThemeContainer, settingsGeneralContainer, settingsLabelsContainer,
+            settingsUnifiedPushContainer, settingsCalendarContainer, settingsInfoRow
+        ).forEach { it.background = cardDrawable() }
+    } else {
+        listOf(
+            settingsThemeContainer, settingsGeneralContainer, settingsLabelsContainer,
+            settingsUnifiedPushContainer, settingsCalendarContainer, settingsInfoRow
+        ).forEach { it.setBackgroundResource(R.drawable.bg_settings_card) }
+    }
+
     // Tint settings chevrons and info row icons with accent color
     val accentTint = ColorStateList.valueOf(currentAccentColor.toColorInt())
     settingsGeneralChevron.imageTintList = accentTint

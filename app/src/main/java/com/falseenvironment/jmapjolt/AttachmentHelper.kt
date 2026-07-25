@@ -25,7 +25,6 @@ import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.graphics.toColorInt
-import com.google.android.material.snackbar.Snackbar
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -733,7 +732,7 @@ private fun MainActivity.showAttachmentInApp(
             }
             progress.visibility = View.GONE
             if (bmp == null) {
-                Snackbar.make(drawerLayout, "Cannot display image", Snackbar.LENGTH_SHORT).show()
+                showThemedSnackbar("Cannot display image")
                 dialog.dismiss()
                 return@launch
             }
@@ -758,7 +757,7 @@ private fun MainActivity.showAttachmentInApp(
             }
             progress.visibility = View.GONE
             if (req == null) {
-                Snackbar.make(drawerLayout, "Load failed", Snackbar.LENGTH_SHORT).show()
+                showThemedSnackbar("Load failed")
                 dialog.dismiss()
                 return@launch
             }
@@ -920,7 +919,7 @@ private fun MainActivity.showAttachmentInApp(
             }
             mediaFrame.addView(seekBar)
             videoView.setOnErrorListener { _, _, _ ->
-                Snackbar.make(drawerLayout, "Cannot play video", Snackbar.LENGTH_SHORT).show()
+                showThemedSnackbar("Cannot play video")
                 true
             }
             mediaFrame.addView(videoView, 0)
@@ -1036,7 +1035,7 @@ private fun MainActivity.openAttachment(
     lifecycleScope.launch {
         val bytes = jmapClient.downloadBlob(account, att.blobId, att.name, att.mimeType)
         if (bytes == null) {
-            Snackbar.make(drawerLayout, "Download failed", Snackbar.LENGTH_SHORT).show()
+            showThemedSnackbar("Download failed")
             return@launch
         }
         val safeName = sanitizeAttachmentName(att.name)
@@ -1056,7 +1055,7 @@ private fun MainActivity.openAttachment(
         try {
             startActivity(Intent.createChooser(intent, "Open with"))
         } catch (e: Exception) {
-            Snackbar.make(drawerLayout, "No app found to open this file", Snackbar.LENGTH_SHORT).show()
+            showThemedSnackbar("No app found to open this file")
         }
     }
 }
