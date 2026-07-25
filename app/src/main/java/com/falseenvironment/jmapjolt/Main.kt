@@ -736,6 +736,9 @@ class MainActivity : AppCompatActivity() {
         updateFormState()
         // Notification permission is only requested from the onboarding permission screen,
         // never automatically on launch.
+        // Re-arm calendar reminders on every launch: the reschedule chain only advances when
+        // a reminder fires or the calendar screen is touched, so it can stall silently.
+        if (CalendarPrefs.isEnabled(this)) CalendarReminderScheduler.reschedule(this)
     }
 
     private val simpleWatcher =

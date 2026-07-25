@@ -22,6 +22,9 @@ object CalendarReminderScheduler {
     private const val PREFS = "calendar_alarms"
     private const val KEY_CODES = "request_codes"
     private const val WINDOW_AHEAD_MS = 45L * 86_400_000L
+    private const val WATCHDOG_INTERVAL_MS = AlarmManager.INTERVAL_HALF_DAY
+    const val ACTION_WATCHDOG = "com.falseenvironment.jmapjolt.CALENDAR_REMINDER_WATCHDOG"
+    private const val WATCHDOG_CODE = 0x5AFE0001
 
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -76,11 +79,31 @@ object CalendarReminderScheduler {
                 am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi)
                 codes.put(code)
             } catch (_: SecurityException) {
-                // Lost exact-alarm permission mid-run; stop quietly.
-                break
+                // Lost exact-alarm permission for this alarm; keep trying the rest.
+                continue
             }
         }
         prefs(context).edit().putString(KEY_CODES, codes.toString()).apply()
+        armWatchdog(context)
+    }
+
+    /**
+     * Self-healing re-arm: the normal chain only advances when a reminder fires or the
+     * user touches the calendar screen, so it can stall silently (empty window, missed
+     * alarm, reboot). This inexact repeating alarm periodically forces a resync so
+     * reminders recover without requiring the app process to be recreated.
+     */
+    private fun armWatchdog(context: Context) {
+        val am = alarmManager(context)
+        val intent = Intent(context, CalendarReminderReceiver::class.java).setAction(ACTION_WATCHDOG)
+        val pi = PendingIntent.getBroadcast(
+            context, WATCHDOG_CODE, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        am.setInexactRepeating(
+            AlarmManager.RTC, System.currentTimeMillis() + WATCHDOG_INTERVAL_MS,
+            WATCHDOG_INTERVAL_MS, pi
+        )
     }
 
     @Synchronized

@@ -9,6 +9,10 @@ class SseBootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED &&
             intent.action != Intent.ACTION_MY_PACKAGE_REPLACED) return
+        if (CalendarPrefs.isEnabled(context)) {
+            Log.d("SseBootReceiver", "Re-arming calendar reminders after ${intent.action}")
+            CalendarReminderScheduler.reschedule(context)
+        }
         if (!JmapEventSourceService.isEnabled(context)) return
         if (BackgroundEmailSyncReceiver.readCurrentAccount(context) == null) return
         Log.d("SseBootReceiver", "Starting SSE service after ${intent.action}")

@@ -15,6 +15,10 @@ import java.util.Locale
 class CalendarReminderReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == CalendarReminderScheduler.ACTION_WATCHDOG) {
+            CalendarReminderScheduler.reschedule(context)
+            return
+        }
         if (intent.action != CalendarReminderScheduler.ACTION_REMIND) return
         val eventId = intent.getStringExtra(CalendarReminderScheduler.EXTRA_EVENT_ID) ?: return
         val occStart = intent.getLongExtra(CalendarReminderScheduler.EXTRA_OCC_START, 0L)
