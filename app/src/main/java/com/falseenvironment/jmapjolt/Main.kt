@@ -1944,7 +1944,10 @@ class MainActivity : AppCompatActivity() {
 
     internal fun hideKeyboard() {
         val imm = getSystemService(InputMethodManager::class.java)
-        imm?.hideSoftInputFromWindow(currentFocus?.windowToken, 0)
+        // currentFocus is already null when the focused view was hidden first
+        // (e.g. searchInput on back-arrow); the decorView token always works.
+        val token = currentFocus?.windowToken ?: window.decorView.windowToken
+        imm?.hideSoftInputFromWindow(token, 0)
         currentFocus?.clearFocus()
     }
 
