@@ -68,7 +68,9 @@ import androidx.core.graphics.toColorInt
 import androidx.core.view.GravityCompat
 import androidx.core.widget.CompoundButtonCompat
 import androidx.drawerlayout.widget.DrawerLayout
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -86,6 +88,7 @@ import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -346,6 +349,7 @@ class MainActivity : AppCompatActivity() {
     internal var prevUpdateFolder: Int = -1
     internal val folderCache = mutableMapOf<Int, List<DisplayEmail>>()
     private var syncJob: Job? = null
+    @Volatile private var lastSseRefreshAt = 0L
     internal var currentSettingsSection: SettingsSection = SettingsSection.ROOT
     internal var currentTheme: String = "gray"
     internal val selectedEmails = mutableSetOf<String>()
@@ -734,6 +738,7 @@ class MainActivity : AppCompatActivity() {
                 IntentFilter(UnifiedPushService.ACTION_PUSH_MESSAGE_RECEIVED),
                 androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
         )
+        startForegroundSse()
         updateFormState()
         // Notification permission is only requested from the onboarding permission screen,
         // never automatically on launch.
@@ -1586,6 +1591,9 @@ class MainActivity : AppCompatActivity() {
                             navigationView.post { rebuildDrawerMenu() }
                         }
                     }
+                    // Account-wide Email state seen at the last full fetch; when the
+                    // cheap probe matches, the heavy refetch is skipped entirely.
+                    val lastEmailStates = HashMap<String, String>()
                     while (true) {
                         try {
                             if (folderCache[currentFolderId] == null) {
@@ -1595,6 +1603,14 @@ class MainActivity : AppCompatActivity() {
 
                             if (isUnifiedInbox) {
                                 val allAccounts = BackgroundEmailSyncReceiver.readAllAccounts(this@MainActivity)
+                                val freshStates = fetchEmailStates(allAccounts)
+                                if (folderCache[currentFolderId] != null &&
+                                            emailStatesUnchanged(allAccounts, freshStates, lastEmailStates)
+                                ) {
+                                    delay(SYNC_POLL_INTERVAL_MS)
+                                    continue
+                                }
+                                lastEmailStates.putAll(freshStates)
                                 val merged = allAccounts.flatMap { acc ->
                                     try {
                                         val base = jmapClient.fetchEmails(acc, limit = emailLimit).map { e ->
@@ -1638,9 +1654,18 @@ class MainActivity : AppCompatActivity() {
                                 status.text = if (merged.isEmpty())
                                     getString(R.string.status_sync_ok_empty, folderTitle, debugTs())
                                 else getString(R.string.status_sync_ok, merged.size, debugTs(), folderTitle)
-                                delay(10000)
+                                delay(SYNC_POLL_INTERVAL_MS)
                                 continue
                             }
+
+                            val freshStates = fetchEmailStates(listOf(account))
+                            if (folderCache[currentFolderId] != null &&
+                                        emailStatesUnchanged(listOf(account), freshStates, lastEmailStates)
+                            ) {
+                                delay(SYNC_POLL_INTERVAL_MS)
+                                continue
+                            }
+                            lastEmailStates.putAll(freshStates)
 
                             val mailboxId =
                                     if (role != null) resolveMailboxIdByRole(account, role)
@@ -1721,9 +1746,94 @@ class MainActivity : AppCompatActivity() {
                                 }.start()
                             }
                         }
-                        delay(10000)
+                        delay(SYNC_POLL_INTERVAL_MS)
                     }
                 }
+    }
+
+    /** Cheap per-account Email state probe; a missing entry means the probe failed. */
+    private suspend fun fetchEmailStates(
+        accounts: List<JMapClient.ConnectedAccount>
+    ): Map<String, String> =
+            accounts.mapNotNull { acc ->
+                try {
+                    jmapClient.fetchEmailState(acc)?.let { acc.email to it }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    null
+                }
+            }.toMap()
+
+    /** True when every account's probed state matches the one from the last full fetch. */
+    private fun emailStatesUnchanged(
+        accounts: List<JMapClient.ConnectedAccount>,
+        fresh: Map<String, String>,
+        last: Map<String, String>
+    ): Boolean =
+            accounts.isNotEmpty() &&
+                    fresh.size == accounts.size &&
+                    accounts.all { fresh[it.email] != null && fresh[it.email] == last[it.email] }
+
+    // Foreground SSE: while the activity is STARTED, hold a direct EventSource
+    // connection per account. No foreground service involved, so the Android 15
+    // dataSync FGS time budget never applies here. A StateChange triggers an
+    // immediate refresh; the periodic state-gated poll remains as fallback.
+    private fun startForegroundSse() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (true) {
+                    val accounts = try {
+                        BackgroundEmailSyncReceiver.readAllAccounts(this@MainActivity)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        emptyList()
+                    }
+                    if (accounts.isEmpty()) {
+                        delay(SSE_NO_ACCOUNT_RETRY_MS)
+                        continue
+                    }
+                    // Suspends until STOP cancels the scope; one listener per account.
+                    coroutineScope {
+                        accounts.forEach { acc ->
+                            launch(Dispatchers.IO) { foregroundSseLoop(acc) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private suspend fun foregroundSseLoop(account: JMapClient.ConnectedAccount) {
+        var backoffMs = SSE_BACKOFF_INITIAL_MS
+        while (true) {
+            try {
+                val url = JmapSse.resolveEventSourceUrl(account)
+                if (url == null) {
+                    delay(backoffMs)
+                    backoffMs = minOf(backoffMs * 2, SSE_BACKOFF_MAX_MS)
+                    continue
+                }
+                backoffMs = SSE_BACKOFF_INITIAL_MS
+                JmapSse.connectAndListen(account, url) { _, data ->
+                    if (JmapSse.isRelevantStateChange(data)) onSseStateChange()
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.d(TAG, "Foreground SSE error for ${account.email}, retry in ${backoffMs}ms", e)
+                delay(backoffMs)
+                backoffMs = minOf(backoffMs * 2, SSE_BACKOFF_MAX_MS)
+            }
+        }
+    }
+
+    private fun onSseStateChange() {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - lastSseRefreshAt < SSE_REFRESH_DEBOUNCE_MS) return
+        lastSseRefreshAt = now
+        runOnUiThread { if (connectedAccount != null) refreshInboxNow() }
     }
 
     private fun loadUnifiedPushPreferences() {
@@ -2727,6 +2837,13 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         internal const val TAG = "MainActivity"
+        // Fallback poll cadence; each tick is only a cheap Email-state probe,
+        // the full refetch runs just when the state actually moved.
+        private const val SYNC_POLL_INTERVAL_MS = 10_000L
+        private const val SSE_REFRESH_DEBOUNCE_MS = 3_000L
+        private const val SSE_BACKOFF_INITIAL_MS = 5_000L
+        private const val SSE_BACKOFF_MAX_MS = 60_000L
+        private const val SSE_NO_ACCOUNT_RETRY_MS = 30_000L
         // Chat-thread expansion reveals messages this many at a time.
         internal const val THREAD_PAGE = 5
         internal const val PREFS_NAME = "mail_prefs"

@@ -138,6 +138,29 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
         }
     }
 
+    /**
+     * Account-wide Email state string (Email/get with no ids). Changes whenever any
+     * email in the account is created, updated or destroyed — a cheap poll primitive:
+     * compare with the last seen value and skip the full fetch when unchanged.
+     */
+    suspend fun fetchEmailState(connectedAccount: ConnectedAccount): String? =
+        withContext(Dispatchers.IO) {
+            val client = newClient(connectedAccount)
+            client.use { jmapClient ->
+                val session = jmapClient.getSession().get(12, TimeUnit.SECONDS)
+                val accountId = session.getPrimaryAccount(MailAccountCapability::class.java)
+                    ?: return@withContext null
+                val call = rs.ltt.jmap.common.method.call.email.GetEmailMethodCall.builder()
+                    .accountId(accountId)
+                    .ids(emptyArray())
+                    .properties(arrayOf("id"))
+                    .build()
+                jmapClient.call(call).get()
+                    .getMain(rs.ltt.jmap.common.method.response.email.GetEmailMethodResponse::class.java)
+                    .state
+            }
+        }
+
     suspend fun fetchEmailsById(
         connectedAccount: ConnectedAccount,
         ids: List<String>
