@@ -273,9 +273,10 @@ internal fun MainActivity.showComposeView() {
 
     val isLight = currentTheme == "light"
     val bgColor = when (currentTheme) {
-        "light" -> "#FFFFFF".toColorInt()
-        "oled"  -> "#000000".toColorInt()
-        else    -> "#1A1A1A".toColorInt()
+        "light"  -> "#FFFFFF".toColorInt()
+        "oled"   -> "#000000".toColorInt()
+        "violet" -> "#160E24".toColorInt()
+        else     -> "#1A1A1A".toColorInt()
     }
     val textColor  = if (isLight) "#212121".toColorInt() else Color.WHITE
     val hintColor  = if (isLight) "#9E9E9E".toColorInt() else "#4A4A4A".toColorInt()
@@ -285,9 +286,10 @@ internal fun MainActivity.showComposeView() {
         it.setHintTextColor(hintColor)
     }
     formatToolbarRow.setBackgroundColor(when (currentTheme) {
-        "light" -> "#E8E8E8".toColorInt()
-        "oled"  -> Color.BLACK
-        else    -> "#212121".toColorInt()
+        "light"  -> "#E8E8E8".toColorInt()
+        "oled"   -> Color.BLACK
+        "violet" -> "#0E0A1A".toColorInt()
+        else     -> "#212121".toColorInt()
     })
     buildFormatToolbar()
     updateFormatButtonStates()
