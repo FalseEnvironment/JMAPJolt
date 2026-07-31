@@ -51,15 +51,29 @@ class JmapEventSourceService : Service() {
     // startForeground() must run as early as possible: onCreate fires before
     // onStartCommand, and a busy main thread at app launch can otherwise push the
     // call past the system deadline (ForegroundServiceDidNotStartInTimeException).
+    // On Android 15+, the dataSync FGS type has a rolling time budget; once it's
+    // exhausted the system kills the service and refuses restart, throwing
+    // ForegroundServiceStartNotAllowedException here instead of just failing quietly.
     override fun onCreate() {
         super.onCreate()
-        startForeground(NOTIFICATION_ID, buildNotification())
+        if (!tryStartForeground()) stopSelf()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForeground(NOTIFICATION_ID, buildNotification())
+        if (!tryStartForeground()) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
         serviceScope.launch { startLoopsForAllAccounts() }
         return START_STICKY
+    }
+
+    private fun tryStartForeground(): Boolean = try {
+        startForeground(NOTIFICATION_ID, buildNotification())
+        true
+    } catch (e: Exception) {
+        Log.e(TAG, "startForeground refused (FGS time-limit likely exhausted)", e)
+        false
     }
 
     private suspend fun startLoopsForAllAccounts() {
