@@ -184,7 +184,8 @@ class MainActivity : AppCompatActivity() {
     internal lateinit var detailScroll: androidx.core.widget.NestedScrollView
     internal var detailBarHidden = false
     internal var detailBarHeight = 0
-    internal var detailBarLastToggleMs = 0L
+    // Scroll-linked header collapse: current upward offset in px (0 = fully shown).
+    internal var detailBarOffset = 0f
     internal var detailSwipeAnimating = false
     internal val prefetchingIds = mutableSetOf<String>()
     internal lateinit var detailWebView: android.webkit.WebView
@@ -907,6 +908,7 @@ class MainActivity : AppCompatActivity() {
         updateDetailStarIcon(email.isFavorite)
         // Reset the auto-hide action row to fully visible on open.
         detailBarHidden = false
+        detailBarOffset = 0f
         detailHeaderRow.animate().cancel()
         detailHeaderRow.visibility = View.VISIBLE
         detailHeaderRow.translationY = 0f

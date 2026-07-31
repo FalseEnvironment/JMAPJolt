@@ -335,49 +335,20 @@ internal fun MainActivity.setupEmailDetailView() {
         overScrollMode = View.OVER_SCROLL_NEVER
         addView(detailBody)
     }
-    // Auto-hide the action row when scrolling down, reveal it when scrolling up.
-    val scrollThreshold = (24 * dp).toInt()
+    // Scroll-linked collapse: the header follows the page 1:1 — it slides up
+    // exactly as much as the page scrolls (fading out on the way) and slides
+    // back in the same gradual way on any upward scroll. No snap animation.
     detailScroll.setOnScrollChangeListener { _, _, scrollY, _, oldScrollY ->
-        val dy = scrollY - oldScrollY
-        when {
-            dy > 4 && scrollY > scrollThreshold && !detailBarHidden -> setDetailBarHidden(true)
-            dy < -4 && detailBarHidden -> setDetailBarHidden(false)
-        }
+        val max = detailBarHeight.toFloat()
+        if (max <= 0f) return@setOnScrollChangeListener
+        detailBarOffset = (detailBarOffset + (scrollY - oldScrollY)).coerceIn(0f, max)
+        if (scrollY <= 0) detailBarOffset = 0f
+        detailHeaderRow.translationY = -detailBarOffset
+        detailHeaderRow.alpha = 1f - detailBarOffset / max
     }
     emailDetailContainer.addView(detailScroll)
     emailDetailContainer.addView(headerWrap)
     mailboxContainer.addView(emailDetailContainer)
-}
-
-internal fun MainActivity.setDetailBarHidden(hidden: Boolean) {
-    if (detailBarHidden == hidden) return
-    val now = System.currentTimeMillis()
-    if (now - detailBarLastToggleMs < 200) return
-    detailBarLastToggleMs = now
-    detailBarHidden = hidden
-    detailHeaderRow.animate().cancel()
-    if (hidden) {
-        // Cache the measured height so the reveal animation has a distance to travel.
-        detailHeaderRow.height.takeIf { it > 0 }?.let { detailBarHeight = it }
-        detailHeaderRow.animate().translationY(-detailBarHeight.toFloat()).alpha(0f).setDuration(160).withEndAction {
-            detailHeaderRow.visibility = View.GONE
-        }.start()
-        android.animation.ValueAnimator.ofInt(detailBarHeight, 0).apply {
-            duration = 160
-            addUpdateListener { detailBody.setPadding(0, it.animatedValue as Int, 0, 0) }
-            start()
-        }
-    } else {
-        detailHeaderRow.visibility = View.VISIBLE
-        detailHeaderRow.translationY = -detailBarHeight.toFloat()
-        detailHeaderRow.alpha = 0f
-        detailHeaderRow.animate().translationY(0f).alpha(1f).setDuration(160).start()
-        android.animation.ValueAnimator.ofInt(0, detailBarHeight).apply {
-            duration = 160
-            addUpdateListener { detailBody.setPadding(0, it.animatedValue as Int, 0, 0) }
-            start()
-        }
-    }
 }
 
 internal fun MainActivity.detailSwipeTarget(forward: Boolean): DisplayEmail? {
