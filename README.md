@@ -7,7 +7,7 @@
 **A fast, open source JMAP email client for Android.**
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.1-green.svg)](https://github.com/FalseEnvironment/JMAPJolt/releases)
+[![Version](https://img.shields.io/badge/version-0.20-green.svg)](https://github.com/FalseEnvironment/JMAPJolt/releases)
 [![Platform](https://img.shields.io/badge/platform-Android-brightgreen.svg)](#)
 [![GitHub Downloads](https://img.shields.io/github/downloads/FalseEnvironment/JMAPJolt/total?label=downloads&color=blue)](https://github.com/FalseEnvironment/JMAPJolt/releases)
 
