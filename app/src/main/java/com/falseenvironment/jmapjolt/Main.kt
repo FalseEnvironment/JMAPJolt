@@ -349,6 +349,7 @@ class MainActivity : AppCompatActivity() {
     internal val folderCache = mutableMapOf<Int, List<DisplayEmail>>()
     private var syncJob: Job? = null
     @Volatile private var lastSseRefreshAt = 0L
+    internal var searchHintJob: Job? = null
     internal var currentSettingsSection: SettingsSection = SettingsSection.ROOT
     internal var currentTheme: String = "gray"
     internal val selectedEmails = mutableSetOf<String>()

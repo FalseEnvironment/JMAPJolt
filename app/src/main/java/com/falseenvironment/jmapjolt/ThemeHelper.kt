@@ -467,8 +467,10 @@ internal fun MainActivity.setDrawerIndicator(enabled: Boolean) {
 }
 
 internal fun MainActivity.updateCustomTopBar(title: String, inMailbox: Boolean = false) {
-    folderLabel.text = title
-    folderLabel.visibility = if (title.isNotBlank()) View.VISIBLE else View.GONE
+    // The fixed folder-label row is retired; the current category is shown
+    // inside the search bar itself instead of "Search mail".
+    folderLabel.visibility = View.GONE
+    if (title.isNotBlank()) searchBarTitle.text = title
 }
 
 internal fun MainActivity.updateContainerTextColors(view: View, primaryColor: Int, secondaryColor: Int) {

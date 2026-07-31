@@ -124,10 +124,28 @@ internal fun MainActivity.activateSearch() {
     searchInput.requestFocus()
     val imm = getSystemService(InputMethodManager::class.java)
     imm?.showSoftInput(searchInput, InputMethodManager.SHOW_IMPLICIT)
+    startSearchingHintAnimation()
+}
+
+/** "Searching." → ".." → "..." hint loop, shown until the user types something. */
+internal fun MainActivity.startSearchingHintAnimation() {
+    searchHintJob?.cancel()
+    searchHintJob = lifecycleScope.launch {
+        var dots = 0
+        while (isSearchActive) {
+            if (searchInput.text.isNullOrEmpty()) {
+                dots = dots % 3 + 1
+                searchInput.hint = "Searching" + ".".repeat(dots)
+            }
+            delay(400)
+        }
+    }
 }
 
 internal fun MainActivity.deactivateSearch() {
     isSearchActive = false
+    searchHintJob?.cancel()
+    searchHintJob = null
     setDrawerIndicator(true)
     searchInput.text.clear()
     searchInput.visibility = View.GONE
