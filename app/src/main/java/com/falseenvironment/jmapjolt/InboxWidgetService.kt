@@ -54,7 +54,6 @@ private class InboxWidgetFactory(
         accentColor = WidgetSupport.accentColor(context)
 
         val selection = WidgetSupport.effectiveSelection(context, appWidgetId)
-        val cache = EmailCache(context.filesDir)
         val accentForSingle = selection?.takeIf { it != WidgetSupport.UNIFIED }
             ?.let { WidgetSupport.accountColor(context, it) }
 
@@ -66,8 +65,15 @@ private class InboxWidgetFactory(
 
         val collected = mutableListOf<Row>()
         for (account in accounts) {
-            val result = runCatching { runBlocking { cache.load(account) } }.getOrNull() ?: continue
-            val inbox = result.folderCache[R.id.nav_inbox] ?: result.emails
+            val inbox = runCatching {
+                runBlocking {
+                    com.falseenvironment.jmapjolt.cache.EmailCacheStore.load(
+                        context,
+                        com.falseenvironment.jmapjolt.cache.EmailCacheStore.bucket(account, R.id.nav_inbox)
+                    )
+                }
+            }.getOrDefault(emptyList())
+            if (inbox.isEmpty()) continue
             val strip = accentForSingle ?: WidgetSupport.accountColor(context, account)
             for (e in inbox) {
                 collected += Row(

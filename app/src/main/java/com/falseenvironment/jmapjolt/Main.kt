@@ -341,7 +341,6 @@ class MainActivity : AppCompatActivity() {
     internal var isLoadingMore = false
     internal lateinit var emailAdapter: EmailAdapter
     internal lateinit var jmapClient: JMapClient
-    private lateinit var emailCache: EmailCache
     internal var connectedAccount: JMapClient.ConnectedAccount? = null
     internal val savedAccounts = mutableListOf<AccountEntry>()
     internal var currentAccountEmail: String? = null
@@ -578,7 +577,15 @@ class MainActivity : AppCompatActivity() {
         accentColorRow = findViewById(R.id.accentColorRow)
 
         jmapClient = JMapClient(this)
-        emailCache = EmailCache(filesDir)
+        // Purge the WebView disk cache: detail views run with LOAD_NO_CACHE, but
+        // caches accumulated before that (or by other WebView writes) linger forever.
+        try { android.webkit.WebView(this).apply { clearCache(true); destroy() } } catch (_: Exception) {}
+        // One-time cleanup of the legacy flat JSON cache (replaced by the Room store).
+        lifecycleScope.launch(Dispatchers.IO) {
+            filesDir.listFiles()
+                ?.filter { it.name.startsWith("cache_") && it.name.endsWith(".json") }
+                ?.forEach { it.delete() }
+        }
 
         setSupportActionBar(toolbar)
         drawerToggle =
@@ -2612,12 +2619,21 @@ class MainActivity : AppCompatActivity() {
         }
 
         lifecycleScope.launch {
-            val cached = emailCache.load(account.email)
-            if (cached != null) {
-                selectedFolder = if (forceInbox) R.id.nav_inbox else cached.selectedFolder
-                folderCache.clear()
-                folderCache.putAll(cached.folderCache)
-                updateEmailsList(cached.emails)
+            val restoredFolder =
+                    if (forceInbox) R.id.nav_inbox
+                    else getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                            .getInt(KEY_LAST_SELECTED_FOLDER, R.id.nav_inbox)
+            selectedFolder = restoredFolder
+            // Only the visible folder is restored eagerly; the others load on
+            // demand from their Room buckets when the user switches to them.
+            val cached = cacheBucket(restoredFolder)?.let { bucket ->
+                runCatching {
+                    com.falseenvironment.jmapjolt.cache.EmailCacheStore.load(this@MainActivity, bucket)
+                }.getOrDefault(emptyList())
+            } ?: emptyList()
+            if (cached.isNotEmpty()) {
+                folderCache[restoredFolder] = cached
+                updateEmailsList(cached)
                 updateTopBarState()
                 rebuildDrawerMenu()
             }
@@ -2837,6 +2853,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         internal const val TAG = "MainActivity"
+        private const val KEY_LAST_SELECTED_FOLDER = "last_selected_folder"
         // Fallback poll cadence; each tick is only a cheap Email-state probe,
         // the full refetch runs just when the state actually moved.
         private const val SYNC_POLL_INTERVAL_MS = 10_000L
@@ -3405,13 +3422,21 @@ class MainActivity : AppCompatActivity() {
     }
 
     internal fun saveEmailCache() {
-        val email = currentAccountEmail ?: return
+        if (currentAccountEmail == null) return
         if (folderCache.isEmpty() && emails.isEmpty()) return
         val snapshot = HashMap(folderCache)
-        val currentList = emails.toList()
-        val folder = selectedFolder
+        snapshot[selectedFolder] = emails.toList()
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
+                .putInt(KEY_LAST_SELECTED_FOLDER, selectedFolder)
+                .apply()
+        val activity = this
         lifecycleScope.launch {
-            emailCache.save(email, folder, snapshot, currentList)
+            snapshot.forEach { (folderId, list) ->
+                val bucket = cacheBucket(folderId) ?: return@forEach
+                runCatching {
+                    com.falseenvironment.jmapjolt.cache.EmailCacheStore.save(activity, bucket, list)
+                }
+            }
             InboxWidgetProvider.refreshAll(applicationContext)
         }
     }

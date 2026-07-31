@@ -294,6 +294,9 @@ internal fun MainActivity.setupEmailDetailView() {
                 settings.setSupportZoom(true)
                 settings.builtInZoomControls = true
                 settings.displayZoomControls = false
+                // Body HTML is local; without this WebView grows an unbounded
+                // disk cache of remote images (~12 MB observed).
+                settings.cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
             }
     detailWebView.webViewClient = object : android.webkit.WebViewClient() {
         override fun shouldOverrideUrlLoading(
@@ -401,6 +404,7 @@ internal fun MainActivity.ensureDetailPreviewPanel(): LinearLayout {
         }
         settings.useWideViewPort = true
         settings.loadWithOverviewMode = true
+        settings.cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
     }
     val panel = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
