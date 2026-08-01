@@ -317,6 +317,12 @@ internal fun MainActivity.showComposeView() {
         }
     }
 
+    // Address book shortcut: picks land in whatever category (To/Cc/Bcc) is active.
+    composeContactsButton.imageTintList = ColorStateList.valueOf(currentAccentColor.toColorInt())
+    composeContactsButton.setOnClickListener {
+        ContactPicker(this) { addresses -> addresses.forEach { addRecipientChip(it) } }.show()
+    }
+
     // Reset recipient categories and wire Enter key for multi-recipient input
     listOf(composeToChipsGroup, composeCcChipsGroup, composeBccChipsGroup).forEach {
         it.removeAllViews(); it.visibility = View.GONE

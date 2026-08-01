@@ -223,6 +223,8 @@ internal fun MainActivity.bindDrawerNavigation() {
     navigationView.setNavigationItemSelectedListener { item ->
         if (item.itemId == R.id.nav_calendar) {
             showCalendarScreen()
+        } else if (item.itemId == R.id.nav_contacts) {
+            showContactsScreen()
         } else if (item.itemId == R.id.nav_settings) {
             showSettingsScreen()
         } else {
@@ -522,11 +524,19 @@ internal fun MainActivity.rebuildDrawerMenu() {
         }
     } else null
 
+    val contactsItem = if (ContactsPrefs.isEnabled(this)) {
+        menu.add(0, R.id.nav_contacts, orderIdx + 1, getString(R.string.contacts_title)).apply {
+            setIcon(R.drawable.ic_lucide_user)
+            icon?.mutate()?.setTint(defaultIconTint)
+            isCheckable = true
+        }
+    } else null
+
     val settingsItem =
             menu.add(
                     0,
                     R.id.nav_settings,
-                    orderIdx + 1,
+                    orderIdx + 2,
                     getString(R.string.settings_title)
             )
     settingsItem.setIcon(R.drawable.ic_lucide_settings)
@@ -539,6 +549,8 @@ internal fun MainActivity.rebuildDrawerMenu() {
         settingsItem.isChecked = true
     } else if (calendarItem != null && calendarPanelView?.visibility == View.VISIBLE) {
         calendarItem.isChecked = true
+    } else if (contactsItem != null && contactsPanelView?.visibility == View.VISIBLE) {
+        contactsItem.isChecked = true
     } else {
         menu.findItem(selectedFolder)?.isChecked = true
     }

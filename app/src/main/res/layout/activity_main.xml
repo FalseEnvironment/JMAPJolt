@@ -497,6 +497,15 @@
                             android:textColorHint="#4A4A4A"
                             android:textSize="14sp" />
 
+                        <!-- Address book picker for the active recipient category -->
+                        <ImageView
+                            android:id="@+id/composeContactsButton"
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:padding="9dp"
+                            android:contentDescription="@string/contacts_pick_title"
+                            android:src="@drawable/ic_lucide_user" />
+
                     </LinearLayout>
 
                     <com.google.android.material.chip.ChipGroup

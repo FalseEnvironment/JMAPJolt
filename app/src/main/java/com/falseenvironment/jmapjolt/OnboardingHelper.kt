@@ -525,6 +525,14 @@ internal fun MainActivity.buildOnboardingGetStartedPage(
         onAllow = { requestCalendarPermissions { onboardingPermRefresh?.invoke() } }
     ))
 
+    page.addView(permRow(
+        iconRes = R.drawable.ic_lucide_user,
+        title = "Contacts",
+        subtitle = "Needed only if you sync your address book with DAVx5",
+        grantedCheck = { ContactsProvider.hasReadPermission(this) },
+        onAllow = { requestContactsPermissions { onboardingPermRefresh?.invoke() } }
+    ))
+
     return page
 }
 

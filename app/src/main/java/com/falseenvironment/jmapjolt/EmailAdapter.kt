@@ -567,8 +567,21 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
             holder.itemView.setBackgroundColor(Color.TRANSPARENT)
 
             val loadFavicons = loadFaviconsEnabled
+            // A contact with a photo wins over the domain favicon: the sender is a person we know.
+            val contactPhoto = ContactAvatars.photoFor(item.fromEmail)
 
-            if (loadFavicons && normalizedDomain.isNotEmpty()) {
+            if (contactPhoto != null) {
+                (holder.avatarImage.getTag(R.id.tag_favicon_job) as? kotlinx.coroutines.Job)?.cancel()
+                holder.avatarImage.tag = null
+                holder.avatarImage.setPadding(0, 0, 0, 0)
+                holder.avatarImage.visibility = android.view.View.VISIBLE
+                holder.avatarImage.load(contactPhoto) {
+                    crossfade(false)
+                    transformations(CircleCropTransformation())
+                }
+                holder.avatar.text = ""
+                bg.setColor(hashColor)
+            } else if (loadFavicons && normalizedDomain.isNotEmpty()) {
                 // Offset from the theme background so dark favicons stay visible on dark themes
                 // (and light favicons on the light theme).
                 val neutralBg = when (activity.currentTheme) {

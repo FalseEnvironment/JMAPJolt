@@ -95,6 +95,7 @@ import org.unifiedpush.android.connector.UnifiedPush
 
 internal fun MainActivity.showSettingsScreen() {
     hideCalendarScreen()
+    hideContactsScreen()
     onboardingContainer.visibility = View.GONE
     loginContainer.visibility = View.GONE
     mailboxContainer.visibility = View.GONE

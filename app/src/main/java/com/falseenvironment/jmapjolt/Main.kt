@@ -247,6 +247,7 @@ class MainActivity : AppCompatActivity() {
     internal var composeCategory = 0
     internal var selectedFromEmail = ""
     internal lateinit var composeToInput: EditText
+    internal lateinit var composeContactsButton: ImageView
     internal lateinit var composeSubjectInput: EditText
     internal lateinit var composeBodyInput: EditText
     internal lateinit var formatToolbar: LinearLayout
@@ -304,6 +305,17 @@ class MainActivity : AppCompatActivity() {
         val email = editingAvatarEmail ?: return@registerForActivityResult
         if (uri != null) showAvatarCropDialog(uri, email)
     }
+    /** Set by [ContactEditor] while its avatar picker is open; cleared once the pick resolves. */
+    internal var pendingContactPhoto: ((Uri) -> Unit)? = null
+
+    internal val pickContactPhotoLauncher = registerForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        val callback = pendingContactPhoto
+        pendingContactPhoto = null
+        if (uri != null) callback?.invoke(uri)
+    }
+
     internal lateinit var accentColorPreview: View
     internal lateinit var accentColorRow: LinearLayout
     internal var currentAccentColor: String = "#3D8BFD"
@@ -491,6 +503,7 @@ class MainActivity : AppCompatActivity() {
         composeBccChipsGroup = findViewById(R.id.composeBccChipsGroup)
         composeCategoryTabs = findViewById(R.id.composeCategoryTabs)
         composeToInput = findViewById(R.id.composeToInput)
+        composeContactsButton = findViewById(R.id.composeContactsButton)
         composeSubjectInput = findViewById(R.id.composeSubjectInput)
         composeBodyInput = findViewById(R.id.composeBodyInput)
         formatToolbar = findViewById(R.id.formatToolbar)
@@ -589,6 +602,12 @@ class MainActivity : AppCompatActivity() {
                 ?.forEach { it.delete() }
         }
 
+        // Warm the address book once so the email list can draw contact photos for known senders
+        // (and the compose picker opens instantly) without waiting for the contacts tab.
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { ContactsRepository(this@MainActivity).warmCache() }
+        }
+
         setSupportActionBar(toolbar)
         drawerToggle =
                 ActionBarDrawerToggle(
@@ -636,6 +655,7 @@ class MainActivity : AppCompatActivity() {
                         drawerLayout.closeDrawer(GravityCompat.START)
                     calendarPanelView?.visibility == View.VISIBLE ->
                         if (calendarPanelView?.onBackPressed() != true) showMailboxScreen()
+                    contactsPanelView?.visibility == View.VISIBLE -> showMailboxScreen()
                     selectedEmails.isNotEmpty() -> clearSelection()
                     isSearchActive -> {
                         // First back press only dismisses the keyboard so results stay
@@ -802,6 +822,7 @@ class MainActivity : AppCompatActivity() {
         mailboxContainer.visibility = View.GONE
         settingsContainer.visibility = View.GONE
         emailDetailContainer.visibility = View.GONE
+        hideContactsScreen()
         fabCompose.visibility = View.GONE
         customTopBar.visibility = View.GONE
         isShowingEmailDetail = false
@@ -824,6 +845,39 @@ class MainActivity : AppCompatActivity() {
         calendarPanelView?.visibility = View.GONE
     }
 
+    /** Address book UI, hosted the same way as the calendar so the drawer stays available. */
+    internal var contactsPanelView: ContactsPanel? = null
+
+    internal fun showContactsScreen() {
+        if (composeContainer.visibility == View.VISIBLE) hideCompose()
+        onboardingContainer.visibility = View.GONE
+        loginContainer.visibility = View.GONE
+        loginBackBtn.visibility = View.GONE
+        mailboxContainer.visibility = View.GONE
+        settingsContainer.visibility = View.GONE
+        emailDetailContainer.visibility = View.GONE
+        calendarPanelView?.visibility = View.GONE
+        fabCompose.visibility = View.GONE
+        customTopBar.visibility = View.GONE
+        isShowingEmailDetail = false
+        val panel = contactsPanelView ?: ContactsPanel(this).also { p ->
+            contactsPanelView = p
+            val parent = mailboxContainer.parent as android.view.ViewGroup
+            parent.addView(p, android.view.ViewGroup.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT))
+        }
+        panel.visibility = View.VISIBLE
+        panel.bringToFront()
+        panel.onShown()
+        navigationView.post { rebuildDrawerMenu() }
+        drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED)
+    }
+
+    internal fun hideContactsScreen() {
+        contactsPanelView?.visibility = View.GONE
+    }
+
     /** Id of the draft currently being edited, so it can be replaced (destroyed) on save/send. */
     internal var editingDraftId: String? = null
 
@@ -838,6 +892,7 @@ class MainActivity : AppCompatActivity() {
         loginContainer.visibility = View.GONE
         loginBackBtn.visibility = View.GONE
         hideCalendarScreen()
+        hideContactsScreen()
         mailboxContainer.visibility = View.VISIBLE
         mailboxContainer.animateScreenInBack()
         emailDetailContainer.visibility = View.GONE
@@ -1068,6 +1123,20 @@ class MainActivity : AppCompatActivity() {
     internal val calendarPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { _ -> calendarPermissionCallback?.invoke(); calendarPermissionCallback = null }
+
+    /** Requests READ/WRITE_CONTACTS; invokes [onResult] once the user responds. */
+    internal var contactsPermissionCallback: (() -> Unit)? = null
+    internal val contactsPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { _ -> contactsPermissionCallback?.invoke(); contactsPermissionCallback = null }
+
+    internal fun requestContactsPermissions(onResult: () -> Unit) {
+        contactsPermissionCallback = onResult
+        contactsPermissionLauncher.launch(arrayOf(
+            android.Manifest.permission.READ_CONTACTS,
+            android.Manifest.permission.WRITE_CONTACTS
+        ))
+    }
 
     /** Reflects the selected calendar provider in the dropdown text, hint, add button + account. */
 

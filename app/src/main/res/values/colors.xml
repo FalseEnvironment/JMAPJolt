@@ -5,5 +5,8 @@
     <!-- Action mode bar tint (overridden by accent at runtime) -->
     <color name="actionModeBlue">#1976D2</color>
 
+    <!-- Destructive action (contact/event delete); same red the calendar editor uses -->
+    <color name="contacts_delete_red">#E5484D</color>
+
     <!-- Ripple / state layer -->
 </resources>
