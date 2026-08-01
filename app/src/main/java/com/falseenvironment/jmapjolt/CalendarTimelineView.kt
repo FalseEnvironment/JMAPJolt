@@ -18,9 +18,9 @@ class CalendarTimelineView(context: Context) : View(context) {
     var palette: CalendarTheme.Palette = CalendarTheme.palette(context)
     /** Day-start (local midnight) instants, one per column. */
     var days: List<Long> = listOf(midnight(System.currentTimeMillis()))
-        set(value) { field = value; requestLayout(); invalidate() }
+        set(value) { field = value; allDayBand = buildBand(); requestLayout(); invalidate() }
     var occurrences: List<EventOccurrence> = emptyList()
-        set(value) { field = value; invalidate() }
+        set(value) { field = value; allDayBand = buildBand(); requestLayout(); invalidate() }
 
     var onEventClick: ((EventOccurrence) -> Unit)? = null
     var onSlotClick: ((Long) -> Unit)? = null
@@ -40,19 +40,58 @@ class CalendarTimelineView(context: Context) : View(context) {
     private val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 12f * density }
     private val dayHeaderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 12f * density; isFakeBoldText = true }
 
-    private val headerHeight get() = if (days.size > 1) 28f * density else 0f
+    private val dayLabelHeight get() = if (days.size > 1) 28f * density else 0f
+    private val allDayRowHeight = 22f * density
+    private val headerHeight get() = dayLabelHeight
+    /**
+     * All-day / multi-day chips live in a band below the hour grid. One row is always
+     * reserved so every page keeps the same footer padding, with or without all-day events.
+     */
+    private val bandRows get() = allDayBand.size.coerceAtLeast(1)
+    private val footerHeight get() = bandRows * allDayRowHeight + 8f * density
     private data class Hit(val rect: RectF, val occ: EventOccurrence)
     private val hits = mutableListOf<Hit>()
+
+    /** An all-day chip: the occurrence plus the inclusive column span it covers. */
+    private data class Span(val occ: EventOccurrence, val firstCol: Int, val lastCol: Int)
+    /** Chips packed into rows; row 0 is drawn topmost. */
+    private var allDayBand: List<List<Span>> = emptyList()
+
+    private fun isBanded(occ: EventOccurrence): Boolean =
+        occ.event.allDay || !isSameDay(occ.start, occ.end - 1)
+
+    /** Greedy row packing of banded occurrences over the visible day columns. */
+    private fun buildBand(): List<List<Span>> {
+        if (days.isEmpty()) return emptyList()
+        val dayEnd = days.last() + 86_400_000L
+        val spans = occurrences.filter { isBanded(it) }.mapNotNull { occ ->
+            // All-day instants are UTC-based; shift them to the local day they belong to.
+            val off = if (occ.event.allDay)
+                java.util.TimeZone.getDefault().getOffset(occ.start).toLong() else 0L
+            val start = occ.start - off
+            val end = occ.end - off
+            if (end <= days.first() || start >= dayEnd) return@mapNotNull null
+            val first = days.indexOfLast { it <= start }.coerceAtLeast(0)
+            val last = days.indexOfLast { it < end }.coerceAtLeast(first)
+            Span(occ, first, last)
+        }.sortedWith(compareBy({ it.firstCol }, { -(it.lastCol - it.firstCol) }))
+        val rows = mutableListOf<MutableList<Span>>()
+        for (span in spans) {
+            val row = rows.firstOrNull { r -> r.none { it.lastCol >= span.firstCol && it.firstCol <= span.lastCol } }
+            if (row != null) row += span else rows += mutableListOf(span)
+        }
+        return rows
+    }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val w = MeasureSpec.getSize(widthMeasureSpec)
         if (fitHeight) {
             val h = MeasureSpec.getSize(heightMeasureSpec)
-            hourHeight = ((h - headerHeight) / 24f).coerceAtLeast(1f)
+            hourHeight = ((h - headerHeight - footerHeight) / 24f).coerceAtLeast(1f)
             setMeasuredDimension(w, h)
         } else {
             hourHeight = 56f * density
-            setMeasuredDimension(w, (24 * hourHeight + headerHeight).toInt())
+            setMeasuredDimension(w, (24 * hourHeight + headerHeight + footerHeight).toInt())
         }
     }
 
@@ -78,6 +117,27 @@ class CalendarTimelineView(context: Context) : View(context) {
             }
         }
 
+        // All-day / multi-day chips: accent bars under the grid, spanning their day columns.
+        val bandTop = top + 24 * hourHeight + 4f * density
+        allDayBand.forEachIndexed { rowIndex, row ->
+            val rowTop = bandTop + rowIndex * allDayRowHeight
+            for (span in row) {
+                val left = gutter + span.firstCol * colWidth + 2f * density
+                val right = gutter + (span.lastCol + 1) * colWidth - 2f * density
+                val rect = RectF(left, rowTop, right, rowTop + allDayRowHeight - 2f * density)
+                blockPaint.color = palette.accent
+                canvas.drawRoundRect(rect, 4f * density, 4f * density, blockPaint)
+                titlePaint.color = palette.onAccent
+                canvas.save()
+                canvas.clipRect(rect)
+                canvas.drawText(
+                    span.occ.event.title.ifBlank { "(no title)" },
+                    left + 6f * density, rect.centerY() + 4.5f * density, titlePaint)
+                canvas.restore()
+                hits += Hit(rect, span.occ)
+            }
+        }
+
         // Hour grid
         for (hour in 0..24) {
             val y = top + hour * hourHeight
@@ -94,6 +154,7 @@ class CalendarTimelineView(context: Context) : View(context) {
 
         // Event blocks
         for (occ in occurrences) {
+            if (isBanded(occ)) continue
             val colIndex = days.indexOfFirst { isSameDay(it, occ.start) }
             if (colIndex < 0) continue
             val dayStart = days[colIndex]
@@ -164,7 +225,7 @@ class CalendarTimelineView(context: Context) : View(context) {
         }
         // Empty slot -> create
         val top = headerHeight
-        if (y < top) return true
+        if (y < top || y > top + 24 * hourHeight) return true
         val colWidth = (width - gutter) / days.size.coerceAtLeast(1)
         val colIndex = (((x - gutter) / colWidth).toInt()).coerceIn(0, days.size - 1)
         // Snap to whole hours (no half-hour slots): tapping yields 9:00, 10:00, …

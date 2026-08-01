@@ -102,8 +102,12 @@ object CalendarProvider {
                 ?.use { c ->
                     while (c.moveToNext()) {
                         val begin = c.getLong(1)
-                        val end = c.getLong(2)
                         val allDay = c.getInt(4) == 1
+                        // Rows written with a malformed DURATION expand to zero-length instances;
+                        // fall back to a sane span so they stay readable in the timeline.
+                        val rawEnd = c.getLong(2)
+                        val end = if (rawEnd > begin) rawEnd
+                            else begin + if (allDay) 86_400_000L else 3_600_000L
                         val dur = ((end - begin) / 60_000L).toInt().coerceAtLeast(0)
                         val color = c.getInt(7)
                         val rowId = c.getLong(0)
@@ -171,7 +175,13 @@ object CalendarProvider {
             val rrule = event.recurrence?.toRRule()
             if (rrule != null) {
                 put(CalendarContract.Events.RRULE, rrule)
-                put(CalendarContract.Events.DURATION, "P${event.durationMinutes}M")
+                // RFC 5545: minutes live in the time part ("PT30M"); "P30M" means 30 months.
+                val duration = if (event.allDay) {
+                    "P${(event.durationMinutes / 1440).coerceAtLeast(1)}D"
+                } else {
+                    "PT${event.durationMinutes.coerceAtLeast(1)}M"
+                }
+                put(CalendarContract.Events.DURATION, duration)
                 putNull(CalendarContract.Events.DTEND)
             } else {
                 put(CalendarContract.Events.DTEND, event.end)
