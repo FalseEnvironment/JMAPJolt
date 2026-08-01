@@ -158,6 +158,14 @@
     <string name="calendar_jmap_unsupported">Server has no JMAP calendar — events stored locally</string>
     <string name="settings_import_ics">Import events (.ics)</string>
     <string name="settings_export_ics">Export events (.ics)</string>
+    <string name="settings_contacts">Contacts</string>
+    <string name="settings_contacts_enable">Enable contacts</string>
+    <string name="settings_import_vcf">Import contacts (.vcf)</string>
+    <string name="settings_export_vcf">Export contacts (.vcf)</string>
+    <string name="contacts_import_done">Imported %1$d contact(s)</string>
+    <string name="contacts_import_failed">Import failed</string>
+    <string name="contacts_export_done">Exported %1$d contact(s)</string>
+    <string name="contacts_export_failed">Export failed</string>
     <string name="settings_load_images">Auto-load images</string>
     <string name="settings_load_favicons">Auto-load favicons</string>
 

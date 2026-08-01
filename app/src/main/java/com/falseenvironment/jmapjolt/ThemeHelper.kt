@@ -136,12 +136,14 @@ internal fun MainActivity.applyTheme() {
         } }
         listOf(
             settingsThemeContainer, settingsGeneralContainer, settingsLabelsContainer,
-            settingsUnifiedPushContainer, settingsCalendarContainer, settingsInfoRow
+            settingsUnifiedPushContainer, settingsCalendarContainer,
+            settingsContactsContainer, settingsInfoRow
         ).forEach { it.background = cardDrawable() }
     } else {
         listOf(
             settingsThemeContainer, settingsGeneralContainer, settingsLabelsContainer,
-            settingsUnifiedPushContainer, settingsCalendarContainer, settingsInfoRow
+            settingsUnifiedPushContainer, settingsCalendarContainer,
+            settingsContactsContainer, settingsInfoRow
         ).forEach { it.setBackgroundResource(R.drawable.bg_settings_card) }
     }
 
@@ -154,6 +156,8 @@ internal fun MainActivity.applyTheme() {
     settingsCalendarChevron.imageTintList = accentTint
     settingsImportIcsRow.compoundDrawableTintList = accentTint
     settingsExportIcsRow.compoundDrawableTintList = accentTint
+    settingsImportVcfRow.compoundDrawableTintList = accentTint
+    settingsExportVcfRow.compoundDrawableTintList = accentTint
     settingsInfoIcon.imageTintList = accentTint
     settingsInfoArrow.imageTintList = accentTint
 
@@ -240,6 +244,8 @@ internal fun MainActivity.applyAccentColor() {
     settingsCalendarChevron.imageTintList = accentTint
     settingsImportIcsRow.compoundDrawableTintList = accentTint
     settingsExportIcsRow.compoundDrawableTintList = accentTint
+    settingsImportVcfRow.compoundDrawableTintList = accentTint
+    settingsExportVcfRow.compoundDrawableTintList = accentTint
     settingsInfoIcon.imageTintList = accentTint
     settingsInfoArrow.imageTintList = accentTint
     val hintAlpha = if (currentTheme == "light") 0.55f else 0.65f
@@ -279,7 +285,8 @@ internal fun MainActivity.applyAccentColor() {
             android.graphics.Color.blue(accentInt)
         )
     )
-    listOf(loadImagesSwitch, loadFaviconsSwitch, unifiedPushSwitch, sseSwitch, calendarEnabledSwitch).forEach {
+    listOf(loadImagesSwitch, loadFaviconsSwitch, unifiedPushSwitch, sseSwitch,
+        calendarEnabledSwitch, contactsEnabledSwitch).forEach {
         it.setThumbTintList(thumbTint)
         it.setTrackTintList(trackTint)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {

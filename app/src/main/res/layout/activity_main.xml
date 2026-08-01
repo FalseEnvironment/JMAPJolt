@@ -1422,6 +1422,108 @@
                         </LinearLayout>
                     </LinearLayout>
 
+                    <!-- Contacts group (address book + vCard import/export) -->
+                    <LinearLayout
+                        android:id="@+id/settingsContactsContainer"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:layout_marginEnd="16dp"
+                        android:layout_marginTop="12dp"
+                        android:orientation="vertical"
+                        android:background="@drawable/bg_settings_card"
+                        android:paddingTop="4dp"
+                        android:paddingBottom="4dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="44dp"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingStart="20dp"
+                            android:paddingEnd="20dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="@string/settings_contacts"
+                                android:textSize="13sp"
+                                android:textAllCaps="true"
+                                android:letterSpacing="0.04"
+                                android:textColor="?attr/colorOnSurfaceVariant"
+                                android:textStyle="bold" />
+
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:paddingStart="20dp"
+                            android:paddingEnd="20dp"
+                            android:paddingBottom="8dp">
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="52dp"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal">
+
+                                <TextView
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="@string/settings_contacts_enable"
+                                    android:textSize="15sp" />
+
+                                <androidx.appcompat.widget.SwitchCompat
+                                    android:id="@+id/contactsEnabledSwitch"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content" />
+
+                            </LinearLayout>
+
+                            <LinearLayout
+                                android:id="@+id/settingsContactsOptions"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical">
+
+                                <View
+                                    android:layout_width="match_parent"
+                                    android:layout_height="1dp"
+                                    android:layout_marginBottom="4dp"
+                                    android:background="?attr/colorOutlineVariant" />
+
+                                <TextView
+                                    android:id="@+id/settingsImportVcfRow"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="48dp"
+                                    android:gravity="center_vertical"
+                                    android:text="@string/settings_import_vcf"
+                                    android:textSize="15sp"
+                                    android:drawableEnd="@drawable/ic_lucide_chevron_right"
+                                    android:clickable="true"
+                                    android:focusable="true"
+                                    android:background="?attr/selectableItemBackground" />
+
+                                <TextView
+                                    android:id="@+id/settingsExportVcfRow"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="48dp"
+                                    android:gravity="center_vertical"
+                                    android:text="@string/settings_export_vcf"
+                                    android:textSize="15sp"
+                                    android:drawableEnd="@drawable/ic_lucide_chevron_right"
+                                    android:clickable="true"
+                                    android:focusable="true"
+                                    android:background="?attr/selectableItemBackground" />
+
+                            </LinearLayout>
+                        </LinearLayout>
+                    </LinearLayout>
+
                     <!-- About / info row -->
                     <LinearLayout
                         android:id="@+id/settingsInfoRow"

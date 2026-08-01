@@ -186,7 +186,66 @@ internal fun MainActivity.bindSettingsMenuNavigation() {
     settingsExportIcsRow.setOnClickListener {
         runCatching { exportIcsLauncher.launch("calendar-${System.currentTimeMillis()}.ics") }
     }
+    contactsEnabledSwitch.isChecked = ContactsPrefs.isEnabled(this)
+    settingsContactsOptions.visibility =
+        if (ContactsPrefs.isEnabled(this)) View.VISIBLE else View.GONE
+    contactsEnabledSwitch.setOnCheckedChangeListener { _, enabled ->
+        ContactsPrefs.setEnabled(this, enabled)
+        settingsContactsOptions.visibility = if (enabled) View.VISIBLE else View.GONE
+        if (!enabled && contactsPanelView?.visibility == View.VISIBLE) showMailboxScreen()
+        navigationView.post { rebuildDrawerMenu() }
+    }
+    settingsImportVcfRow.setOnClickListener {
+        runCatching { importVcfLauncher.launch(arrayOf("text/vcard", "text/x-vcard", "*/*")) }
+    }
+    settingsExportVcfRow.setOnClickListener {
+        runCatching { exportVcfLauncher.launch("contacts-${System.currentTimeMillis()}.vcf") }
+    }
     settingsInfoRow.setOnClickListener { showAboutDialog() }
+}
+
+/**
+ * Imports every card in the picked .vcf into the backend new contacts default to. DAVx5-backed
+ * imports land in the system provider, which DAVx5 then pushes over CardDAV on its next sync.
+ */
+internal fun MainActivity.doImportVcf(uri: android.net.Uri) {
+    val repository = ContactsRepository(applicationContext)
+    val source = when (ContactsPrefs.provider(this)) {
+        ContactsPrefs.Provider.DAVX5 -> ContactSource.DAVX5
+        ContactsPrefs.Provider.JMAP -> ContactSource.JMAP
+    }
+    lifecycleScope.launch {
+        val saved = withContext(Dispatchers.IO) {
+            runCatching {
+                val text = contentResolver.openInputStream(uri)?.bufferedReader()
+                    ?.use { it.readText() } ?: return@runCatching -1
+                if (!ContactsVcf.looksLikeVcf(text)) return@runCatching -1
+                ContactsVcf.parse(text, source).count { repository.save(it) != null }
+            }.getOrDefault(-1)
+        }
+        if (saved >= 0) {
+            ContactsCache.contacts = null
+            repository.warmCache()
+            contactsPanelView?.refresh()
+            showInAppMessage(getString(R.string.contacts_import_done, saved))
+        } else showInAppMessage(getString(R.string.contacts_import_failed))
+    }
+}
+
+internal fun MainActivity.doExportVcf(uri: android.net.Uri) {
+    val repository = ContactsRepository(applicationContext)
+    lifecycleScope.launch {
+        val count = withContext(Dispatchers.IO) {
+            runCatching {
+                val contacts = repository.loadAll()
+                val vcf = ContactsVcf.toVcf(contacts)
+                contentResolver.openOutputStream(uri)?.use { it.write(vcf.toByteArray()) }
+                contacts.size
+            }.getOrDefault(-1)
+        }
+        if (count >= 0) showInAppMessage(getString(R.string.contacts_export_done, count))
+        else showInAppMessage(getString(R.string.contacts_export_failed))
+    }
 }
 
 internal fun MainActivity.requestCalendarPermissions(onResult: () -> Unit) {

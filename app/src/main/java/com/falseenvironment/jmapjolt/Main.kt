@@ -154,6 +154,11 @@ class MainActivity : AppCompatActivity() {
     internal lateinit var settingsCalendarChevron: ImageView
     internal lateinit var settingsImportIcsRow: TextView
     internal lateinit var settingsExportIcsRow: TextView
+    internal lateinit var settingsContactsContainer: LinearLayout
+    internal lateinit var settingsContactsOptions: LinearLayout
+    internal lateinit var contactsEnabledSwitch: SwitchCompat
+    internal lateinit var settingsImportVcfRow: TextView
+    internal lateinit var settingsExportVcfRow: TextView
     internal lateinit var settingsInfoRow: LinearLayout
     internal lateinit var settingsInfoIcon: ImageView
     internal lateinit var settingsInfoArrow: ImageView
@@ -288,6 +293,16 @@ class MainActivity : AppCompatActivity() {
     internal val exportIcsLauncher = registerForActivityResult(
         ActivityResultContracts.CreateDocument("text/calendar")
     ) { uri -> uri?.let { doExportIcs(it) } }
+
+    /** Import a .vcf address book picked via the Storage Access Framework. */
+    internal val importVcfLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> uri?.let { doImportVcf(it) } }
+
+    /** Export the address book to a .vcf file created via the Storage Access Framework. */
+    internal val exportVcfLauncher = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("text/vcard")
+    ) { uri -> uri?.let { doExportVcf(it) } }
     internal lateinit var drawerAccountName: TextView
     private lateinit var drawerAccountEmail: TextView
     private lateinit var drawerAccountAvatar: ImageView
@@ -571,6 +586,11 @@ class MainActivity : AppCompatActivity() {
         settingsCalProviderText = findViewById(R.id.settingsCalProviderText)
         calendarEnabledSwitch = findViewById(R.id.calendarEnabledSwitch)
         settingsCalAddProviderButton = findViewById(R.id.settingsCalAddProviderRow)
+        settingsContactsContainer = findViewById(R.id.settingsContactsContainer)
+        settingsContactsOptions = findViewById(R.id.settingsContactsOptions)
+        contactsEnabledSwitch = findViewById(R.id.contactsEnabledSwitch)
+        settingsImportVcfRow = findViewById(R.id.settingsImportVcfRow)
+        settingsExportVcfRow = findViewById(R.id.settingsExportVcfRow)
         topBarSendButton = findViewById(R.id.topBarSendButton)
         quoteIndicatorRow = findViewById(R.id.quoteIndicatorRow)
         quoteIndicatorLabel = findViewById(R.id.quoteIndicatorLabel)
