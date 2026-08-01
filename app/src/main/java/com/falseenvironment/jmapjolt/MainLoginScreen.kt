@@ -95,12 +95,17 @@ internal fun MainActivity.connectAndOpenMailbox() {
             loadingOverlay.visibility = View.GONE
             val attempted = result.attemptedEndpoints.joinToString(" | ")
             status.text =
-                    getString(
-                            R.string.status_connection_failed_verbose,
-                            debugTs(),
-                            result.errorMessage ?: getString(R.string.status_connection_failed),
-                            attempted
-                    )
+                    if (result.authFailed) {
+                        // Credentials were refused: the endpoint list is noise here.
+                        getString(R.string.error_auth_app_password)
+                    } else {
+                        getString(
+                                R.string.status_connection_failed_verbose,
+                                debugTs(),
+                                result.errorMessage ?: getString(R.string.status_connection_failed),
+                                attempted
+                        )
+                    }
             updateFormState()
         }
     }

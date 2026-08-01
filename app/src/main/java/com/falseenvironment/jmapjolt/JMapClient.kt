@@ -26,7 +26,7 @@ import rs.ltt.jmap.common.method.call.identity.GetIdentityMethodCall
 import rs.ltt.jmap.common.method.response.identity.GetIdentityMethodResponse
 import rs.ltt.jmap.common.method.response.email.SetEmailMethodResponse
 
-class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
+class JMapClient(private val context: Context) {
 
     data class ConnectedAccount(
         val email: String,
@@ -57,7 +57,9 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
         val resolvedSessionUrl: String? = null,
         val connectedAccount: ConnectedAccount? = null,
         val errorMessage: String? = null,
-        val attemptedEndpoints: List<String> = emptyList()
+        val attemptedEndpoints: List<String> = emptyList(),
+        /** True when the server rejected the credentials (401/403), not the endpoint. */
+        val authFailed: Boolean = false
     )
 
     suspend fun connect(email: String, password: String, serverInput: String): ConnectResult {
@@ -70,7 +72,7 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
                 )
             }
 
-            var lastError: String? = null
+            var lastError: Throwable? = null
 
             for (sessionUrl in normalizedCandidates) {
                 val httpUrl = sessionUrl.toHttpUrlOrNull() ?: continue
@@ -97,14 +99,19 @@ class JMapClient(@Suppress("UNUSED_PARAMETER") context: Context) {
                     }
                 } catch (error: Throwable) {
                     if (error is kotlinx.coroutines.CancellationException) throw error
-                    lastError = error.message
+                    lastError = error
+                    // The server answered and refused these credentials: other candidate endpoints
+                    // of the same server will refuse them too.
+                    if (AuthError.isAuthFailure(error)) break
                 }
             }
 
             ConnectResult(
                 success = false,
-                errorMessage = lastError ?: "Unable to connect to JMAP session endpoint",
-                attemptedEndpoints = normalizedCandidates
+                errorMessage = lastError?.let { AuthError.describe(context, it) }
+                    ?: context.getString(R.string.error_no_session_endpoint),
+                attemptedEndpoints = normalizedCandidates,
+                authFailed = lastError?.let { AuthError.isAuthFailure(it) } ?: false
             )
         }
     }

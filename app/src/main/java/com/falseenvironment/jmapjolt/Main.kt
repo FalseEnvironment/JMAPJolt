@@ -1746,7 +1746,12 @@ class MainActivity : AppCompatActivity() {
                             return@launch
                         } catch (e: Throwable) {
                             Log.e(TAG, "Sync failed", e)
-                            status.text = getString(R.string.status_sync_failed, e.message ?: "-", debugTs())
+                            status.text =
+                                    getString(
+                                            R.string.status_sync_failed,
+                                            AuthError.describe(this@MainActivity, e),
+                                            debugTs()
+                                    )
                             if (pendingMailboxShow) {
                                 pendingMailboxShow = false
                                 showMailboxScreen(skipRefresh = true)
