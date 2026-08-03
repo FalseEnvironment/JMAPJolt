@@ -10,6 +10,9 @@ object ContactsVcf {
 
     private const val CRLF = "\r\n"
 
+    /** Imported PHOTO payloads above this are dropped so a crafted card cannot OOM the app. */
+    private const val MAX_PHOTO_BASE64_CHARS = 5 * 1024 * 1024
+
     // ---------------------------------------------------------------- export
 
     fun toVcf(contacts: List<Contact>): String =
@@ -146,6 +149,7 @@ object ContactsVcf {
             it.uppercase().let { p -> p == "ENCODING=B" || p == "ENCODING=BASE64" }
         }
         val cleaned = raw.filterNot { it.isWhitespace() }
+        if (cleaned.length > MAX_PHOTO_BASE64_CHARS) return null
         return when {
             isBase64 && cleaned.isNotBlank() -> cleaned
             cleaned.startsWith("data:", ignoreCase = true) ->

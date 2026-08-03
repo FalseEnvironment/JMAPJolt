@@ -688,7 +688,7 @@ internal fun MainActivity.sanitizeEmailHtml(html: String): String {
         .replace(Regex("<meta\\b[^>]*http-equiv\\s*=\\s*[\"']?refresh[^>]*>", RegexOption.IGNORE_CASE), "")
         .replace(Regex("""(\s)on[a-zA-Z]+\s*=\s*"[^"]*""""), "$1")
         .replace(Regex("""(\s)on[a-zA-Z]+\s*=\s*'[^']*'"""), "$1")
-        .replace(Regex("""(\s)on[a-zA-Z]+\s*=[^\s>]+"""), "$1")
+        .replace(Regex("""(\s)on[a-zA-Z]+\s*=\s*[^\s>]+"""), "$1")
         .replace(Regex("""(\s)srcdoc\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)""", RegexOption.IGNORE_CASE), "$1")
         // Block script-bearing URI schemes; data: stays allowed in src so inline images keep working.
         .replace(Regex("""(href|action|formaction)\s*=\s*["']?\s*(javascript|data|vbscript):[^"'\s>]*""", RegexOption.IGNORE_CASE), "$1=\"#\"")

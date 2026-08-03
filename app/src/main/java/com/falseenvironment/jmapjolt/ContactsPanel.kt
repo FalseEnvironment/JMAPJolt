@@ -440,6 +440,8 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
         if (targets.isEmpty()) return
         val sent = runCatching {
             val dir = java.io.File(activity.cacheDir, "contacts").apply { mkdirs() }
+            // Shared cards should not linger on disk: drop leftovers from earlier shares.
+            dir.listFiles()?.forEach { it.delete() }
             val file = java.io.File(dir, "contacts-${System.currentTimeMillis()}.vcf")
             file.writeText(ContactsVcf.toVcf(targets))
             val uri = androidx.core.content.FileProvider.getUriForFile(

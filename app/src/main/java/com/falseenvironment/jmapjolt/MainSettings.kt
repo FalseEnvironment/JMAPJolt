@@ -204,6 +204,21 @@ internal fun MainActivity.bindSettingsMenuNavigation() {
     settingsInfoRow.setOnClickListener { showAboutDialog() }
 }
 
+/** Picked .vcf files above this are rejected so a crafted file cannot exhaust memory. */
+private const val MAX_VCF_IMPORT_CHARS = 20 * 1024 * 1024
+
+/** Reads at most [limit] chars; returns null when the stream keeps going past the limit. */
+private fun java.io.Reader.readBounded(limit: Int): String? {
+    val buf = CharArray(8192)
+    val out = StringBuilder()
+    while (true) {
+        val n = read(buf)
+        if (n < 0) return out.toString()
+        if (out.length + n > limit) return null
+        out.append(buf, 0, n)
+    }
+}
+
 /**
  * Imports every card in the picked .vcf into the backend new contacts default to. DAVx5-backed
  * imports land in the system provider, which DAVx5 then pushes over CardDAV on its next sync.
@@ -218,7 +233,7 @@ internal fun MainActivity.doImportVcf(uri: android.net.Uri) {
         val saved = withContext(Dispatchers.IO) {
             runCatching {
                 val text = contentResolver.openInputStream(uri)?.bufferedReader()
-                    ?.use { it.readText() } ?: return@runCatching -1
+                    ?.use { it.readBounded(MAX_VCF_IMPORT_CHARS) } ?: return@runCatching -1
                 if (!ContactsVcf.looksLikeVcf(text)) return@runCatching -1
                 ContactsVcf.parse(text, source).count { repository.save(it) != null }
             }.getOrDefault(-1)
