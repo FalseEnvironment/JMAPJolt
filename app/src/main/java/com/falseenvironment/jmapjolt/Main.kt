@@ -675,7 +675,8 @@ class MainActivity : AppCompatActivity() {
                         drawerLayout.closeDrawer(GravityCompat.START)
                     calendarPanelView?.visibility == View.VISIBLE ->
                         if (calendarPanelView?.onBackPressed() != true) showMailboxScreen()
-                    contactsPanelView?.visibility == View.VISIBLE -> showMailboxScreen()
+                    contactsPanelView?.visibility == View.VISIBLE ->
+                        if (contactsPanelView?.onBackPressed() != true) showMailboxScreen()
                     selectedEmails.isNotEmpty() -> clearSelection()
                     isSearchActive -> {
                         // First back press only dismisses the keyboard so results stay

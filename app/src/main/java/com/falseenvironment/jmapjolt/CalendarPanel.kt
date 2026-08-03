@@ -30,7 +30,7 @@ class CalendarPanel(private val activity: MainActivity) : FrameLayout(activity) 
 
     private enum class Mode { MONTH, WEEK, DAY, AGENDA }
 
-    private val palette: CalendarTheme.Palette = CalendarTheme.palette(activity)
+    private var palette: CalendarTheme.Palette = CalendarTheme.palette(activity)
     private val scope get() = activity.lifecycleScope
 
     private var mode = Mode.MONTH
@@ -48,6 +48,12 @@ class CalendarPanel(private val activity: MainActivity) : FrameLayout(activity) 
     private fun dp(v: Int) = (v * density).toInt()
 
     init {
+        buildUi()
+    }
+
+    private fun buildUi() {
+        removeAllViews()
+        switcherButtons.clear()
         setBackgroundColor(palette.background)
         addView(buildRoot())
         render()
@@ -55,6 +61,13 @@ class CalendarPanel(private val activity: MainActivity) : FrameLayout(activity) 
 
     /** Called when the panel becomes visible. */
     fun onShown() {
+        // The panel is created once and re-shown, so a theme or accent change made in settings
+        // never reaches it unless the palette is re-read and the views rebuilt here.
+        val current = CalendarTheme.palette(activity)
+        if (current != palette) {
+            palette = current
+            buildUi()
+        }
         maybePromptExactAlarm()
         if (CalendarPrefs.provider(activity) == CalendarPrefs.Provider.DAVX5 &&
             !CalendarProvider.hasReadPermission(activity)) {

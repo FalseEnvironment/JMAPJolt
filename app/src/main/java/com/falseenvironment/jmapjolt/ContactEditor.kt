@@ -151,6 +151,15 @@ class ContactEditor(
                     weights = floatArrayOf(1f)))
             })
         })
+        // Keep the bubble in sync while the name is typed, so a new contact stops showing an
+        // empty circle as soon as there is something to derive initials from.
+        listOf(firstNameField, lastNameField, nicknameField).forEach { field ->
+            field.addTextChangedListener(object : android.text.TextWatcher {
+                override fun afterTextChanged(s: android.text.Editable?) = refreshInitials()
+                override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
+                override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
+            })
+        }
 
         form.addView(caption(activity.getString(R.string.contacts_section_email)))
         emailRows = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
@@ -311,6 +320,15 @@ class ContactEditor(
         }
         activity.pickContactPhotoLauncher.launch(
             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+    }
+
+    /** Recomputes the bubble letters from the name fields as they are typed. */
+    private fun refreshInitials() {
+        avatarInitials.text = original.copy(
+            firstName = firstNameField.text.toString().trim(),
+            lastName = lastNameField.text.toString().trim(),
+            nickname = nicknameField.text.toString().trim()
+        ).initials
     }
 
     private fun renderAvatar() {

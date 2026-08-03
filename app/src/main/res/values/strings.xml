@@ -30,6 +30,15 @@
     <string name="contacts_save_to">Save to</string>
     <string name="contacts_refresh">Refresh</string>
     <string name="contacts_add_carddav">Add CardDAV account</string>
+    <string name="contacts_selected_count">%1$d selected</string>
+    <string name="contacts_select_all">Select all</string>
+    <string name="contacts_delete_selected">Delete</string>
+    <string name="contacts_share_selected">Share</string>
+    <string name="contacts_delete_confirm_title">Delete contacts?</string>
+    <string name="contacts_delete_confirm_body">%1$d contact(s) will be removed from their address book. This cannot be undone.</string>
+    <string name="contacts_share_title">Share contacts</string>
+    <string name="contacts_share_failed">Could not share the selected contacts.</string>
+    <string name="contacts_exit_selection">Exit selection</string>
     <string name="contacts_section_name">Name</string>
     <string name="contacts_section_email">Email</string>
     <string name="contacts_section_phone">Phone</string>

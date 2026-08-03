@@ -62,12 +62,25 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
     private lateinit var listView: RecyclerView
     private lateinit var emptyView: TextView
     private lateinit var filterBar: LinearLayout
+    private lateinit var searchBar: View
+    private lateinit var selectionBar: View
+    private lateinit var selectionCountView: TextView
+    private lateinit var shareButton: ImageView
+    private lateinit var deleteButton: ImageView
     private val adapter = ContactsAdapter()
 
     private var contacts: List<Contact> = emptyList()
     private var filter: ContactSource? = null
     private var query: String = ""
     private var searchHintJob: Job? = null
+
+    /**
+     * Multi-select state. The mode is a flag of its own so emptying the selection keeps the
+     * selection bar up (with select-all still reachable) instead of snapping back to the search
+     * bar; only the back arrow or the system back button leaves it.
+     */
+    private val selectedIds = linkedSetOf<String>()
+    private var isSelecting = false
 
     private val density get() = resources.displayMetrics.density
     private fun dp(v: Int) = (v * density).toInt()
@@ -82,6 +95,14 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
         addView(buildRoot())
         addView(buildFab())
         adapter.submit(visibleContacts())
+        updateSelectionBar()
+    }
+
+    /** Android back closes multi-select before the tab itself reacts. */
+    fun onBackPressed(): Boolean {
+        if (!isSelecting) return false
+        exitSelection()
+        return true
     }
 
     /** Called when the panel becomes visible. */
@@ -228,8 +249,213 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
             setPadding(dp(10), dp(2), dp(10), dp(2))
             setOnClickListener { showOverflowMenu(it) }
         })
+        searchBar = bar
+        selectionBar = buildSelectionBar()
         strip.addView(bar)
+        strip.addView(selectionBar)
         return strip
+    }
+
+    /**
+     * Replaces the search row while contacts are selected: count on the left, then select-all,
+     * share and delete, all drawn on the same darkened accent as the search field.
+     */
+    private fun buildSelectionBar(): View {
+        val bar = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 12 * density
+                setColor(activity.darkenColor(palette.accent, 0.78f))
+            }
+            setPadding(dp(4), 0, dp(4), 0)
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(52))
+            visibility = View.GONE
+        }
+        bar.addView(iconButton(R.drawable.ic_arrow_back_24dp, palette.onAccent) {
+            exitSelection()
+        }.apply { contentDescription = context.getString(R.string.contacts_exit_selection) })
+
+        selectionCountView = TextView(activity).apply {
+            setTextColor(palette.onAccent)
+            textSize = 16f
+            setTypeface(typeface, Typeface.BOLD)
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                .also { it.marginStart = dp(4) }
+        }
+        bar.addView(selectionCountView)
+
+        bar.addView(iconButton(R.drawable.ic_lucide_check, palette.onAccent) {
+            selectAllVisible()
+        }.apply { contentDescription = context.getString(R.string.contacts_select_all) })
+        shareButton = iconButton(R.drawable.ic_lucide_share_2, palette.onAccent) {
+            shareSelected()
+        }.apply { contentDescription = context.getString(R.string.contacts_share_selected) }
+        deleteButton = iconButton(R.drawable.ic_lucide_trash, palette.onAccent) {
+            confirmDeleteSelected()
+        }.apply { contentDescription = context.getString(R.string.contacts_delete_selected) }
+        bar.addView(shareButton)
+        bar.addView(deleteButton)
+        return bar
+    }
+
+    // ---- multi-select ---------------------------------------------------------------------
+
+    private fun toggleSelection(contact: Contact) {
+        isSelecting = true
+        if (!selectedIds.remove(contact.id)) selectedIds.add(contact.id)
+        // Row and section picks close the mode once nothing is left; only the select-all button
+        // deliberately keeps an empty selection alive.
+        if (selectedIds.isEmpty()) isSelecting = false
+        updateSelectionBar()
+        adapter.notifyDataSetChanged()
+    }
+
+    /** Leaves multi-select entirely and restores the search bar. */
+    private fun exitSelection() {
+        if (!isSelecting) return
+        isSelecting = false
+        selectedIds.clear()
+        updateSelectionBar()
+        adapter.notifyDataSetChanged()
+    }
+
+    /** Select-all doubles as deselect-all once every visible row is already picked. */
+    private fun selectAllVisible() {
+        isSelecting = true
+        val visible = visibleContacts()
+        if (visible.isNotEmpty() && visible.all { it.id in selectedIds }) selectedIds.clear()
+        else visible.forEach { selectedIds.add(it.id) }
+        updateSelectionBar()
+        adapter.notifyDataSetChanged()
+    }
+
+    /** Tapping an index letter picks (or drops) the whole A / B / C section. */
+    private fun toggleSection(letter: String) {
+        val section = visibleContacts().filter { sectionLetter(it) == letter }
+        if (section.isEmpty()) return
+        isSelecting = true
+        if (section.all { it.id in selectedIds }) section.forEach { selectedIds.remove(it.id) }
+        else section.forEach { selectedIds.add(it.id) }
+        if (selectedIds.isEmpty()) isSelecting = false
+        updateSelectionBar()
+        adapter.notifyDataSetChanged()
+    }
+
+    private fun updateSelectionBar() {
+        if (!::selectionBar.isInitialized) return
+        selectionBar.visibility = if (isSelecting) View.VISIBLE else View.GONE
+        searchBar.visibility = if (isSelecting) View.GONE else View.VISIBLE
+        if (!isSelecting) return
+        selectionCountView.text =
+            context.getString(R.string.contacts_selected_count, selectedIds.size)
+        // Share and delete need a target; select-all stays live so an emptied selection is usable.
+        val hasTargets = selectedIds.isNotEmpty()
+        listOf(shareButton, deleteButton).forEach {
+            it.isEnabled = hasTargets
+            it.alpha = if (hasTargets) 1f else 0.35f
+        }
+    }
+
+    private fun selectedContacts(): List<Contact> = contacts.filter { it.id in selectedIds }
+
+    private fun confirmDeleteSelected() {
+        val targets = selectedContacts()
+        if (targets.isEmpty()) return
+        // Same rounded surface card, accent typography and text buttons as the contact editor's
+        // dialogs, so the confirmation follows the active theme and accent instead of the system
+        // AlertDialog look (which also localised its buttons independently of the app).
+        val dialog = android.app.Dialog(activity)
+        val card = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 16 * density
+                setColor(palette.surface)
+            }
+            setPadding(dp(20), dp(20), dp(20), dp(12))
+        }
+        card.addView(TextView(activity).apply {
+            text = context.getString(R.string.contacts_delete_confirm_title)
+            textSize = 17f
+            setTextColor(palette.text)
+            setTypeface(typeface, Typeface.BOLD)
+        })
+        card.addView(TextView(activity).apply {
+            text = context.getString(R.string.contacts_delete_confirm_body, targets.size)
+            textSize = 14f
+            setTextColor(palette.secondaryText)
+            setPadding(0, dp(10), 0, dp(6))
+        })
+        card.addView(LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            addView(dialogButton(context.getString(R.string.contacts_cancel),
+                palette.secondaryText) { dialog.dismiss() })
+            addView(dialogButton(context.getString(R.string.contacts_delete_selected),
+                androidx.core.content.ContextCompat.getColor(
+                    activity, R.color.contacts_delete_red)) {
+                dialog.dismiss()
+                deleteSelected(targets)
+            })
+        })
+        dialog.setContentView(card)
+        dialog.show()
+        dialog.window?.setBackgroundDrawable(
+            android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+        dialog.window?.attributes?.let { lp ->
+            lp.width = (resources.displayMetrics.widthPixels * 0.86f).toInt()
+            dialog.window?.attributes = lp
+        }
+    }
+
+    private fun dialogButton(label: String, color: Int, onClick: () -> Unit): TextView =
+        TextView(activity).apply {
+            text = label
+            textSize = 14f
+            setTextColor(color)
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(dp(16), dp(10), dp(16), dp(10))
+            setOnClickListener { onClick() }
+        }
+
+    private fun deleteSelected(targets: List<Contact>) {
+        scope.launch {
+            val failures = targets.count { !runCatching { repository.delete(it) }.getOrDefault(false) }
+            if (failures > 0) {
+                android.widget.Toast.makeText(
+                    activity, R.string.contacts_delete_failed, android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
+            exitSelection()
+            refresh()
+        }
+    }
+
+    /** Exports the picked cards to a single cached .vcf and hands it to the system share sheet. */
+    private fun shareSelected() {
+        val targets = selectedContacts()
+        if (targets.isEmpty()) return
+        val sent = runCatching {
+            val dir = java.io.File(activity.cacheDir, "contacts").apply { mkdirs() }
+            val file = java.io.File(dir, "contacts-${System.currentTimeMillis()}.vcf")
+            file.writeText(ContactsVcf.toVcf(targets))
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                activity, "${activity.packageName}.fileprovider", file)
+            val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = "text/x-vcard"
+                putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            activity.startActivity(android.content.Intent.createChooser(
+                intent, context.getString(R.string.contacts_share_title)))
+        }.isSuccess
+        if (!sent) {
+            android.widget.Toast.makeText(
+                activity, R.string.contacts_share_failed, android.widget.Toast.LENGTH_SHORT).show()
+        }
     }
 
     /**
@@ -377,7 +603,13 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
         return contacts.filter { contact ->
             (filter == null || contact.source == filter) &&
                 (needle.isEmpty() || contact.matches(needle))
-        }
+        }.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.displayName })
+    }
+
+    /** Index letter of a row, "#" for names that do not start with a letter (like AOSP Contacts). */
+    private fun sectionLetter(contact: Contact): String {
+        val first = contact.displayName.trim().firstOrNull() ?: return "#"
+        return if (first.isLetter()) first.uppercaseChar().toString() else "#"
     }
 
     private fun Contact.matches(needle: String): Boolean =
@@ -430,7 +662,11 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
             ContactViewHolder(buildRowView())
 
         override fun onBindViewHolder(holder: ContactViewHolder, position: Int) {
-            holder.bind(items[position])
+            val contact = items[position]
+            val letter = sectionLetter(contact)
+            val isFirstOfLetter =
+                position == 0 || sectionLetter(items[position - 1]) != letter
+            holder.bind(contact, if (isFirstOfLetter) letter else "")
         }
     }
 
@@ -439,10 +675,20 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
         val row = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(16), dp(10), dp(16), dp(10))
+            setPadding(dp(8), dp(10), dp(16), dp(10))
             layoutParams = RecyclerView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         }
+        // Left gutter carrying the A / B / C index letter on the first row of each section.
+        row.addView(TextView(activity).apply {
+            setTextColor(palette.accent)
+            textSize = 14f
+            gravity = Gravity.CENTER
+            setTypeface(typeface, Typeface.BOLD)
+            minHeight = dp(40)
+            layoutParams = LinearLayout.LayoutParams(dp(28), dp(40))
+                .also { it.marginEnd = dp(4) }
+        })
         // Initials bubble with the photo (when the contact has one) layered on top of it.
         row.addView(FrameLayout(activity).apply {
             layoutParams = LinearLayout.LayoutParams(dp(40), dp(40)).also { it.marginEnd = dp(14) }
@@ -464,6 +710,15 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
                         outline.setOval(0, 0, view.width, view.height)
                     }
                 }
+                visibility = View.GONE
+                layoutParams = FrameLayout.LayoutParams(dp(40), dp(40))
+            })
+            // Check mark shown in place of the initials/photo while the row is selected.
+            addView(ImageView(activity).apply {
+                setImageResource(R.drawable.ic_lucide_check)
+                imageTintList = ColorStateList.valueOf(activity.getOnAccentColor())
+                val pad = dp(7)
+                setPadding(pad, pad, pad, pad)
                 visibility = View.GONE
                 layoutParams = FrameLayout.LayoutParams(dp(40), dp(40))
             })
@@ -494,18 +749,35 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
     private inner class ContactViewHolder(private val row: LinearLayout) :
         RecyclerView.ViewHolder(row) {
 
-        private val avatarBubble = row.getChildAt(0) as FrameLayout
+        private val letter = row.getChildAt(0) as TextView
+        private val avatarBubble = row.getChildAt(1) as FrameLayout
         private val avatar = avatarBubble.getChildAt(0) as TextView
         private val avatarPhoto = avatarBubble.getChildAt(1) as ImageView
-        private val name = (row.getChildAt(1) as LinearLayout).getChildAt(0) as TextView
-        private val subtitle = (row.getChildAt(1) as LinearLayout).getChildAt(1) as TextView
-        private val badge = row.getChildAt(2) as TextView
+        private val avatarCheck = avatarBubble.getChildAt(2) as ImageView
+        private val name = (row.getChildAt(2) as LinearLayout).getChildAt(0) as TextView
+        private val subtitle = (row.getChildAt(2) as LinearLayout).getChildAt(1) as TextView
+        private val badge = row.getChildAt(3) as TextView
 
-        fun bind(contact: Contact) {
-            avatar.text = contact.initials
+        fun bind(contact: Contact, sectionLetter: String) {
+            letter.text = sectionLetter
+            letter.isClickable = sectionLetter.isNotEmpty()
+            letter.setOnClickListener(
+                if (sectionLetter.isEmpty()) null
+                else View.OnClickListener { toggleSection(sectionLetter) })
+            val selected = contact.id in selectedIds
+            // Selected rows mirror the inbox: the accent circle stays and only carries a check,
+            // over a slightly darkened row background (see EmailAdapter's isSelected branch).
+            avatar.text = if (selected) "" else contact.initials
             val photo = ContactAvatars.decode(contact.photoBase64)
             avatarPhoto.setImageBitmap(photo)
-            avatarPhoto.visibility = if (photo == null) View.GONE else View.VISIBLE
+            avatarPhoto.visibility =
+                if (photo == null || selected) View.GONE else View.VISIBLE
+            avatarCheck.visibility = if (selected) View.VISIBLE else View.GONE
+            row.setBackgroundColor(
+                if (selected) activity.darkenColor(activity.getDialogBackgroundColor(), 0.85f)
+                else android.graphics.Color.TRANSPARENT)
+            avatarBubble.setOnClickListener { toggleSelection(contact) }
+            row.setOnLongClickListener { toggleSelection(contact); true }
             name.text = contact.displayName
             val sub = contact.emails.firstOrNull()?.address
                 ?: contact.phones.firstOrNull()?.number
@@ -516,7 +788,10 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
                 if (contact.source == ContactSource.JMAP) R.string.contacts_source_jmap
                 else R.string.contacts_source_davx5
             )
-            row.setOnClickListener { ContactEditor(activity, contact) { refresh() }.show() }
+            row.setOnClickListener {
+                if (isSelecting) toggleSelection(contact)
+                else ContactEditor(activity, contact) { refresh() }.show()
+            }
         }
     }
 }

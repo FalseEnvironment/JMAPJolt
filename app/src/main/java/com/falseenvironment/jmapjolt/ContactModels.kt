@@ -39,15 +39,28 @@ data class Contact(
             .ifBlank { nickname }
             .ifBlank { organization?.companyName.orEmpty() }
             .ifBlank { emails.firstOrNull()?.address.orEmpty() }
-            .ifBlank { "(no name)" }
+            .ifBlank { NO_NAME }
 
-    /** Initials for the avatar bubble; single letter when only one name part is known. */
+    /**
+     * Initials for the avatar bubble; single letter when only one name part is known, empty when
+     * the contact carries no renderable name at all. Only letters and digits qualify, so a name
+     * made of emoji or punctuation leaves a plain accent bubble instead of a tofu box.
+     */
     val initials: String
-        get() = listOf(firstName, lastName)
-            .filter { it.isNotBlank() }
-            .mapNotNull { it.firstOrNull()?.uppercaseChar() }
-            .joinToString("")
-            .ifBlank { displayName.firstOrNull()?.uppercaseChar()?.toString() ?: "?" }
+        get() {
+            val fromParts = listOf(firstName, lastName).mapNotNull { it.initialChar() }
+            if (fromParts.isNotEmpty()) return fromParts.joinToString("")
+            if (displayName == NO_NAME) return ""
+            return displayName.initialChar()?.toString().orEmpty()
+        }
+
+    /** First letter or digit of a name part, ignoring emoji, punctuation and whitespace. */
+    private fun String.initialChar(): Char? =
+        firstOrNull { it.isLetterOrDigit() }?.uppercaseChar()
+
+    private companion object {
+        const val NO_NAME = "(no name)"
+    }
 }
 
 /** Backend a contact is stored in. Mirrors [ContactsPrefs.Provider] for a saved contact. */

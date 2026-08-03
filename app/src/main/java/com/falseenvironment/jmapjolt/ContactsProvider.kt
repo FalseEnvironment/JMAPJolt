@@ -49,6 +49,8 @@ object ContactsProvider {
                 while (c.moveToNext()) {
                     val name = c.getString(0) ?: continue
                     val type = c.getString(1) ?: continue
+                    // Same filter as contacts(): never offer a messenger sync adapter as a target.
+                    if (!isAddressBookAccount(type)) continue
                     out += ProviderAccount(name, type)
                 }
             }
@@ -64,9 +66,49 @@ object ContactsProvider {
             ?: all.firstOrNull()
     }
 
-    /** Every raw contact in the system provider, mapped onto [Contact]. */
+    /**
+     * Account types that hold a real address book: DAVx5 collections and the device-local store.
+     * Messenger sync adapters (Telegram, WhatsApp, Signal, …) register their own account type and
+     * mirror the whole phone book into it, which is why an unfiltered read shows every chat
+     * partner twice and with no phone number.
+     */
+    private val LOCAL_ACCOUNT_TYPES = setOf(
+        "com.android.contacts",
+        "com.android.localphone",
+        "vnd.sec.contact.phone"
+    )
+
+    private fun isAddressBookAccount(type: String?): Boolean =
+        type.isNullOrBlank() ||
+            type.contains("davdroid", ignoreCase = true) ||
+            type.contains("davx5", ignoreCase = true) ||
+            type.lowercase() in LOCAL_ACCOUNT_TYPES
+
+    /**
+     * Raw contact ids worth reading. Null means "no usable filter" (nothing matched), in which
+     * case the caller keeps every row rather than presenting an empty address book.
+     */
+    private fun addressBookRawIds(context: Context): Set<Long>? {
+        val ids = linkedSetOf<Long>()
+        runCatching {
+            context.contentResolver.query(
+                ContactsContract.RawContacts.CONTENT_URI,
+                arrayOf(ContactsContract.RawContacts._ID,
+                    ContactsContract.RawContacts.ACCOUNT_TYPE),
+                "${ContactsContract.RawContacts.DELETED}=0", null, null
+            )?.use { c ->
+                while (c.moveToNext()) {
+                    if (isAddressBookAccount(c.getString(1))) ids += c.getLong(0)
+                }
+            }
+        }
+        return ids.takeIf { it.isNotEmpty() }
+    }
+
+    /** Every raw contact in a real address book account, mapped onto [Contact]. */
     fun contacts(context: Context): List<Contact> {
         if (!hasReadPermission(context)) return emptyList()
+        val allowed = addressBookRawIds(context)
         val byRawId = linkedMapOf<Long, Contact>()
         val cols = arrayOf(
             ContactsContract.Data.RAW_CONTACT_ID,
@@ -91,6 +133,7 @@ object ContactsProvider {
             )?.use { c ->
                 while (c.moveToNext()) {
                     val rawId = c.getLong(0)
+                    if (allowed != null && rawId !in allowed) continue
                     val current = byRawId[rawId] ?: Contact(
                         id = contactId(rawId), source = ContactSource.DAVX5
                     )
