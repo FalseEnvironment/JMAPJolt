@@ -156,9 +156,7 @@ internal fun MainActivity.deactivateSearch() {
     hideKeyboard()
     // Recompute the threaded view rather than dumping baseEmails flat: baseEmails
     // holds the raw per-folder list, not thread head/child grouping.
-    emails.clear()
-    emails.addAll(buildThreadedView(baseEmails))
-    emailAdapter.notifyDataSetChanged()
+    setVisibleEmails(buildThreadedView(baseEmails))
     emptyStateView.visibility = if (emails.isEmpty()) View.VISIBLE else View.GONE
     emailsRecyclerView.visibility = if (emails.isEmpty()) View.GONE else View.VISIBLE
 }
@@ -285,6 +283,15 @@ internal fun MainActivity.searchSourceEmails(): List<DisplayEmail> {
 }
 
 internal fun MainActivity.applySearchFilter(query: String) {
+    // Callers include background sync and scroll-driven paging, which can land while
+    // the RecyclerView is mid layout/scroll pass. Swapping the backing list there
+    // corrupts its child state ("Called attach on a child which is not detached"),
+    // so retry once the pass is over.
+    if (emailsRecyclerView.isComputingLayout ||
+        emailsRecyclerView.scrollState != RecyclerView.SCROLL_STATE_IDLE) {
+        emailsRecyclerView.post { applySearchFilter(query) }
+        return
+    }
     val source = if (isSearchActive) searchSourceEmails() else baseEmails.toList()
     val filtered = if (query.isBlank()) source else source.filter {
         it.subject.contains(query, ignoreCase = true) ||
@@ -292,18 +299,16 @@ internal fun MainActivity.applySearchFilter(query: String) {
         it.preview.contains(query, ignoreCase = true) ||
         labelsOf(it).any { label -> label.name.contains(query, ignoreCase = true) }
     }
-    emails.clear()
     // Search is always a flat list — never threaded — but these DisplayEmail
     // instances are shared with baseEmails/folderCache, so they can carry stale
     // isThreadHeadRow/isThreadChildRow flags from the last time buildThreadedView()
     // used them as a conversation head/child in the normal inbox view. Clear them
     // here or the chevron/reply-count pill leaks into search results.
-    emails.addAll(filtered.distinctBy { it.id }.onEach {
+    setVisibleEmails(filtered.onEach {
         it.isThreadHeadRow = false
         it.isThreadChildRow = false
         it.isThreadMoreRow = false
     })
-    emailAdapter.notifyDataSetChanged()
     emptyStateView.visibility = if (emails.isEmpty()) View.VISIBLE else View.GONE
     emailsRecyclerView.visibility = if (emails.isEmpty()) View.GONE else View.VISIBLE
 }

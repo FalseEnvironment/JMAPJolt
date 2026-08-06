@@ -256,6 +256,38 @@ internal fun MainActivity.showFolderEditorDialog() {
             })
             list.addView(row)
         }
+
+        // Accent "create" affordance, mirroring the label editor.
+        val createRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, (52 * dp).toInt()
+            )
+            setPadding((20 * dp).toInt(), 0, (20 * dp).toInt(), 0)
+            isClickable = true; isFocusable = true
+            background = ContextCompat.getDrawable(
+                this@showFolderEditorDialog,
+                android.util.TypedValue().also {
+                    theme.resolveAttribute(android.R.attr.selectableItemBackground, it, true)
+                }.resourceId
+            )
+            setOnClickListener { showCreateFolderDialog { rebuildRows() } }
+        }
+        createRow.addView(ImageView(this).apply {
+            setImageResource(R.drawable.ic_lucide_plus)
+            imageTintList = ColorStateList.valueOf(accentInt)
+            val sz = (20 * dp).toInt()
+            layoutParams = LinearLayout.LayoutParams(sz, sz).also { it.marginEnd = (16 * dp).toInt() }
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        })
+        createRow.addView(TextView(this).apply {
+            text = "Create new folder"
+            textSize = 15f
+            setTextColor(accentInt)
+            typeface = Typeface.DEFAULT_BOLD
+        })
+        list.addView(createRow)
     }
     rebuildRows()
 
@@ -265,6 +297,71 @@ internal fun MainActivity.showFolderEditorDialog() {
     val dialog = AlertDialog.Builder(this).setView(outer).create()
     dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
     dialog.show()
+}
+
+/** Name + color prompt that provisions a new user folder (mailbox) on the server. */
+internal fun MainActivity.showCreateFolderDialog(onCreated: () -> Unit) {
+    val dp = resources.displayMetrics.density
+    val textColor = if (currentTheme == "light") "#212121".toColorInt() else Color.WHITE
+    val hintColor = if (currentTheme == "light") "#9E9E9E".toColorInt() else "#616161".toColorInt()
+    val pendingHsv = floatArrayOf(210f, 0.75f, 0.95f)
+
+    val nameInput = EditText(this).apply {
+        hint = "Folder name"
+        inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        filters = arrayOf(android.text.InputFilter.LengthFilter(30), noArabicFilter())
+        setTextColor(textColor)
+        setHintTextColor(hintColor)
+        backgroundTintList = ColorStateList.valueOf(hintColor)
+        layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).also { it.bottomMargin = (16 * dp).toInt() }
+    }
+    val wheel = buildHueWheel(pendingHsv, 200)
+    val root = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER_HORIZONTAL
+        val p = (20 * dp).toInt()
+        setPadding(p, (14 * dp).toInt(), p, (4 * dp).toInt())
+        addView(nameInput)
+        addView(wheel.also { (it.layoutParams as LinearLayout.LayoutParams).bottomMargin = (16 * dp).toInt() })
+        addView(buildPresetSwatchRow(pendingHsv, wheel))
+    }
+
+    // Returning false keeps the dialog open on an empty/duplicate name.
+    showCardDialog("New folder", root, "Create") {
+        val name = nameInput.text.toString().trim()
+        if (name.isEmpty()) {
+            nameInput.error = "Name required"
+            return@showCardDialog false
+        }
+        if (mailboxCache?.any { it.name.equals(name, ignoreCase = true) } == true) {
+            nameInput.error = "Folder already exists"
+            return@showCardDialog false
+        }
+        val account = connectedAccount
+        if (account == null) {
+            showThemedSnackbar("Not connected")
+            return@showCardDialog true
+        }
+        val colorHex = hsvHex(pendingHsv)
+        lifecycleScope.launch {
+            val id = jmapClient.createMailbox(account, name, null)
+            if (id == null) {
+                showThemedSnackbar("Could not create folder")
+            } else {
+                mailboxCache = (mailboxCache ?: emptyList()) +
+                    JMapClient.MailboxInfo(id, name, null)
+                folderMeta.add(FolderMeta(id, null, colorHex))
+                saveFolderMeta()
+                subfolderDisplayOrder.add(id)
+                saveSubfolderOrder()
+                rebuildDrawerMenuPublic()
+            }
+            onCreated()
+        }
+        true
+    }
 }
 
 internal fun MainActivity.showEditFolderDialog(

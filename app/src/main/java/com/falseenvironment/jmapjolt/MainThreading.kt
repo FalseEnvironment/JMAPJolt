@@ -179,9 +179,10 @@ internal fun MainActivity.rebuildThreadedList() {
     val snapshot = baseEmails.toList()
     lifecycleScope.launch {
         val display = withContext(Dispatchers.Default) { buildThreadedView(snapshot) }
-        emails.clear()
-        emails.addAll(display)
-        emailAdapter.notifyDataSetChanged()
+        // Search shows a flat, filtered list: replacing it with the threaded folder
+        // view here would both wipe the results and fight applySearchFilter().
+        if (isSearchActive) return@launch
+        setVisibleEmails(display)
     }
 }
 

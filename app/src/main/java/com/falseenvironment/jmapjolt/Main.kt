@@ -1251,6 +1251,14 @@ class MainActivity : AppCompatActivity() {
         if (selectedFolder == R.id.nav_drafts) updateEmailsList(current)
     }
 
+    /**
+     * True when deleting this email has to be permanent because it already sits in Trash.
+     * Search results mix folders, so there the row's own origin decides, not [selectedFolder].
+     */
+    internal fun isTrashedEmail(email: DisplayEmail): Boolean =
+        selectedFolder == R.id.nav_trash ||
+            (isSearchActive && email.originFolderId == R.id.nav_trash)
+
     /** Asks for confirmation, then permanently destroys emails (used in Trash). */
     internal fun confirmPermanentDelete(account: JMapClient.ConnectedAccount, ids: List<String>) {
         showThemedConfirmDialog(
@@ -1264,7 +1272,11 @@ class MainActivity : AppCompatActivity() {
         ) {
             clearSelection()
             removeEmailsAnimated(ids)
-            folderCache[R.id.nav_trash] = emails.toList()
+            // Outside Trash (e.g. deleting a trashed hit from search results) the visible
+            // list isn't the Trash folder, so drop the ids from its cache instead.
+            folderCache[R.id.nav_trash] =
+                if (selectedFolder == R.id.nav_trash) emails.toList()
+                else (folderCache[R.id.nav_trash] ?: emptyList()).filterNot { it.id in ids }
             saveEmailCache()
             lifecycleScope.launch {
                 ids.forEach {
@@ -1277,7 +1289,7 @@ class MainActivity : AppCompatActivity() {
 
     internal fun performAction(action: String) {
         val account = connectedAccount ?: return
-        val ids = selectedEmails.toList()
+        var ids = selectedEmails.toList()
         if (ids.isEmpty()) return
 
         if (selectedFolder == R.id.nav_drafts && (action == "archive" || action == "toggleRead")) {
@@ -1286,9 +1298,19 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        if (action == "delete" && selectedFolder == R.id.nav_trash) {
-            confirmPermanentDelete(account, ids)
-            return
+        if (action == "delete") {
+            // A search selection can mix trashed and non-trashed hits: the trashed ones
+            // need the permanent-delete confirmation, the rest just move to Trash.
+            val trashedIds = emails.filter { it.id in ids && isTrashedEmail(it) }.map { it.id }
+            if (trashedIds.size == ids.size) {
+                confirmPermanentDelete(account, ids)
+                return
+            }
+            if (trashedIds.isNotEmpty()) {
+                confirmPermanentDelete(account, trashedIds)
+                selectedEmails.removeAll(trashedIds.toSet())
+                ids = ids - trashedIds.toSet()
+            }
         }
 
         when (action) {

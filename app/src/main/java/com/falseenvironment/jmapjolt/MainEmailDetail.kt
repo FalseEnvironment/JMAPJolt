@@ -922,7 +922,7 @@ internal fun MainActivity.archiveDetailEmail(email: DisplayEmail) {
 internal fun MainActivity.trashDetailEmail(email: DisplayEmail) {
     val acc = resolveAccountFor(email) ?: connectedAccount ?: return
     // Deleting from Trash is permanent.
-    if (selectedFolder == R.id.nav_trash) {
+    if (isTrashedEmail(email)) {
         closeEmailDetail()
         confirmPermanentDelete(acc, listOf(email.id))
         return

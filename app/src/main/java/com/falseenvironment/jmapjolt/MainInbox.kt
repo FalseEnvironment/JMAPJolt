@@ -511,7 +511,7 @@ internal fun MainActivity.attachMailSwipe() {
                     }
 
                     // Deleting from Trash is permanent: confirm first, restoring the row meanwhile.
-                    if (selectedFolder == R.id.nav_trash && action == MainActivity.SwipeAction.DELETE) {
+                    if (isTrashedEmail(item) && action == MainActivity.SwipeAction.DELETE) {
                         emailAdapter.notifyItemChanged(position)
                         confirmPermanentDelete(account, listOf(item.id))
                         return
@@ -628,7 +628,29 @@ internal fun MainActivity.saveCategoryPreferences() {
     editor.apply()
 }
 
+/**
+ * Wholesale replacement of the visible rows. The adapter uses stable ids, so two rows
+ * sharing an email id — or a swap landing while the previous item animations are still
+ * running — makes RecyclerView try to re-attach a live child and crash with
+ * "Called attach on a child which is not detached". Ending the animations and
+ * deduplicating here keeps every caller safe.
+ */
+internal fun MainActivity.setVisibleEmails(rows: List<DisplayEmail>) {
+    emailsRecyclerView.itemAnimator?.endAnimations()
+    emails.clear()
+    emails.addAll(rows.distinctBy { it.id })
+    emailAdapter.notifyDataSetChanged()
+}
+
 internal fun MainActivity.updateEmailsList(rawList: List<DisplayEmail>) {
+    // Paging fetches finish inside scroll callbacks, so this can land mid layout/scroll
+    // pass; mutating the adapter's list there corrupts RecyclerView child state
+    // ("Called attach on a child which is not detached"). Defer past the pass.
+    if (emailsRecyclerView.isComputingLayout ||
+        emailsRecyclerView.scrollState != RecyclerView.SCROLL_STATE_IDLE) {
+        emailsRecyclerView.post { updateEmailsList(rawList) }
+        return
+    }
     // A fetch landed: allow the next scroll-triggered page load.
     isLoadingMore = false
     // Stable adapter ids derive from email ids: a duplicate id in the list
@@ -690,10 +712,13 @@ internal fun MainActivity.updateEmailsList(rawList: List<DisplayEmail>) {
         return
     }
 
-    emails.clear()
-    emails.addAll(display)
-    if (diffResult != null) diffResult.dispatchUpdatesTo(emailAdapter)
-    else emailAdapter.notifyDataSetChanged()
+    if (diffResult != null) {
+        emails.clear()
+        emails.addAll(display)
+        diffResult.dispatchUpdatesTo(emailAdapter)
+    } else {
+        setVisibleEmails(display)
+    }
 
     if (firstChanged) {
         emailsRecyclerView.post { emailsRecyclerView.scrollToPosition(0) }

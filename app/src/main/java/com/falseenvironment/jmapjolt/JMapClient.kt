@@ -730,6 +730,8 @@ class JMapClient(private val context: Context) {
             val setCall = rs.ltt.jmap.common.method.call.mailbox.SetMailboxMethodCall.builder()
                 .accountId(accountId)
                 .destroy(arrayOf(mailboxId))
+                // Without this the server refuses to destroy a mailbox that still holds emails.
+                .onDestroyRemoveEmails(true)
                 .build()
 
             try {
