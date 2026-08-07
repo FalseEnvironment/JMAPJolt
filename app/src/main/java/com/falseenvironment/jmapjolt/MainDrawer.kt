@@ -113,7 +113,6 @@ internal fun MainActivity.showAddAccountDialog() {
         cornerRadius = 20 * dp
         setColor(dialogBg)
     }
-    (root.getChildAt(0) as? TextView)?.setTextColor(textColor)
     // Floating-label outlined fields: styleOutlinedField applies the theme-aware box,
     // stroke and label colours (same treatment as the login screen).
     listOf(

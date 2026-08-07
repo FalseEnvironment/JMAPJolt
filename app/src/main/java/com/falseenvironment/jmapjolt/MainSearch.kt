@@ -142,6 +142,24 @@ internal fun MainActivity.startSearchingHintAnimation() {
     }
 }
 
+/**
+ * Brings the mail list forward so search results are visible when the user starts
+ * typing from Settings, Calendar or Contacts. Keeps the active query and the search
+ * bar state intact: [MainActivity.showMailboxScreen] would otherwise restore the
+ * folder title and re-run the unfiltered folder refresh over the results.
+ */
+internal fun MainActivity.enterMailboxForSearch() {
+    if (mailboxContainer.visibility == View.VISIBLE && !isShowingEmailDetail) return
+    showMailboxScreen(skipRefresh = true)
+    if (!isSearchActive) activateSearch()
+    // showMailboxScreen resets these for the normal inbox; search owns them again.
+    setDrawerIndicator(false)
+    searchBarTitle.visibility = View.GONE
+    searchInput.visibility = View.VISIBLE
+    searchChipsScroll.visibility = View.VISIBLE
+    searchInput.requestFocus()
+}
+
 internal fun MainActivity.deactivateSearch() {
     isSearchActive = false
     searchHintJob?.cancel()

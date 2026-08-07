@@ -223,6 +223,15 @@ class MainActivity : AppCompatActivity() {
     internal lateinit var swipeLeftDropdownText: TextView
     internal lateinit var settingsCalProviderDropdown: LinearLayout
     internal lateinit var settingsCalProviderText: TextView
+    internal lateinit var settingsCalTimeFormatDropdown: LinearLayout
+    internal lateinit var settingsCalTimeFormatText: TextView
+    internal lateinit var settingsCalTimeZoneDropdown: LinearLayout
+    internal lateinit var settingsCalTimeZoneText: TextView
+    internal lateinit var settingsContactsShowDropdown: LinearLayout
+    internal lateinit var settingsContactsShowText: TextView
+    internal lateinit var settingsAccountContainer: LinearLayout
+    internal lateinit var settingsAccountProfileRow: LinearLayout
+    internal lateinit var settingsAccountAddRow: TextView
     internal lateinit var calendarEnabledSwitch: SwitchCompat
     internal lateinit var settingsCalAddProviderButton: TextView
     internal lateinit var topBarSendButton: ImageView
@@ -590,6 +599,15 @@ class MainActivity : AppCompatActivity() {
         swipeLeftDropdownText = findViewById(R.id.swipeLeftDropdownText)
         settingsCalProviderDropdown = findViewById(R.id.settingsCalProviderDropdown)
         settingsCalProviderText = findViewById(R.id.settingsCalProviderText)
+        settingsCalTimeFormatDropdown = findViewById(R.id.settingsCalTimeFormatDropdown)
+        settingsCalTimeFormatText = findViewById(R.id.settingsCalTimeFormatText)
+        settingsCalTimeZoneDropdown = findViewById(R.id.settingsCalTimeZoneDropdown)
+        settingsCalTimeZoneText = findViewById(R.id.settingsCalTimeZoneText)
+        settingsContactsShowDropdown = findViewById(R.id.settingsContactsShowDropdown)
+        settingsContactsShowText = findViewById(R.id.settingsContactsShowText)
+        settingsAccountContainer = findViewById(R.id.settingsAccountContainer)
+        settingsAccountProfileRow = findViewById(R.id.settingsAccountProfileRow)
+        settingsAccountAddRow = findViewById(R.id.settingsAccountAddRow)
         calendarEnabledSwitch = findViewById(R.id.calendarEnabledSwitch)
         settingsCalAddProviderButton = findViewById(R.id.settingsCalAddProviderRow)
         settingsContactsContainer = findViewById(R.id.settingsContactsContainer)
@@ -660,6 +678,8 @@ class MainActivity : AppCompatActivity() {
         setupSwipeSpinners()
         setupThemeSpinner()
         loadThemePreference()
+        // Calendar views read the zone override from a static cache (no Context there).
+        CalendarPrefs.warmTimeZone(this)
         loadUnifiedPushPreferences()
         loadGeneralPreferences()
         rebuildDrawerMenu()
@@ -2167,7 +2187,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** Circular avatar: custom photo if present, otherwise a colored disc with the first initial. */
-    private fun buildAccountAvatar(email: String, sizePx: Int): android.graphics.Bitmap {
+    internal fun buildAccountAvatar(email: String, sizePx: Int): android.graphics.Bitmap {
         val bmp = android.graphics.Bitmap.createBitmap(sizePx, sizePx, android.graphics.Bitmap.Config.ARGB_8888)
         val canvas = android.graphics.Canvas(bmp)
         val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
@@ -2516,7 +2536,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** Edit dialog: change the display name and the avatar photo for an account. */
-    private fun showEditProfileDialog(email: String) {
+    internal fun showEditProfileDialog(email: String) {
         val dp = resources.displayMetrics.density
         val dialogBg = getDialogBackgroundColor()
         val accentInt = currentAccentColor.toColorInt()
@@ -2577,6 +2597,9 @@ class MainActivity : AppCompatActivity() {
             }
             isClickable = true
             isFocusable = true
+            // The account color only distinguishes rows in the unified inbox, so it is
+            // pointless (and confusing) with a single account.
+            visibility = if (savedAccounts.size >= 2) View.VISIBLE else View.GONE
         }
         root.addView(LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -2654,6 +2677,7 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener {
                 setAccountDisplayName(email, nameInput.text.toString())
                 renderAccountHeader()
+                refreshSettingsAccountRow()
                 dialog.dismiss()
             }
         })
@@ -2661,6 +2685,7 @@ class MainActivity : AppCompatActivity() {
         dialog.setOnDismissListener {
             editingAvatarEmail = null
             editProfileAvatarRefresh = null
+            refreshSettingsAccountRow()
         }
         dialog.show()
         dialog.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))

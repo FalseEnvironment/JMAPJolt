@@ -42,7 +42,7 @@ class CalendarMonthView(context: Context) : View(context) {
     init { rebuild() }
 
     private fun rebuild() {
-        val cal = Calendar.getInstance().apply {
+        val cal = CalendarPrefs.calendar().apply {
             timeInMillis = monthAnchor
             set(Calendar.DAY_OF_MONTH, 1)
             set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
@@ -82,7 +82,7 @@ class CalendarMonthView(context: Context) : View(context) {
 
         // weekday header
         dowPaint.color = palette.secondaryText
-        val firstDow = Calendar.getInstance().firstDayOfWeek
+        val firstDow = CalendarPrefs.calendar().firstDayOfWeek
         for (i in 0 until cols) {
             val dow = ((firstDow - 1 + i) % 7) + 1
             canvas.drawText(CalendarTimelineView.shortDow(dow).take(2),
@@ -90,7 +90,7 @@ class CalendarMonthView(context: Context) : View(context) {
         }
 
         linePaint.color = CalendarTimelineView.adjustAlpha(palette.secondaryText, 0.18f)
-        val thisMonth = Calendar.getInstance().apply { timeInMillis = monthAnchor }.get(Calendar.MONTH)
+        val thisMonth = CalendarPrefs.calendar().apply { timeInMillis = monthAnchor }.get(Calendar.MONTH)
         val today = CalendarTimelineView.midnight(System.currentTimeMillis())
 
         for (idx in 0 until 42) {
@@ -99,7 +99,7 @@ class CalendarMonthView(context: Context) : View(context) {
             val x = col * cellW
             val y = gridTop + row * cellH
             val dayStart = cellStarts[idx]
-            val cal = Calendar.getInstance().apply { timeInMillis = dayStart }
+            val cal = CalendarPrefs.calendar().apply { timeInMillis = dayStart }
             val inMonth = cal.get(Calendar.MONTH) == thisMonth
 
             if (dayStart == selectedDay) {

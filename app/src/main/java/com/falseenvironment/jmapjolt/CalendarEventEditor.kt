@@ -103,8 +103,8 @@ object CalendarEventEditor {
         val preservedLocation = existing?.location ?: ""
 
         // working state — independent start and end instants (supports multi-day events)
-        val cal = Calendar.getInstance().apply { timeInMillis = existing?.start ?: defaultStart }
-        val endCal = Calendar.getInstance().apply {
+        val cal = CalendarPrefs.calendar().apply { timeInMillis = existing?.start ?: defaultStart }
+        val endCal = CalendarPrefs.calendar().apply {
             timeInMillis = cal.timeInMillis + (existing?.durationMinutes ?: 60) * 60_000L
         }
         var allDay = existing?.allDay ?: false
@@ -123,7 +123,9 @@ object CalendarEventEditor {
         }
 
         val dateFmt = SimpleDateFormat("EEE, d MMM yyyy", Locale.ENGLISH)
-        val timeFmt = SimpleDateFormat("HH:mm", Locale.ENGLISH)
+            .apply { timeZone = CalendarPrefs.zone() }
+        val use24h = CalendarPrefs.use24Hour(context)
+        val timeFmt = CalendarPrefs.timeFormatter(context)
         fun refresh() {
             startDateBtn.text = dateFmt.format(cal.time)
             startTimeBtn.text = timeFmt.format(cal.time)
@@ -159,7 +161,7 @@ object CalendarEventEditor {
                     set = { cal.set(Calendar.HOUR_OF_DAY, h); cal.set(Calendar.MINUTE, min)
                         cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0) },
                     undo = { cal.set(Calendar.HOUR_OF_DAY, prevH); cal.set(Calendar.MINUTE, prevMin) })
-            }, cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE), true).show()
+            }, cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE), use24h).show()
         }
         endDateBtn.setOnClickListener {
             DatePickerDialog(context, { _, y, m, d ->
@@ -177,7 +179,7 @@ object CalendarEventEditor {
                     set = { endCal.set(Calendar.HOUR_OF_DAY, h); endCal.set(Calendar.MINUTE, min)
                         endCal.set(Calendar.SECOND, 0); endCal.set(Calendar.MILLISECOND, 0) },
                     undo = { endCal.set(Calendar.HOUR_OF_DAY, prevH); endCal.set(Calendar.MINUTE, prevMin) })
-            }, endCal.get(Calendar.HOUR_OF_DAY), endCal.get(Calendar.MINUTE), true).show()
+            }, endCal.get(Calendar.HOUR_OF_DAY), endCal.get(Calendar.MINUTE), use24h).show()
         }
 
         // Animated, accent-tinted toggle matching the settings switches.

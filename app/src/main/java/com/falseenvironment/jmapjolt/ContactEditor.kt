@@ -121,7 +121,12 @@ class ContactEditor(
 
         // The backend is fixed once a contact exists: moving a card between backends would mean
         // deleting it on one side and recreating it on the other.
-        if (isNew) {
+        // With the list pinned to one backend in Settings there is nothing to choose: the new
+        // card goes to that backend, so the selector is dropped instead of offering a contact
+        // the list would then hide.
+        val forcedSource = ContactsPrefs.forcedSource(activity)
+        if (isNew && forcedSource != null) source = forcedSource
+        if (isNew && forcedSource == null) {
             form.addView(caption(activity.getString(R.string.contacts_save_to)))
             form.addView(buildSourceSelector())
         }

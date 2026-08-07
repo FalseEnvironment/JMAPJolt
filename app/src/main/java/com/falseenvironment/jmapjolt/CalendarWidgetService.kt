@@ -41,6 +41,8 @@ private class CalendarWidgetFactory(
     override fun onCreate() {}
 
     override fun onDataSetChanged() {
+        // Widgets can be rebuilt in a fresh process where the static zone cache is cold.
+        CalendarPrefs.warmTimeZone(context)
         val palette = WidgetSupport.palette(WidgetSupport.currentTheme(context))
         textColor = palette[2]
         secondaryColor = palette[3]
@@ -52,7 +54,7 @@ private class CalendarWidgetFactory(
         val occurrences = runCatching { CalendarRepository.occurrences(context, from, to) }
             .getOrDefault(emptyList())
 
-        val use24h = DateFormat.is24HourFormat(context)
+        val use24h = CalendarPrefs.use24Hour(context)
         val built = mutableListOf<Item>()
         var lastDay = Long.MIN_VALUE
         for (occ in occurrences) {
@@ -123,11 +125,12 @@ private class CalendarWidgetFactory(
 
     private fun timeLabel(occ: EventOccurrence, use24h: Boolean): String {
         if (occ.event.allDay) return context.getString(R.string.calendar_all_day)
-        val flags = DateUtils.FORMAT_SHOW_TIME or
-            if (use24h) DateUtils.FORMAT_24HOUR else 0
-        val start = DateUtils.formatDateTime(context, occ.start, flags)
-        val end = DateUtils.formatDateTime(context, occ.end, flags)
-        return "$start\n$end"
+        // SimpleDateFormat rather than DateUtils: the latter always renders in the
+        // device zone and ignores the calendar's time-zone override.
+        val fmt = java.text.SimpleDateFormat(
+            if (use24h) "HH:mm" else "h:mm a", java.util.Locale.ENGLISH
+        ).apply { timeZone = CalendarPrefs.zone() }
+        return "${fmt.format(java.util.Date(occ.start))}\n${fmt.format(java.util.Date(occ.end))}"
     }
 
     private val englishContext: Context by lazy {
@@ -140,7 +143,16 @@ private class CalendarWidgetFactory(
         val today = startOfToday()
         val flags = DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_SHOW_WEEKDAY or
             DateUtils.FORMAT_ABBREV_ALL
-        val date = DateUtils.formatDateTime(englishContext, ts, flags)
+        val date = DateUtils.formatDateTime(
+            englishContext, ts, flags or DateUtils.FORMAT_ABBREV_ALL
+        ).let {
+            // formatDateTime has no zone parameter; when an override is active the day
+            // label is derived from the overridden calendar instead.
+            if (CalendarPrefs.zone() == java.util.TimeZone.getDefault()) it
+            else java.text.SimpleDateFormat("EEE, d MMM", java.util.Locale.ENGLISH)
+                .apply { timeZone = CalendarPrefs.zone() }
+                .format(java.util.Date(ts))
+        }
         return when (dayStart(ts)) {
             today -> context.getString(R.string.calendar_today_prefix, date)
             today + DAY_MS -> context.getString(R.string.calendar_tomorrow_prefix, date)
@@ -150,7 +162,7 @@ private class CalendarWidgetFactory(
 
     private fun startOfToday(): Long = dayStart(System.currentTimeMillis())
 
-    private fun dayStart(ts: Long): Long = Calendar.getInstance().apply {
+    private fun dayStart(ts: Long): Long = CalendarPrefs.calendar().apply {
         timeInMillis = ts
         set(Calendar.HOUR_OF_DAY, 0)
         set(Calendar.MINUTE, 0)

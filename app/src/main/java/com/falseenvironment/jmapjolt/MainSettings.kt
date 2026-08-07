@@ -111,6 +111,7 @@ internal fun MainActivity.showSettingsScreen() {
     drawerToggle.syncState()
     updateTopBarState()
     showSettingsMenuRoot()
+    refreshSettingsAccountRow()
     loadUnifiedPushPreferences()
     rebuildDrawerMenu()
 }
@@ -168,6 +169,44 @@ internal fun MainActivity.bindSettingsMenuNavigation() {
             onCalendarProviderChosen(chosen)
         }
     }
+    settingsCalTimeFormatDropdown.setOnClickListener {
+        val formats = listOf(
+            CalendarPrefs.TimeFormat.SYSTEM,
+            CalendarPrefs.TimeFormat.H24,
+            CalendarPrefs.TimeFormat.H12)
+        val options = formats.map { getString(calTimeFormatLabel(it)) }
+        showSettingsDropdown(
+            settingsCalTimeFormatDropdown,
+            options,
+            formats.indexOf(CalendarPrefs.timeFormat(this)).coerceAtLeast(0)
+        ) { idx ->
+            CalendarPrefs.setTimeFormat(this, formats[idx])
+            updateCalTimeFormatUi()
+            // Re-render every surface that prints a clock time with the new pattern.
+            calendarPanelView?.refresh()
+            CalendarWidgetProvider.refreshAll(applicationContext)
+        }
+    }
+    updateCalTimeFormatUi()
+    settingsCalTimeZoneDropdown.setOnClickListener {
+        // "Automatic" first, then the curated offset list (negative → UTC → positive).
+        val ids = listOf<String?>(null) + TimeZones.entries.map { it.zoneId }
+        val options = listOf(getString(R.string.settings_cal_timezone_auto)) + TimeZones.labels()
+        val current = ids.indexOf(CalendarPrefs.timeZoneId(this)).coerceAtLeast(0)
+        showSettingsDropdown(settingsCalTimeZoneDropdown, options, current) { idx ->
+            CalendarPrefs.setTimeZone(this, ids[idx])
+            updateCalTimeZoneUi()
+            calendarPanelView?.refresh()
+            CalendarWidgetProvider.refreshAll(applicationContext)
+        }
+    }
+    updateCalTimeZoneUi()
+    settingsAccountProfileRow.setOnClickListener {
+        val email = currentAccountEmail ?: savedAccounts.firstOrNull()?.email
+        if (email != null) showEditProfileDialog(email)
+    }
+    settingsAccountAddRow.setOnClickListener { showAddAccountDialog() }
+    refreshSettingsAccountRow()
     settingsCalAddProviderButton.setOnClickListener { CalendarDavx5.launch(activity) }
     calendarEnabledSwitch.isChecked = CalendarPrefs.isEnabled(this)
     calendarEnabledSwitch.setOnCheckedChangeListener { _, enabled ->
@@ -195,6 +234,18 @@ internal fun MainActivity.bindSettingsMenuNavigation() {
         if (!enabled && contactsPanelView?.visibility == View.VISIBLE) showMailboxScreen()
         navigationView.post { rebuildDrawerMenu() }
     }
+    settingsContactsShowDropdown.setOnClickListener {
+        val values = ContactsPrefs.Show.entries
+        val options = values.map { getString(contactsShowLabel(it)) }
+        showSettingsDropdown(
+            settingsContactsShowDropdown, options, values.indexOf(ContactsPrefs.show(this))
+        ) { idx ->
+            ContactsPrefs.setShow(this, values[idx])
+            updateContactsShowUi()
+            contactsPanelView?.applyShowPreference()
+        }
+    }
+    updateContactsShowUi()
     settingsImportVcfRow.setOnClickListener {
         runCatching { importVcfLauncher.launch(arrayOf("text/vcard", "text/x-vcard", "*/*")) }
     }
@@ -271,15 +322,81 @@ internal fun MainActivity.requestCalendarPermissions(onResult: () -> Unit) {
     ))
 }
 
+internal fun calTimeFormatLabel(format: CalendarPrefs.TimeFormat): Int = when (format) {
+    CalendarPrefs.TimeFormat.H24 -> R.string.settings_cal_time_format_24h
+    CalendarPrefs.TimeFormat.H12 -> R.string.settings_cal_time_format_12h
+    CalendarPrefs.TimeFormat.SYSTEM -> R.string.settings_cal_time_format_system
+}
+
+internal fun MainActivity.updateCalTimeFormatUi() {
+    settingsCalTimeFormatText.text = getString(calTimeFormatLabel(CalendarPrefs.timeFormat(this)))
+}
+
+private fun contactsShowLabel(show: ContactsPrefs.Show): Int = when (show) {
+    ContactsPrefs.Show.BOTH -> R.string.settings_contacts_show_both
+    ContactsPrefs.Show.JMAP_ONLY -> R.string.settings_contacts_show_jmap
+    ContactsPrefs.Show.DAVX5_ONLY -> R.string.settings_contacts_show_davx5
+}
+
+internal fun MainActivity.updateContactsShowUi() {
+    settingsContactsShowText.text = getString(contactsShowLabel(ContactsPrefs.show(this)))
+}
+
+internal fun MainActivity.updateCalTimeZoneUi() {
+    settingsCalTimeZoneText.text = CalendarPrefs.zoneLabel(this)
+}
+
+/** Mirrors the drawer profile entry into the Settings > Account card. */
+internal fun MainActivity.refreshSettingsAccountRow() {
+    // Called from dialogs that can outlive the settings screen binding, so tolerate
+    // the views not being wired up yet.
+    val row = findViewById<LinearLayout>(R.id.settingsAccountProfileRow) ?: return
+    val email = currentAccountEmail ?: savedAccounts.firstOrNull()?.email
+    if (email.isNullOrBlank()) {
+        // Signed out: only "Add account" is actionable.
+        row.visibility = View.GONE
+        return
+    }
+    row.visibility = View.VISIBLE
+    val sizePx = (36 * resources.displayMetrics.density).toInt()
+    findViewById<ImageView>(R.id.settingsAccountAvatar)?.setImageBitmap(
+        buildAccountAvatar(email, sizePx)
+    )
+    findViewById<TextView>(R.id.settingsAccountName)?.let { nameView ->
+        nameView.text = getAccountDisplayName(email)
+        // The dot only carries meaning when the unified inbox can mix accounts.
+        applyAccountColorDot(nameView, email, savedAccounts.size >= 2)
+    }
+    findViewById<TextView>(R.id.settingsAccountEmail)?.text = email
+}
+
+/**
+ * Puts a small disc in the account's unified-inbox color before [nameView]'s text,
+ * or removes it when [show] is false (single-account setups, where the color says nothing).
+ */
+internal fun MainActivity.applyAccountColorDot(nameView: TextView, email: String, show: Boolean) {
+    if (!show) {
+        nameView.setCompoundDrawablesRelativeWithIntrinsicBounds(null, null, null, null)
+        return
+    }
+    val dp = resources.displayMetrics.density
+    val sizePx = (10 * dp).toInt()
+    val dot = GradientDrawable().apply {
+        shape = GradientDrawable.OVAL
+        setColor(getAccountColor(email))
+        setSize(sizePx, sizePx)
+        setBounds(0, 0, sizePx, sizePx)
+    }
+    nameView.setCompoundDrawablesRelative(dot, null, null, null)
+    nameView.compoundDrawablePadding = (6 * dp).toInt()
+}
+
 internal fun MainActivity.updateCalProviderUi() {
     val isDavx5 = CalendarPrefs.provider(this) == CalendarPrefs.Provider.DAVX5
     val accent = currentAccentColor.toColorInt()
     settingsCalProviderText.text = getString(
         if (isDavx5) R.string.settings_cal_provider_davx5
         else R.string.settings_cal_provider_jmap)
-    findViewById<TextView>(R.id.settingsCalProviderHint)?.text = getString(
-        if (isDavx5) R.string.settings_cal_provider_hint_davx5
-        else R.string.settings_cal_provider_hint_jmap)
     settingsCalAddProviderButton.visibility = if (isDavx5) View.VISIBLE else View.GONE
     val accountText = findViewById<TextView>(R.id.settingsCalProviderAccount)
     val connected = if (isDavx5 && CalendarProvider.hasReadPermission(this)) {
@@ -699,10 +816,24 @@ internal fun MainActivity.showSettingsDropdown(
         })
     }
 
+    // Long lists (time zones) must not run off screen: cap the popup and let it scroll.
+    val scroller = android.widget.ScrollView(this).apply {
+        isVerticalScrollBarEnabled = false
+        overScrollMode = View.OVER_SCROLL_NEVER
+        clipToOutline = true
+        addView(container)
+    }
+    val unspecified = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+    container.measure(unspecified, unspecified)
+    val maxHeight = (resources.displayMetrics.heightPixels * 0.55f).toInt()
+    val popupHeight =
+        if (container.measuredHeight > maxHeight) maxHeight
+        else android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+
     val pw = android.widget.PopupWindow(
-        container,
+        scroller,
         android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
-        android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+        popupHeight,
         true
     ).apply {
         elevation = 10 * dp
@@ -710,14 +841,21 @@ internal fun MainActivity.showSettingsDropdown(
     }
     popupRef = pw
     pw.showAsDropDown(anchor, 0, (4 * dp).toInt())
+    // Open on the current choice instead of the top of a long list.
+    if (popupHeight != android.view.ViewGroup.LayoutParams.WRAP_CONTENT) {
+        scroller.post {
+            val row = container.getChildAt(currentIdx) ?: return@post
+            scroller.scrollTo(0, (row.top - maxHeight / 3).coerceAtLeast(0))
+        }
+    }
     // Entrance: scale-in from the anchor corner with a fade (MD3 menu motion).
-    container.alpha = 0f
-    container.scaleX = 0.86f
-    container.scaleY = 0.78f
-    container.post {
-        container.pivotX = container.width * 0.85f
-        container.pivotY = 0f
-        container.animate()
+    scroller.alpha = 0f
+    scroller.scaleX = 0.86f
+    scroller.scaleY = 0.78f
+    scroller.post {
+        scroller.pivotX = scroller.width * 0.85f
+        scroller.pivotY = 0f
+        scroller.animate()
             .alpha(1f).scaleX(1f).scaleY(1f)
             .setDuration(200)
             .setInterpolator(android.view.animation.DecelerateInterpolator(2.5f))

@@ -135,12 +135,14 @@ internal fun MainActivity.applyTheme() {
             setColor(cardBg)
         } }
         listOf(
+            settingsAccountContainer,
             settingsThemeContainer, settingsGeneralContainer, settingsLabelsContainer,
             settingsUnifiedPushContainer, settingsCalendarContainer,
             settingsContactsContainer, settingsInfoRow
         ).forEach { it.background = cardDrawable() }
     } else {
         listOf(
+            settingsAccountContainer,
             settingsThemeContainer, settingsGeneralContainer, settingsLabelsContainer,
             settingsUnifiedPushContainer, settingsCalendarContainer,
             settingsContactsContainer, settingsInfoRow
@@ -154,6 +156,9 @@ internal fun MainActivity.applyTheme() {
     settingsThemeChevron.imageTintList = accentTint
     settingsUnifiedPushChevron.imageTintList = accentTint
     settingsCalendarChevron.imageTintList = accentTint
+    settingsAccountAddRow.compoundDrawableTintList = accentTint
+    // The pencil affordance on the profile row follows the accent like other chevrons.
+    findViewById<ImageView>(R.id.settingsAccountEditIcon)?.imageTintList = accentTint
     settingsImportIcsRow.compoundDrawableTintList = accentTint
     settingsExportIcsRow.compoundDrawableTintList = accentTint
     settingsImportVcfRow.compoundDrawableTintList = accentTint
@@ -343,7 +348,9 @@ internal fun MainActivity.applyAccentColor() {
     // MD3-style tonal pill for the dropdown triggers.
     val dropdownBg = darkenColor(accentInt, 0.78f)
     val dropdownStroke = darkenColor(accentInt, 1.15f)
-    for (dropdown in listOf(swipeLeftDropdown, swipeRightDropdown, themeDropdown, settingsCalProviderDropdown)) {
+    for (dropdown in listOf(swipeLeftDropdown, swipeRightDropdown, themeDropdown,
+                            settingsCalProviderDropdown, settingsCalTimeFormatDropdown,
+                            settingsCalTimeZoneDropdown, settingsContactsShowDropdown)) {
         dropdown.background = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             cornerRadius = 999 * d

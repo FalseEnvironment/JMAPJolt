@@ -34,6 +34,17 @@ class CalendarTimelineView(context: Context) : View(context) {
     /** Etar-style two-tap add: first tap arms this slot, second tap on it creates. */
     private var pendingSlot: Long = -1L
 
+    /**
+     * Hour-gutter label honouring the 24H/12H setting. In 12-hour mode the gutter is
+     * too narrow for ":00 AM", so it renders the compact "9 AM" / "12 PM" form.
+     */
+    private fun hourGutterLabel(hour: Int): String {
+        if (CalendarPrefs.use24Hour(context)) return "%02d:00".format(hour)
+        val suffix = if (hour < 12) "AM" else "PM"
+        val h12 = when (hour % 12) { 0 -> 12; else -> hour % 12 }
+        return "$h12 $suffix"
+    }
+
     private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val hourTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 11f * density }
     private val blockPaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -108,7 +119,7 @@ class CalendarTimelineView(context: Context) : View(context) {
         // Day headers (week mode)
         if (days.size > 1) {
             for (i in days.indices) {
-                val c = Calendar.getInstance().apply { timeInMillis = days[i] }
+                val c = CalendarPrefs.calendar().apply { timeInMillis = days[i] }
                 val label = "%s %d".format(
                     shortDow(c.get(Calendar.DAY_OF_WEEK)), c.get(Calendar.DAY_OF_MONTH))
                 val isToday = isSameDay(days[i], System.currentTimeMillis())
@@ -143,7 +154,7 @@ class CalendarTimelineView(context: Context) : View(context) {
             val y = top + hour * hourHeight
             canvas.drawLine(gutter, y, width.toFloat(), y, linePaint)
             if (hour < 24) {
-                canvas.drawText("%02d:00".format(hour), 4f * density, y + 14f * density, hourTextPaint)
+                canvas.drawText(hourGutterLabel(hour), 4f * density, y + 14f * density, hourTextPaint)
             }
         }
         // Column separators
@@ -230,7 +241,7 @@ class CalendarTimelineView(context: Context) : View(context) {
         val colIndex = (((x - gutter) / colWidth).toInt()).coerceIn(0, days.size - 1)
         // Snap to whole hours (no half-hour slots): tapping yields 9:00, 10:00, …
         val hour = ((y - top) / hourHeight).toInt().coerceIn(0, 23)
-        val slot = Calendar.getInstance().apply {
+        val slot = CalendarPrefs.calendar().apply {
             timeInMillis = days[colIndex]
             set(Calendar.HOUR_OF_DAY, hour)
             set(Calendar.MINUTE, 0)
@@ -246,15 +257,15 @@ class CalendarTimelineView(context: Context) : View(context) {
     }
 
     companion object {
-        fun midnight(epoch: Long): Long = Calendar.getInstance().apply {
+        fun midnight(epoch: Long): Long = CalendarPrefs.calendar().apply {
             timeInMillis = epoch
             set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
             set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
         }.timeInMillis
 
         fun isSameDay(a: Long, b: Long): Boolean {
-            val ca = Calendar.getInstance().apply { timeInMillis = a }
-            val cb = Calendar.getInstance().apply { timeInMillis = b }
+            val ca = CalendarPrefs.calendar().apply { timeInMillis = a }
+            val cb = CalendarPrefs.calendar().apply { timeInMillis = b }
             return ca.get(Calendar.YEAR) == cb.get(Calendar.YEAR) &&
                 ca.get(Calendar.DAY_OF_YEAR) == cb.get(Calendar.DAY_OF_YEAR)
         }

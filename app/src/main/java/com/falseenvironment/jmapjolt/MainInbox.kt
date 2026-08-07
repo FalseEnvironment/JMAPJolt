@@ -866,6 +866,10 @@ internal fun MainActivity.setupSelectionBarListeners() {
         override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
             val query = s?.toString() ?: ""
             searchClearBtn.visibility = if (query.isNotEmpty()) View.VISIBLE else View.GONE
+            // The search bar is shared with Settings/Calendar/Contacts, where filtering
+            // the (hidden) mail list looked like nothing happened. As soon as the user
+            // actually types, move to the inbox so the results are on screen.
+            if (query.isNotEmpty()) enterMailboxForSearch()
             applySearchFilter(query)
         }
         override fun afterTextChanged(s: android.text.Editable?) {}

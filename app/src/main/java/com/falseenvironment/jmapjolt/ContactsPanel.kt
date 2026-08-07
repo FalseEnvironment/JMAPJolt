@@ -94,8 +94,20 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
         setBackgroundColor(palette.background)
         addView(buildRoot())
         addView(buildFab())
-        adapter.submit(visibleContacts())
+        applyShowPreference()
         updateSelectionBar()
+    }
+
+    /**
+     * Settings can pin the list to a single backend. When pinned, the scope chips would only
+     * offer choices that contradict the setting, so the whole bar goes away.
+     */
+    fun applyShowPreference() {
+        val forced = ContactsPrefs.forcedSource(activity)
+        filterBar.visibility = if (forced == null) View.VISIBLE else View.GONE
+        filter = forced
+        styleChips(filterBar)
+        renderList()
     }
 
     /** Android back closes multi-select before the tab itself reacts. */
@@ -114,6 +126,7 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
             palette = current
             buildUi()
         }
+        applyShowPreference()
         if (ContactsPrefs.provider(activity) == ContactsPrefs.Provider.DAVX5 &&
             !ContactsProvider.hasReadPermission(activity)) {
             activity.requestContactsPermissions { refresh() }

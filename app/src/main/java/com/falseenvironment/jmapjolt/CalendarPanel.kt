@@ -212,11 +212,11 @@ class CalendarPanel(private val activity: MainActivity) : FrameLayout(activity) 
     }
 
     private fun showGoToDatePicker() {
-        val cal = Calendar.getInstance().apply { timeInMillis = anchor }
+        val cal = CalendarPrefs.calendar().apply { timeInMillis = anchor }
         android.app.DatePickerDialog(
             activity,
             { _, year, month, day ->
-                val picked = Calendar.getInstance().apply {
+                val picked = CalendarPrefs.calendar().apply {
                     set(Calendar.YEAR, year); set(Calendar.MONTH, month)
                     set(Calendar.DAY_OF_MONTH, day)
                     set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
@@ -398,7 +398,7 @@ class CalendarPanel(private val activity: MainActivity) : FrameLayout(activity) 
 
     /** Advances the cursor by [dir] periods for the current mode (no rendering). */
     private fun applyShift(dir: Int) {
-        val cal = Calendar.getInstance().apply { timeInMillis = anchor }
+        val cal = CalendarPrefs.calendar().apply { timeInMillis = anchor }
         when (mode) {
             Mode.MONTH -> cal.add(Calendar.MONTH, dir)
             Mode.WEEK -> cal.add(Calendar.DAY_OF_MONTH, 7 * dir)
@@ -423,7 +423,7 @@ class CalendarPanel(private val activity: MainActivity) : FrameLayout(activity) 
                 this@CalendarPanel.anchor = day
             }
             onAddRequested = { day ->
-                val start = Calendar.getInstance().apply {
+                val start = CalendarPrefs.calendar().apply {
                     timeInMillis = day
                     set(Calendar.HOUR_OF_DAY, 9); set(Calendar.MINUTE, 0)
                     set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
@@ -463,7 +463,8 @@ class CalendarPanel(private val activity: MainActivity) : FrameLayout(activity) 
             })
         }
         val dayFmt = SimpleDateFormat("EEEE, d MMMM", Locale.ENGLISH)
-        val timeFmt = SimpleDateFormat("HH:mm", Locale.ENGLISH)
+            .apply { timeZone = CalendarPrefs.zone() }
+        val timeFmt = CalendarPrefs.timeFormatter(context)
         var lastDay = -1L
         for (occ in occs) {
             val day = CalendarTimelineView.midnight(occ.start)
@@ -523,21 +524,24 @@ class CalendarPanel(private val activity: MainActivity) : FrameLayout(activity) 
     // ---- navigation / labels --------------------------------------------------------------
 
     private fun periodLabel(): String {
-        val cal = Calendar.getInstance().apply { timeInMillis = anchor }
+        val cal = CalendarPrefs.calendar().apply { timeInMillis = anchor }
         return when (mode) {
-            Mode.MONTH -> SimpleDateFormat("MMMM yyyy", Locale.ENGLISH).format(cal.time)
+            Mode.MONTH -> SimpleDateFormat("MMMM yyyy", Locale.ENGLISH)
+                .apply { timeZone = CalendarPrefs.zone() }.format(cal.time)
             Mode.WEEK -> {
                 val ws = weekDays().first(); val we = weekDays().last()
                 val f = SimpleDateFormat("d MMM", Locale.ENGLISH)
+                    .apply { timeZone = CalendarPrefs.zone() }
                 "${f.format(Date(ws))} – ${f.format(Date(we))}"
             }
-            Mode.DAY -> SimpleDateFormat("EEE, d MMM yyyy", Locale.ENGLISH).format(Date(selectedDay))
+            Mode.DAY -> SimpleDateFormat("EEE, d MMM yyyy", Locale.ENGLISH)
+                .apply { timeZone = CalendarPrefs.zone() }.format(Date(selectedDay))
             Mode.AGENDA -> "Agenda"
         }
     }
 
     private fun weekDays(): List<Long> {
-        val cal = Calendar.getInstance().apply { timeInMillis = anchor }
+        val cal = CalendarPrefs.calendar().apply { timeInMillis = anchor }
         while (cal.get(Calendar.DAY_OF_WEEK) != cal.firstDayOfWeek) cal.add(Calendar.DAY_OF_MONTH, -1)
         cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0)
         cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
@@ -545,7 +549,7 @@ class CalendarPanel(private val activity: MainActivity) : FrameLayout(activity) 
     }
 
     private fun monthRange(): Pair<Long, Long> {
-        val cal = Calendar.getInstance().apply {
+        val cal = CalendarPrefs.calendar().apply {
             timeInMillis = anchor; set(Calendar.DAY_OF_MONTH, 1)
             set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0)
         }
@@ -582,9 +586,9 @@ class CalendarPanel(private val activity: MainActivity) : FrameLayout(activity) 
         )
     }
 
-    private fun defaultNewStart(): Long = Calendar.getInstance().apply {
+    private fun defaultNewStart(): Long = CalendarPrefs.calendar().apply {
         timeInMillis = selectedDay
-        val now = Calendar.getInstance()
+        val now = CalendarPrefs.calendar()
         if (CalendarTimelineView.isSameDay(selectedDay, now.timeInMillis)) {
             set(Calendar.HOUR_OF_DAY, now.get(Calendar.HOUR_OF_DAY) + 1)
         } else set(Calendar.HOUR_OF_DAY, 9)

@@ -28,7 +28,9 @@ class CalendarReminderReceiver : BroadcastReceiver() {
 
         ensureChannel(context)
 
-        val timeStr = SimpleDateFormat("EEE d MMM, HH:mm", Locale.ENGLISH).format(Date(occStart))
+        val timeStr = SimpleDateFormat(
+            "EEE d MMM, " + CalendarPrefs.timePattern(context), Locale.ENGLISH
+        ).apply { timeZone = CalendarPrefs.zone() }.format(Date(occStart))
         val text = buildString {
             append(timeStr)
             if (location.isNotBlank()) append(" · ").append(location)
