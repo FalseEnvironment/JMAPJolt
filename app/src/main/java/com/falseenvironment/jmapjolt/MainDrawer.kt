@@ -114,29 +114,14 @@ internal fun MainActivity.showAddAccountDialog() {
         setColor(dialogBg)
     }
     (root.getChildAt(0) as? TextView)?.setTextColor(textColor)
-    // The XML input_field_bg drawable is a hardcoded dark grey that ignores the theme
-    // (hints become grey-on-grey and unreadable). Give each field a theme-aware surface.
-    val fieldFill = when (currentTheme) {
-        "light"  -> "#FFFFFF".toColorInt()
-        "oled"   -> "#141414".toColorInt()
-        "violet" -> "#241634".toColorInt()
-        else     -> "#2E2E34".toColorInt()
-    }
-    val fieldStroke = if (currentTheme == "light") "#D0D0D4".toColorInt() else "#454552".toColorInt()
-    // A clearer hint colour so the field labels (Email Address / Password / JMAP URL) read well.
-    val fieldHint = if (currentTheme == "light") "#8A8A90".toColorInt() else "#B0B0BA".toColorInt()
-    listOf(dialogEmail, dialogPassword, dialogServerUrl).forEach {
-        it.setTextColor(textColor)
-        it.setHintTextColor(fieldHint)
-        it.backgroundTintList = null
-        it.background = GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = 14 * dp
-            setColor(fieldFill)
-            setStroke((1 * dp).toInt(), fieldStroke)
-        }
-        it.setPadding((16 * dp).toInt(), (14 * dp).toInt(), (16 * dp).toInt(), (14 * dp).toInt())
-        it.compoundDrawableTintList = ColorStateList.valueOf(fieldHint)
+    // Floating-label outlined fields: styleOutlinedField applies the theme-aware box,
+    // stroke and label colours (same treatment as the login screen).
+    listOf(
+        R.id.dialogEmailInputLayout,
+        R.id.dialogPasswordInputLayout,
+        R.id.dialogServerUrlInputLayout
+    ).forEach {
+        styleOutlinedField(view.findViewById(it))
     }
 
     val btnRow = LinearLayout(this).apply {

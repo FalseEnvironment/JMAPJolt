@@ -172,6 +172,9 @@ class MainActivity : AppCompatActivity() {
     internal lateinit var emailInput: EditText
     internal lateinit var passwordInput: EditText
     internal lateinit var serverUrlInput: EditText
+    internal lateinit var emailInputLayout: com.google.android.material.textfield.TextInputLayout
+    internal lateinit var passwordInputLayout: com.google.android.material.textfield.TextInputLayout
+    internal lateinit var serverUrlInputLayout: com.google.android.material.textfield.TextInputLayout
     internal lateinit var loginButton: Button
     internal lateinit var mailboxContainer: FrameLayout
     internal lateinit var emailsRecyclerView: RecyclerView
@@ -504,6 +507,9 @@ class MainActivity : AppCompatActivity() {
         emailInput = findViewById(R.id.emailInput)
         passwordInput = findViewById(R.id.passwordInput)
         serverUrlInput = findViewById(R.id.serverUrlInput)
+        emailInputLayout = findViewById(R.id.emailInputLayout)
+        passwordInputLayout = findViewById(R.id.passwordInputLayout)
+        serverUrlInputLayout = findViewById(R.id.serverUrlInputLayout)
         loginButton = findViewById(R.id.loginButton)
         mailboxContainer = findViewById(R.id.mailboxContainer)
         emailsRecyclerView = findViewById(R.id.emailsRecyclerView)

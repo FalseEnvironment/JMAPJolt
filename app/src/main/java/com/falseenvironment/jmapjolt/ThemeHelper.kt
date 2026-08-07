@@ -192,17 +192,45 @@ internal fun MainActivity.getOnAccentColor(): Int {
     return if (lum > 140) Color.BLACK else Color.WHITE
 }
 
-internal fun MainActivity.styleLoginInputs() {
-    val d = resources.displayMetrics.density
-    val padH = (16 * d).toInt()
-    val padV = (10 * d).toInt()
-    val hintColor = "#9E9E9E".toColorInt()
-    listOf(emailInput, passwordInput, serverUrlInput).forEach {
-        it.backgroundTintList = null
-        it.setBackgroundResource(R.drawable.input_field_bg)
-        it.setPadding(padH, padV, padH, padV)
-        it.setHintTextColor(hintColor)
+/**
+ * Theme-aware colours for a floating-label outlined field (Courier-style): the hint
+ * sits centered in the box while empty and animates to the top-start edge on focus.
+ * Used by both the login screen and the add-account dialog.
+ */
+internal fun MainActivity.styleOutlinedField(
+    layout: com.google.android.material.textfield.TextInputLayout
+) {
+    val accent = currentAccentColor.toColorInt()
+    val isLight = currentTheme == "light"
+    val textColor = if (isLight) "#212121".toColorInt() else Color.WHITE
+    val idleLabel = if (isLight) "#8A8A90".toColorInt() else "#B0B0BA".toColorInt()
+    val idleStroke = if (isLight) "#D0D0D4".toColorInt() else "#454552".toColorInt()
+    val boxFill = when (currentTheme) {
+        "light"  -> "#FFFFFF".toColorInt()
+        "oled"   -> "#141414".toColorInt()
+        "violet" -> "#241634".toColorInt()
+        else     -> "#2E2E34".toColorInt()
     }
+
+    val states = arrayOf(
+        intArrayOf(android.R.attr.state_focused),
+        intArrayOf(-android.R.attr.state_focused)
+    )
+    layout.boxBackgroundColor = boxFill
+    layout.setBoxStrokeColorStateList(ColorStateList(states, intArrayOf(accent, idleStroke)))
+    layout.defaultHintTextColor = ColorStateList(states, intArrayOf(accent, idleLabel))
+    layout.hintTextColor = ColorStateList.valueOf(accent)
+    layout.setStartIconTintList(ColorStateList(states, intArrayOf(accent, idleLabel)))
+    layout.setEndIconTintList(ColorStateList(states, intArrayOf(accent, idleLabel)))
+    layout.editText?.apply {
+        setTextColor(textColor)
+        highlightColor = accent
+    }
+}
+
+internal fun MainActivity.styleLoginInputs() {
+    listOf(emailInputLayout, passwordInputLayout, serverUrlInputLayout)
+        .forEach { styleOutlinedField(it) }
 }
 
 /** Pill-shaped accent button for primary actions (MD3 filled button shape). */
@@ -482,6 +510,9 @@ internal fun MainActivity.updateCustomTopBar(title: String, inMailbox: Boolean =
 
 internal fun MainActivity.updateContainerTextColors(view: View, primaryColor: Int, secondaryColor: Int) {
     when (view) {
+        // Outlined fields own their colours (see styleOutlinedField); recursing into
+        // them would repaint the floating label and box with the generic text colours.
+        is com.google.android.material.textfield.TextInputLayout -> return
         is EditText -> {
             view.setTextColor(primaryColor)
             view.setHintTextColor(secondaryColor)

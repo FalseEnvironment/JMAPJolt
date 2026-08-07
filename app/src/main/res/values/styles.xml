@@ -73,4 +73,17 @@
         <item name="android:textSize">14sp</item>
         <item name="android:lineSpacingMultiplier">1.4</item>
     </style>
+    <!-- Outlined field with a floating label (Courier-style): the label starts
+         centered inside the box and animates to the top-start edge on focus/typing. -->
+    <style name="OutlinedField" parent="Widget.Material3.TextInputLayout.OutlinedBox">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="boxCornerRadiusTopStart">@dimen/radius_xl</item>
+        <item name="boxCornerRadiusTopEnd">@dimen/radius_xl</item>
+        <item name="boxCornerRadiusBottomStart">@dimen/radius_xl</item>
+        <item name="boxCornerRadiusBottomEnd">@dimen/radius_xl</item>
+        <item name="hintAnimationEnabled">true</item>
+        <item name="startIconTint">@null</item>
+    </style>
+
 </resources>
