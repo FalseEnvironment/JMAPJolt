@@ -84,6 +84,19 @@ object ContactAvatars {
         Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
     }.getOrNull()
 
+    /**
+     * Encodes an already-cropped bitmap (from the crop editor) as base64 JPEG, scaled down
+     * to [STORED_SIZE] when the caller handed over something larger.
+     */
+    fun encode(bitmap: Bitmap): String? = runCatching {
+        val square =
+            if (bitmap.width == STORED_SIZE && bitmap.height == STORED_SIZE) bitmap
+            else centreCropSquare(bitmap, STORED_SIZE)
+        val out = ByteArrayOutputStream()
+        square.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
+        Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+    }.getOrNull()
+
     fun toBytes(base64: String?): ByteArray? =
         base64?.takeIf { it.isNotBlank() }?.let {
             runCatching { Base64.decode(it, Base64.DEFAULT) }.getOrNull()

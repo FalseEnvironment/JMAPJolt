@@ -1285,6 +1285,17 @@ class MainActivity : AppCompatActivity() {
         selectedFolder == R.id.nav_trash ||
             (isSearchActive && email.originFolderId == R.id.nav_trash)
 
+    /**
+     * True when the top-bar action for this email is "move back to Inbox" instead of
+     * "archive". In search the list mixes folders, so the row's own origin decides:
+     * an archived or trashed hit gets restored, everything else gets archived.
+     */
+    internal fun isRestorableEmail(email: DisplayEmail): Boolean =
+        selectedFolder == R.id.nav_archive ||
+            (isSearchActive &&
+                (email.originFolderId == R.id.nav_archive ||
+                    email.originFolderId == R.id.nav_trash))
+
     /** Asks for confirmation, then permanently destroys emails (used in Trash). */
     internal fun confirmPermanentDelete(account: JMapClient.ConnectedAccount, ids: List<String>) {
         showThemedConfirmDialog(
@@ -1322,6 +1333,29 @@ class MainActivity : AppCompatActivity() {
             showThemedSnackbar("Not available for drafts")
             clearSelection()
             return
+        }
+
+        if (action == "archive" || action == "unarchive") {
+            // The action follows each email's own folder, not the visible one: in search
+            // a trashed/archived hit must go back to the Inbox even from the inbox view.
+            val restorableIds = emails.filter { it.id in ids && isRestorableEmail(it) }
+                .map { it.id }
+                .toSet()
+            val archivableIds = ids.filterNot { it in restorableIds }
+            if (restorableIds.isNotEmpty() && archivableIds.isNotEmpty()) {
+                selectedEmails.clear()
+                selectedEmails.addAll(restorableIds)
+                performAction("unarchive")
+                selectedEmails.clear()
+                selectedEmails.addAll(archivableIds)
+                performAction("archive")
+                return
+            }
+            val resolved = if (restorableIds.isNotEmpty()) "unarchive" else "archive"
+            if (resolved != action) {
+                performAction(resolved)
+                return
+            }
         }
 
         if (action == "delete") {
@@ -1476,6 +1510,11 @@ class MainActivity : AppCompatActivity() {
         val archiveCurrent = folderCache[R.id.nav_archive]
         if (archiveCurrent != null) {
             folderCache[R.id.nav_archive] = archiveCurrent.filter { it.id != email.id }
+        }
+        // Restoring also happens from Trash (e.g. a trashed hit picked in search).
+        val trashCurrent = folderCache[R.id.nav_trash]
+        if (trashCurrent != null) {
+            folderCache[R.id.nav_trash] = trashCurrent.filter { it.id != email.id }
         }
         val inboxCurrent = folderCache[R.id.nav_inbox]
         if (inboxCurrent != null && inboxCurrent.none { it.id == email.id }) {
@@ -2380,8 +2419,26 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
-    /** Discord-style crop/rotate editor before the chosen photo becomes the avatar. */
+    /** Crop/rotate editor for the account avatar; shares the editor with contact photos. */
     private fun showAvatarCropDialog(uri: android.net.Uri, email: String) {
+        showImageCropDialog(uri) { cropped ->
+            try {
+                accountAvatarFile(email).outputStream().use { out ->
+                    cropped.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, out)
+                }
+                renderAccountHeader()
+                editProfileAvatarRefresh?.invoke()
+            } catch (e: Throwable) {
+                Log.e(TAG, "Avatar save failed", e)
+            }
+        }
+    }
+
+    /**
+     * Discord-style crop/rotate editor. Hands the square 512px result to [onCropped],
+     * so both the account avatar and the contact photo use the same UX.
+     */
+    internal fun showImageCropDialog(uri: android.net.Uri, onCropped: (android.graphics.Bitmap) -> Unit) {
         val dp = resources.displayMetrics.density
         val source = try {
             contentResolver.openInputStream(uri)?.use { input ->
@@ -2511,18 +2568,7 @@ class MainActivity : AppCompatActivity() {
             setPadding((16 * dp).toInt(), (10 * dp).toInt(), (4 * dp).toInt(), (10 * dp).toInt())
             isClickable = true; isFocusable = true
             setOnClickListener {
-                val cropped = cropView.getCroppedBitmap(512)
-                if (cropped != null) {
-                    try {
-                        accountAvatarFile(email).outputStream().use { out ->
-                            cropped.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, out)
-                        }
-                        renderAccountHeader()
-                        editProfileAvatarRefresh?.invoke()
-                    } catch (e: Throwable) {
-                        Log.e(TAG, "Avatar save failed", e)
-                    }
-                }
+                cropView.getCroppedBitmap(512)?.let(onCropped)
                 dialog.dismiss()
             }
         })

@@ -834,8 +834,12 @@ internal fun MainActivity.updateSelectionBar() {
         selectionCountText.text = "${selectedEmails.size} selected"
         val allSeen = selectedEmails.all { id -> emails.find { it.id == id }?.seen == true }
         selectionReadBtn.contentDescription = if (allSeen) "Mark Unread" else "Mark Read"
-        // In Archive the action button restores the email to the Inbox instead.
-        if (selectedFolder == R.id.nav_archive) {
+        // In Archive — and for archived/trashed hits in search — the action button
+        // restores the email to the Inbox instead of archiving it.
+        val anyRestorable = selectedEmails.any { id ->
+            emails.find { it.id == id }?.let { isRestorableEmail(it) } == true
+        }
+        if (anyRestorable) {
             selectionArchiveBtn.setImageResource(R.drawable.ic_lucide_archive_restore)
             selectionArchiveBtn.contentDescription = "Move to Inbox"
         } else {
@@ -848,7 +852,8 @@ internal fun MainActivity.updateSelectionBar() {
 internal fun MainActivity.setupSelectionBarListeners() {
     selectionCloseBtn.setOnClickListener { clearSelection() }
     selectionArchiveBtn.setOnClickListener {
-        performAction(if (selectedFolder == R.id.nav_archive) "unarchive" else "archive")
+        // performAction resolves archive vs. move-to-Inbox per email (mixed search selections).
+        performAction("archive")
     }
     selectionDeleteBtn.setOnClickListener { performAction("delete") }
     selectionReadBtn.setOnClickListener { performAction("toggleRead") }

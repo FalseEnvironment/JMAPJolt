@@ -316,15 +316,16 @@ class ContactEditor(
 
     private fun pickPhoto() {
         activity.pendingContactPhoto = { uri ->
-            activity.lifecycleScope.launch {
-                val encoded = withContext(Dispatchers.IO) {
-                    ContactAvatars.fromPickedImage(activity, uri)
-                }
-                if (encoded == null) {
-                    notify(R.string.contacts_avatar_failed)
-                } else {
-                    photoBase64 = encoded
-                    renderAvatar()
+            // Same crop/zoom/rotate editor as the account avatar before the photo is stored.
+            activity.showImageCropDialog(uri) { cropped ->
+                activity.lifecycleScope.launch {
+                    val encoded = withContext(Dispatchers.IO) { ContactAvatars.encode(cropped) }
+                    if (encoded == null) {
+                        notify(R.string.contacts_avatar_failed)
+                    } else {
+                        photoBase64 = encoded
+                        renderAvatar()
+                    }
                 }
             }
         }
