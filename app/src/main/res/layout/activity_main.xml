@@ -821,8 +821,7 @@
 
                             <View
                                 android:layout_width="match_parent"
-                                android:layout_height="1dp"
-                                android:background="?attr/colorOutlineVariant" />
+                                android:layout_height="10dp" />
 
                             <TextView
                                 android:id="@+id/settingsAccountAddRow"
@@ -935,8 +934,7 @@
 
                             <View
                                 android:layout_width="match_parent"
-                                android:layout_height="1dp"
-                                android:background="?attr/colorOutlineVariant" />
+                                android:layout_height="10dp" />
 
                             <LinearLayout
                                 android:id="@+id/accentColorRow"
@@ -1028,11 +1026,14 @@
                                 android:textOff=""
                                 android:textSize="15sp" />
 
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="10dp" />
+
                             <androidx.appcompat.widget.SwitchCompat
                                 android:id="@+id/loadFaviconsSwitch"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:layout_marginTop="4dp"
                                 android:text="@string/settings_load_favicons"
                                 android:textOn=""
                                 android:textOff=""
@@ -1040,9 +1041,7 @@
 
                             <View
                                 android:layout_width="match_parent"
-                                android:layout_height="1dp"
-                                android:layout_marginTop="8dp"
-                                android:background="?attr/colorOutlineVariant" />
+                                android:layout_height="10dp" />
 
                             <LinearLayout
                                 android:layout_width="match_parent"
@@ -1084,6 +1083,10 @@
                                         android:scaleType="fitCenter" />
                                 </LinearLayout>
                             </LinearLayout>
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="10dp" />
 
                             <LinearLayout
                                 android:layout_width="match_parent"
@@ -1211,8 +1214,7 @@
 
                             <View
                                 android:layout_width="match_parent"
-                                android:layout_height="1dp"
-                                android:background="?attr/colorOutlineVariant" />
+                                android:layout_height="10dp" />
 
                             <LinearLayout
                                 android:id="@+id/settingsEditFoldersRow"
@@ -1311,7 +1313,6 @@
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="2dp"
-                                android:layout_marginBottom="8dp"
                                 android:paddingStart="4dp"
                                 android:text="@string/settings_sse_subtitle"
                                 android:textColor="?attr/colorOnSurfaceVariant"
@@ -1319,15 +1320,12 @@
 
                             <View
                                 android:layout_width="match_parent"
-                                android:layout_height="1dp"
-                                android:layout_marginBottom="8dp"
-                                android:background="?attr/colorOutlineVariant" />
+                                android:layout_height="10dp" />
 
                             <androidx.appcompat.widget.SwitchCompat
                                 android:id="@+id/unifiedPushSwitch"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:layout_marginTop="4dp"
                                 android:text="@string/settings_unifiedpush_toggle"
                                 android:textOn=""
                                 android:textOff=""
@@ -1425,9 +1423,7 @@
 
                             <View
                                 android:layout_width="match_parent"
-                                android:layout_height="1dp"
-                                android:layout_marginBottom="4dp"
-                                android:background="?attr/colorOutlineVariant" />
+                                android:layout_height="10dp" />
 
                             <LinearLayout
                                 android:layout_width="match_parent"
@@ -1484,7 +1480,6 @@
                                 android:id="@+id/settingsCalAddProviderRow"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_marginBottom="6dp"
                                 android:text="@string/settings_cal_add_davx5"
                                 android:textSize="14sp"
                                 android:clickable="true"
@@ -1493,8 +1488,7 @@
 
                             <View
                                 android:layout_width="match_parent"
-                                android:layout_height="1dp"
-                                android:background="?attr/colorOutlineVariant" />
+                                android:layout_height="10dp" />
 
                             <LinearLayout
                                 android:layout_width="match_parent"
@@ -1540,8 +1534,7 @@
 
                             <View
                                 android:layout_width="match_parent"
-                                android:layout_height="1dp"
-                                android:background="?attr/colorOutlineVariant" />
+                                android:layout_height="10dp" />
 
                             <LinearLayout
                                 android:layout_width="match_parent"
@@ -1589,8 +1582,7 @@
 
                             <View
                                 android:layout_width="match_parent"
-                                android:layout_height="1dp"
-                                android:background="?attr/colorOutlineVariant" />
+                                android:layout_height="10dp" />
 
                             <TextView
                                 android:id="@+id/settingsImportIcsRow"
@@ -1603,6 +1595,10 @@
                                 android:clickable="true"
                                 android:focusable="true"
                                 android:background="?attr/selectableItemBackground" />
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="10dp" />
 
                             <TextView
                                 android:id="@+id/settingsExportIcsRow"
@@ -1690,9 +1686,7 @@
 
                                 <View
                                     android:layout_width="match_parent"
-                                    android:layout_height="1dp"
-                                    android:layout_marginBottom="4dp"
-                                    android:background="?attr/colorOutlineVariant" />
+                                    android:layout_height="10dp" />
 
                                 <LinearLayout
                                     android:layout_width="match_parent"
@@ -1738,6 +1732,10 @@
 
                                 </LinearLayout>
 
+                                <View
+                                    android:layout_width="match_parent"
+                                    android:layout_height="10dp" />
+
                                 <TextView
                                     android:id="@+id/settingsImportVcfRow"
                                     android:layout_width="match_parent"
@@ -1749,6 +1747,10 @@
                                     android:clickable="true"
                                     android:focusable="true"
                                     android:background="?attr/selectableItemBackground" />
+
+                                <View
+                                    android:layout_width="match_parent"
+                                    android:layout_height="10dp" />
 
                                 <TextView
                                     android:id="@+id/settingsExportVcfRow"
