@@ -38,8 +38,19 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        ndk {
-            abiFilters += "arm64-v8a"
+    }
+
+    // SQLCipher is the only native dependency; it ships .so files for every ABI below.
+    // One APK per architecture instead of a universal one: each build carries a single
+    // libsqlcipher.so, so adding 32-bit ARM support costs nothing to 64-bit users.
+    // (ndk.abiFilters must stay unset — AGP rejects it alongside splits, and the
+    // include list below already keeps x86/x86_64 out of the outputs.)
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a")
+            isUniversalApk = false
         }
     }
 
