@@ -17,6 +17,9 @@ class ContactsRepository(private val context: Context) {
     /** Cached per instance: resolving it costs a session round-trip. */
     private var cachedAccountId: String? = null
 
+    /** Cached per instance too: every save would otherwise re-query the address book list. */
+    private var cachedAddressBookId: String? = null
+
     /** True when the connected JMAP server advertises the contacts capability. */
     suspend fun isJmapAvailable(): Boolean = jmapAccountId() != null
 
@@ -59,7 +62,8 @@ class ContactsRepository(private val context: Context) {
             ContactSource.JMAP -> {
                 val account = CalendarAccount.current(context) ?: return@withContext null
                 val accountId = jmapAccountId() ?: return@withContext null
-                val bookId = jmap.defaultAddressBookId(account, accountId)
+                val bookId = cachedAddressBookId
+                    ?: jmap.defaultAddressBookId(account, accountId)?.also { cachedAddressBookId = it }
                 val id = jmap.pushContact(account, accountId, bookId, contact)
                     ?: return@withContext null
                 contact.copy(jmapId = id)

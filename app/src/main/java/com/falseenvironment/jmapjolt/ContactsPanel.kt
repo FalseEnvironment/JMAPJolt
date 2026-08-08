@@ -149,13 +149,41 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
         }
     }
 
+    /**
+     * Paints a created or edited contact straight away, before the backend has acknowledged it.
+     * The next [refresh] replaces the list with the server's version, so a rejected write simply
+     * disappears again instead of leaving the UI lying.
+     */
+    private fun applyLocal(contact: Contact) {
+        publishLocal(contacts.filterNot { it.id == contact.id } + contact)
+    }
+
+    /** Mirror of [applyLocal] for deletions. */
+    private fun removeLocal(removed: Collection<Contact>) {
+        val ids = removed.map { it.id }.toSet()
+        publishLocal(contacts.filterNot { it.id in ids })
+    }
+
+    private fun publishLocal(updated: List<Contact>) {
+        contacts = updated.sortedBy { it.displayName.lowercase() }
+        ContactsCache.contacts = contacts
+        ContactAvatars.index(contacts)
+        renderList()
+    }
+
     /** Opens the editor on a blank contact; wired to the panel's floating action button. */
     fun startNewContact() {
         val default = when (ContactsPrefs.provider(activity)) {
             ContactsPrefs.Provider.DAVX5 -> ContactSource.DAVX5
             ContactsPrefs.Provider.JMAP -> ContactSource.JMAP
         }
-        ContactEditor(activity, Contact(source = default)) { refresh() }.show()
+        ContactEditor(
+            activity,
+            Contact(source = default),
+            onSaved = { refresh() },
+            onApplied = { applyLocal(it) },
+            onRemoved = { removeLocal(listOf(it)) },
+        ).show()
     }
 
     // ---- layout ---------------------------------------------------------------------------
@@ -435,6 +463,10 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
         }
 
     private fun deleteSelected(targets: List<Contact>) {
+        // Rows leave the list at once; the backend deletes run afterwards and only the reload can
+        // bring a contact back, which is exactly what should happen when the server refuses.
+        removeLocal(targets)
+        exitSelection()
         scope.launch {
             val failures = targets.count { !runCatching { repository.delete(it) }.getOrDefault(false) }
             if (failures > 0) {
@@ -442,7 +474,6 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
                     activity, R.string.contacts_delete_failed, android.widget.Toast.LENGTH_SHORT
                 ).show()
             }
-            exitSelection()
             refresh()
         }
     }
@@ -805,7 +836,13 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
             )
             row.setOnClickListener {
                 if (isSelecting) toggleSelection(contact)
-                else ContactEditor(activity, contact) { refresh() }.show()
+                else ContactEditor(
+                    activity,
+                    contact,
+                    onSaved = { refresh() },
+                    onApplied = { applyLocal(it) },
+                    onRemoved = { removeLocal(listOf(it)) },
+                ).show()
             }
         }
     }

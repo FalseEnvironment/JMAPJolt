@@ -7,7 +7,7 @@
 **A fast, open source JMAP email client for Android.**
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.20-green.svg)](https://github.com/FalseEnvironment/JMAPJolt/releases)
+[![Version](https://img.shields.io/badge/version-0.2-green.svg)](https://github.com/FalseEnvironment/JMAPJolt/releases)
 [![Platform](https://img.shields.io/badge/platform-Android-brightgreen.svg)](#)
 [![GitHub Downloads](https://img.shields.io/github/downloads/FalseEnvironment/JMAPJolt/total?label=downloads&color=blue)](https://github.com/FalseEnvironment/JMAPJolt/releases)
 
@@ -33,10 +33,18 @@ JMAPJolt was born from a simple thought: there are far too few mobile apps with 
 | **Custom themes** | Legacy gray, light snow, purple iris, and dark OLED, plus an accent color picker |
 | **Swipe actions** | Configurable per direction (delete, archive, mark read, spam) |
 | **Compose** | Rich text editor with a formatting toolbar and attachments |
-| **Calendar** | JMAP Calendar or DAVx5 support |
+| **Calendar** | JMAP Calendar or DAVx5 sync, with .ics import and export |
+| **Contacts** | JMAP Contacts or DAVx5 sync, with vCard import and export |
+| **Search** | Across subject, sender, preview and labels, scoped to all folders or just one |
+| **Subfolders** | Nested folder tree with collapsible parents |
 | **Labels** | Custom color-coded labels stored as JMAP keywords, with drawer filtering |
 | **Notification** | Push notifications with JMAP JSON meta or UnifiedPush |
 | **Widgets** | Android home-widget for Inbox / Unified Inbox and Calendar |
+
+## Requirements
+
+Android 7.0 (API 24) or newer, and a mail server that supprot JMAP, i suggest
+[Stalwart](https://github.com/stalwartlabs/stalwart).
 
 ## Download
 

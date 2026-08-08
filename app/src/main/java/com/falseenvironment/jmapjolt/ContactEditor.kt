@@ -39,7 +39,12 @@ import kotlinx.coroutines.withContext
 class ContactEditor(
     private val activity: MainActivity,
     private val original: Contact,
-    private val onSaved: () -> Unit
+    /** Reconciliation callback: fired once the backend round-trip finished (success or not). */
+    private val onSaved: () -> Unit,
+    /** Optimistic callback: fired the instant the user saves, before the backend is touched. */
+    private val onApplied: (Contact) -> Unit = {},
+    /** Optimistic callback: fired the instant the user deletes, before the backend is touched. */
+    private val onRemoved: (Contact) -> Unit = {}
 ) {
 
     private val palette: CalendarTheme.Palette = CalendarTheme.palette(activity)
@@ -463,10 +468,15 @@ class ContactEditor(
         if (!isNew) {
             val danger = ContextCompat.getColor(activity, R.color.contacts_delete_red)
             bar.addView(textButton(activity.getString(R.string.contacts_delete), danger) {
+                // Drop the row now; the backend call runs behind the closed dialog and only
+                // surfaces if it fails, in which case the reload puts the contact back.
+                dialog.dismiss()
+                onRemoved(original)
+                notify(R.string.contacts_deleted)
                 activity.lifecycleScope.launch {
-                    val deleted = repository.delete(original)
-                    notify(if (deleted) R.string.contacts_deleted else R.string.contacts_delete_failed)
-                    if (deleted) { dialog.dismiss(); onSaved() }
+                    val deleted = runCatching { repository.delete(original) }.getOrDefault(false)
+                    if (!deleted) notify(R.string.contacts_delete_failed)
+                    onSaved()
                 }
             })
         }
@@ -490,14 +500,15 @@ class ContactEditor(
             notify(R.string.contacts_need_permission)
             return
         }
+        // Optimistic: the card is already valid locally, so close and paint it immediately and let
+        // the backend catch up in the background. A failed push only costs a snackbar plus the
+        // reload that follows, which restores the server's version of the truth.
+        dialog.dismiss()
+        onApplied(contact)
+        notify(R.string.contacts_saved)
         activity.lifecycleScope.launch {
-            val saved = repository.save(contact)
-            if (saved == null) {
-                notify(R.string.contacts_save_failed)
-                return@launch
-            }
-            notify(R.string.contacts_saved)
-            dialog.dismiss()
+            val saved = runCatching { repository.save(contact) }.getOrNull()
+            if (saved == null) notify(R.string.contacts_save_failed)
             onSaved()
         }
     }
