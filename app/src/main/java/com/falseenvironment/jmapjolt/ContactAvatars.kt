@@ -37,16 +37,32 @@ object ContactAvatars {
         }.getOrNull()?.also { decoded.put(key, it) }
     }
 
-    /** Photo for an email address, or null when no contact owns it. */
-    fun photoFor(address: String?): Bitmap? {
-        val key = address?.trim()?.lowercase()?.takeIf { it.isNotEmpty() } ?: return null
-        return decode(byAddress[key])
+    /**
+     * Address keys used for lookup: the address as-is, plus — when it carries an RFC 5233
+     * sub-address (`finance+tag@host`) — the bare `finance@host`. Forwarding aliases arrive
+     * tagged, so without the fallback a contact saved on the plain alias never matches.
+     */
+    private fun lookupKeys(address: String?): List<String> {
+        val key = address?.trim()?.lowercase()?.takeIf { it.isNotEmpty() } ?: return emptyList()
+        val at = key.lastIndexOf('@')
+        val plus = key.indexOf('+')
+        if (at <= 0 || plus <= 0 || plus > at) return listOf(key)
+        return listOf(key, key.substring(0, plus) + key.substring(at))
     }
 
-    fun hasPhotoFor(address: String?): Boolean {
-        val key = address?.trim()?.lowercase()?.takeIf { it.isNotEmpty() } ?: return false
-        return byAddress.containsKey(key)
-    }
+    /** Photo for an email address, or null when no contact owns it. */
+    fun photoFor(address: String?): Bitmap? =
+        decode(lookupKeys(address).firstNotNullOfOrNull { byAddress[it] })
+
+    fun hasPhotoFor(address: String?): Boolean =
+        lookupKeys(address).any { byAddress.containsKey(it) }
+
+    /**
+     * Notified after every [index] rebuild so already-bound views (the email list) can repaint:
+     * the address book usually finishes loading well after the first rows are drawn.
+     */
+    @Volatile
+    var onIndexed: (() -> Unit)? = null
 
     /** Rebuilds the address index; call after every address book load. */
     fun index(contacts: List<Contact>) {
@@ -59,6 +75,7 @@ object ContactAvatars {
             }
         }
         byAddress = map
+        onIndexed?.invoke()
     }
 
     /**

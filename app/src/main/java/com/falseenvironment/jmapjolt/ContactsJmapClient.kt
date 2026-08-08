@@ -385,8 +385,14 @@ class ContactsJmapClient {
             addresses = addresses,
             categories = categories,
             notes = notes.orEmpty(),
+            // "kind" is optional on some servers, so fall back to any image media carrying
+            // inline data: bytes. Blob-backed uris are skipped (nothing to decode inline).
             photoBase64 = card.optJSONObject("media").entries()
-                .firstOrNull { it.optString("kind") == "photo" }
+                .firstOrNull {
+                    it.optString("kind") == "photo" ||
+                        it.optString("mediaType").startsWith("image/") ||
+                        it.optString("uri").startsWith("data:image")
+                }
                 ?.optString("uri")
                 ?.substringAfter("base64,", "")
                 ?.takeIf { it.isNotBlank() },

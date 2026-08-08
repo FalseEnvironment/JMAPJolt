@@ -648,6 +648,13 @@ class MainActivity : AppCompatActivity() {
 
         // Warm the address book once so the email list can draw contact photos for known senders
         // (and the compose picker opens instantly) without waiting for the contacts tab.
+        // The book lands after the first rows are already bound, so repaint the list once the
+        // photo index exists (and again whenever the address book is reloaded or edited).
+        ContactAvatars.onIndexed = {
+            runOnUiThread {
+                if (::emailAdapter.isInitialized) emailAdapter.notifyDataSetChanged()
+            }
+        }
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching { ContactsRepository(this@MainActivity).warmCache() }
         }
