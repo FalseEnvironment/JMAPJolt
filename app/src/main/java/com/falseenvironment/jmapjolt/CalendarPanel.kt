@@ -598,6 +598,10 @@ class CalendarPanel(private val activity: MainActivity) : FrameLayout(activity) 
     private fun afterChange() {
         CalendarReminderScheduler.reschedule(activity)
         render()
+        // DAVx5 events live in the system provider, so no CalendarStore write repaints
+        // the widgets for them — refresh them here for both backends.
+        CalendarWidgetProvider.refreshAll(activity.applicationContext)
+        CalendarWeekWidgetProvider.refreshAll(activity.applicationContext)
         triggerSync()
     }
 

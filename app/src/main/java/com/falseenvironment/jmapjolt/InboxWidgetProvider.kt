@@ -17,6 +17,8 @@ class InboxWidgetProvider : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, mgr: AppWidgetManager, ids: IntArray) {
         for (id in ids) renderWidget(context, mgr, id)
+        // Row dates are relative ("Today", "Yesterday"): roll them over at midnight.
+        WidgetDayRollReceiver.schedule(context)
     }
 
     override fun onDeleted(context: Context, ids: IntArray) {

@@ -75,6 +75,7 @@ object CalendarSync {
                 }
             }
             CalendarWidgetProvider.refreshAll(context)
+            CalendarWeekWidgetProvider.refreshAll(context)
             Result(supported = true, pulled = remote.size)
         }.getOrElse { Result(supported = isSupported(context), pulled = 0, error = it.message) }
     }

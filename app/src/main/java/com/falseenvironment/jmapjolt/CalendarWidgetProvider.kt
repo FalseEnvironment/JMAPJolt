@@ -20,6 +20,9 @@ class CalendarWidgetProvider : AppWidgetProvider() {
     override fun onUpdate(context: Context, mgr: AppWidgetManager, ids: IntArray) {
         for (id in ids) renderWidget(context, mgr, id)
         scheduleNextExpiry(context)
+        // The agenda is day-based ("Today"/"Tomorrow", 30-day window): make sure the
+        // midnight rollover alarm is armed.
+        WidgetDayRollReceiver.schedule(context)
     }
 
     override fun onReceive(context: Context, intent: Intent) {

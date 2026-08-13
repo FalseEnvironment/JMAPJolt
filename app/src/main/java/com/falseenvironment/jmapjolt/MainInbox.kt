@@ -416,13 +416,37 @@ internal fun MainActivity.attachMailSwipe() {
                     super.onSelectedChanged(viewHolder, actionState)
                     if (actionState == ItemTouchHelper.ACTION_STATE_SWIPE) {
                         mailSwipeRefresh.isEnabled = false
+                        // Rows are transparent, so while the finger holds the row the touch
+                        // state layer / window background shows through as a dark grey wash
+                        // that only clears when the row is rebound on release. Paint the row
+                        // opaque in the theme colour for the whole gesture instead.
+                        viewHolder?.itemView?.let { row ->
+                            row.isPressed = false
+                            row.setBackgroundColor(rowBackgroundColor(viewHolder))
+                        }
                     }
                 }
 
                 override fun clearView(rv: RecyclerView, vh: RecyclerView.ViewHolder) {
                     super.clearView(rv, vh)
                     mailSwipeRefresh.isEnabled = true
+                    // Back to the bind-time background (transparent, or the selection tint).
+                    vh.itemView.setBackgroundColor(
+                        if (isRowSelected(vh)) darkenColor(getDialogBackgroundColor(), 0.85f)
+                        else Color.TRANSPARENT
+                    )
                 }
+
+                private fun isRowSelected(vh: RecyclerView.ViewHolder): Boolean {
+                    val pos = vh.adapterPosition
+                    val id = emails.getOrNull(pos)?.id ?: return false
+                    return selectedEmails.contains(id)
+                }
+
+                /** Opaque backdrop for the swiped row: theme surface, or the selection tint. */
+                private fun rowBackgroundColor(vh: RecyclerView.ViewHolder): Int =
+                    if (isRowSelected(vh)) darkenColor(getDialogBackgroundColor(), 0.85f)
+                    else getThemeBackgroundColor()
 
                 override fun onChildDraw(
                         c: Canvas,
@@ -490,6 +514,12 @@ internal fun MainActivity.attachMailSwipe() {
                         c.restore()
                     }
                     super.onChildDraw(c, rv, vh, cappedDX, dY, state, active)
+                    // ItemTouchHelper lifts the dragged row (elevation = maxChildElevation + 1)
+                    // while the finger is down. Rows have a transparent background, so that
+                    // shadow shows *through* the row as a dark grey wash that only clears on
+                    // release — most visible on the OLED/Iris themes. Flatten it every frame;
+                    // the reveal strip is the swipe affordance, no shadow needed.
+                    vh.itemView.elevation = 0f
                 }
 
                 override fun onSwiped(vh: RecyclerView.ViewHolder, direction: Int) {
@@ -551,6 +581,7 @@ internal fun MainActivity.attachMailSwipe() {
                         }
                         MainActivity.SwipeAction.MARK_READ -> {
                             item.seen = !item.seen
+                            PendingMutations.markSeen(item.id, item.seen)
                             emailAdapter.notifyItemChanged(position)
                             saveEmailCache()
                         }
@@ -583,6 +614,9 @@ internal fun MainActivity.attachMailSwipe() {
                                 }
                             }
                         } catch (e: Exception) {
+                            // The server never applied it: drop the local override so the
+                            // next sync puts the email back where it really is.
+                            PendingMutations.forget(item.id)
                             Log.e(MainActivity.TAG,"Failed to perform optimistic swipe action $action on server", e)
                         }
                     }

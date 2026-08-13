@@ -228,6 +228,12 @@
     <string name="calendar_all_day">All day</string>
     <string name="calendar_today_prefix">Today · %1$s</string>
     <string name="calendar_tomorrow_prefix">Tomorrow · %1$s</string>
+    <string name="widget_week_title">Week</string>
+    <string name="widget_week_description">Shows the current week as a calendar grid.</string>
+    <string name="widget_week_empty">No events this week</string>
+    <string name="widget_week_previous">Previous week</string>
+    <string name="widget_week_next">Next week</string>
+    <string name="widget_week_grid">Week grid</string>
     <string name="widget_config_title">Inbox widget</string>
     <string name="widget_config_subtitle">Choose which inbox this widget shows.</string>
     <string name="widget_config_no_accounts">Sign in to an account first, then add the widget again.</string>

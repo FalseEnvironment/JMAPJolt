@@ -110,7 +110,9 @@ internal fun MainActivity.setupEmailDetailView() {
                                 ViewGroup.LayoutParams.MATCH_PARENT,
                                 ViewGroup.LayoutParams.MATCH_PARENT
                         )
-                setBackgroundColor("#1F1F1F".toColorInt())
+                // Exposed while a detail swipe drags the body sideways, so it must be the
+                // theme surface — a fixed grey flashed under the drag on every theme.
+                setBackgroundColor(getThemeBackgroundColor())
             }
     // Content column sits below the overlay bar via a top inset equal to the bar height.
     detailBody =
@@ -127,7 +129,7 @@ internal fun MainActivity.setupEmailDetailView() {
     val headerWrap =
             LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                setBackgroundColor("#1F1F1F".toColorInt())
+                setBackgroundColor(getThemeToolbarColor())
                 minimumHeight = barHeight
                 layoutParams = FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
@@ -384,6 +386,8 @@ internal fun MainActivity.ensureDetailPreviewPanel(): LinearLayout {
         )
         setPadding(0, detailBarHeight, 0, 0)
         visibility = View.GONE
+        // Painted before the first preview load so no default surface flashes.
+        setBackgroundColor(getThemeBackgroundColor())
         // The preview is display-only: swallow touches while it briefly overlays.
         setOnTouchListener { _, _ -> true }
         addView(wv)
@@ -401,13 +405,12 @@ internal fun MainActivity.prepareDetailPreview(target: DisplayEmail, forward: Bo
     detailPreviewKey = key
     val panel = ensureDetailPreviewPanel()
     val wv = detailPreviewWebView ?: return
-    val bg = when (currentTheme) {
-        "oled" -> "#000000"
-        "light" -> "#ffffff"
-        else -> "#1a1a1a"
-    }.toColorInt()
-    panel.setBackgroundColor(bg)
-    wv.setBackgroundColor(bg)
+    // Same surface as the real detail body: the preview is what the finger drags in,
+    // so a fixed grey here reads as the wrong background on Iris/OLED until release.
+    panel.setBackgroundColor(getThemeBackgroundColor())
+    // Transparent like the real detail WebView (see showEmailDetail): an opaque WebView
+    // paints its own dark-mode surface (#121212) over the theme colour while dragging.
+    wv.setBackgroundColor(android.graphics.Color.TRANSPARENT)
     wv.settings.blockNetworkImage =
         !getSharedPreferences(MainActivity.PREFS_NAME, Context.MODE_PRIVATE).getBoolean("load_images", false)
     val html = if (target.fullBody.isNotBlank())
@@ -592,7 +595,10 @@ internal fun MainActivity.unarchiveDetailEmail(email: DisplayEmail) {
                 jmapClient.setMailbox(acc, email.id, inboxId)
                 BackgroundEmailSyncReceiver.addToBaseline(activity, acc.email, listOf(email.id))
             }
-        } catch (e: Exception) { Log.e(MainActivity.TAG,"detail unarchive failed", e) }
+        } catch (e: Exception) {
+            PendingMutations.forget(email.id)
+            Log.e(MainActivity.TAG,"detail unarchive failed", e)
+        }
     }
 }
 
@@ -915,7 +921,10 @@ internal fun MainActivity.archiveDetailEmail(email: DisplayEmail) {
         try {
             val archiveId = resolveOrCreateArchive(acc)
             if (archiveId != null) jmapClient.setMailbox(acc, email.id, archiveId)
-        } catch (e: Exception) { Log.e(MainActivity.TAG,"detail archive failed", e) }
+        } catch (e: Exception) {
+            PendingMutations.forget(email.id)
+            Log.e(MainActivity.TAG,"detail archive failed", e)
+        }
     }
 }
 
@@ -935,7 +944,10 @@ internal fun MainActivity.trashDetailEmail(email: DisplayEmail) {
         try {
             val trashId = jmapClient.resolveMailboxIdByRole(acc, "trash")
             if (trashId != null) jmapClient.setMailbox(acc, email.id, trashId)
-        } catch (e: Exception) { Log.e(MainActivity.TAG,"detail trash failed", e) }
+        } catch (e: Exception) {
+            PendingMutations.forget(email.id)
+            Log.e(MainActivity.TAG,"detail trash failed", e)
+        }
     }
 }
 

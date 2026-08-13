@@ -81,6 +81,29 @@
             android:permission="android.permission.BIND_REMOTEVIEWS"
             android:exported="false" />
 
+        <receiver
+            android:name=".CalendarWeekWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_calendar_week_info" />
+        </receiver>
+
+        <!-- Rolls every widget over to the new day at local midnight, and re-arms
+             the alarm when the clock or the time zone changes. -->
+        <receiver
+            android:name=".WidgetDayRollReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.DATE_CHANGED" />
+            </intent-filter>
+        </receiver>
+
         <activity
             android:name=".InboxWidgetConfigActivity"
             android:exported="false"

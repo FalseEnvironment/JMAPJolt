@@ -41,6 +41,7 @@ internal fun MainActivity.saveThemePreference() {
             .apply()
     InboxWidgetProvider.refreshAll(applicationContext)
     CalendarWidgetProvider.refreshAll(applicationContext)
+    CalendarWeekWidgetProvider.refreshAll(applicationContext)
 }
 
 internal fun MainActivity.applyTheme() {
@@ -61,6 +62,9 @@ internal fun MainActivity.applyTheme() {
     val textInt = textColor.toColorInt()
     val secondaryTextInt = secondaryTextColor.toColorInt()
 
+    // The window itself keeps the Material3 grey unless it is repainted: it shows through
+    // wherever a view is translated or briefly uncovered (detail swipe), on every theme.
+    window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(bgInt))
     drawerLayout.setBackgroundColor(bgInt)
     toolbar.setBackgroundColor(toolbarInt)
     toolbar.setTitleTextColor(textInt)
@@ -168,6 +172,9 @@ internal fun MainActivity.applyTheme() {
 
     // Update detail view header if visible
     if (isShowingEmailDetail) {
+        // The container is what shows through while a swipe drags the body sideways.
+        emailDetailContainer.setBackgroundColor(bgInt)
+        detailHeaderRow.setBackgroundColor(toolbarInt)
         emailDetailContainer.getChildAt(0).setBackgroundColor(toolbarInt)
         detailFrom.setTextColor(textInt)
         detailSubject.setTextColor(textInt)
@@ -404,6 +411,7 @@ internal fun MainActivity.saveAccentColorPreference() {
         .edit().putString(MainActivity.KEY_ACCENT_COLOR, currentAccentColor).apply()
     InboxWidgetProvider.refreshAll(applicationContext)
     CalendarWidgetProvider.refreshAll(applicationContext)
+    CalendarWeekWidgetProvider.refreshAll(applicationContext)
 }
 
 internal fun MainActivity.updateAccentColorPreview() {
@@ -575,6 +583,22 @@ internal fun MainActivity.lightenColor(color: Int, factor: Float = 1.3f): Int = 
     (Color.green(color) * factor).toInt().coerceIn(0, 255),
     (Color.blue(color) * factor).toInt().coerceIn(0, 255)
 )
+
+/** Main surface colour of the active theme — the same value [applyTheme] paints containers with. */
+internal fun MainActivity.getThemeBackgroundColor(): Int = when (currentTheme) {
+    "light"  -> "#F6F6F8".toColorInt()
+    "oled"   -> "#000000".toColorInt()
+    "violet" -> "#160E24".toColorInt()
+    else     -> "#212126".toColorInt()
+}
+
+/** Toolbar/header surface of the active theme (second slot of the palette). */
+internal fun MainActivity.getThemeToolbarColor(): Int = when (currentTheme) {
+    "light"  -> "#FFFFFF".toColorInt()
+    "oled"   -> "#0B0B0D".toColorInt()
+    "violet" -> "#1E1430".toColorInt()
+    else     -> "#2A2A30".toColorInt()
+}
 
 internal fun MainActivity.getDialogBackgroundColor(): Int = when (currentTheme) {
     "light"  -> "#F0EEEE".toColorInt()

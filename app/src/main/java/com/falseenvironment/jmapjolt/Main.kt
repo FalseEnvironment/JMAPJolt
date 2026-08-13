@@ -828,6 +828,8 @@ class MainActivity : AppCompatActivity() {
         // Re-arm calendar reminders on every launch: the reschedule chain only advances when
         // a reminder fires or the calendar screen is touched, so it can stall silently.
         if (CalendarPrefs.isEnabled(this)) CalendarReminderScheduler.reschedule(this)
+        // Same self-healing idea for the widgets' midnight rollover alarm.
+        WidgetDayRollReceiver.schedule(applicationContext)
     }
 
     private val simpleWatcher =
@@ -1014,6 +1016,10 @@ class MainActivity : AppCompatActivity() {
         }
         isShowingEmailDetail = true
         currentDetailEmail = email
+        // The theme may have changed while the detail was hidden; the container is the
+        // surface uncovered by the next/previous swipe, so keep it on the current theme.
+        emailDetailContainer.setBackgroundColor(getThemeBackgroundColor())
+        detailHeaderRow.setBackgroundColor(getThemeToolbarColor())
         updateDetailStarIcon(email.isFavorite)
         // Reset the auto-hide action row to fully visible on open.
         detailBarHidden = false
@@ -1147,6 +1153,7 @@ class MainActivity : AppCompatActivity() {
             if (account != null) {
                 // 1. Optimistic local UI update
                 email.seen = true
+                PendingMutations.markSeen(email.id, true)
                 emailAdapter.notifyItemsChangedByIds(listOf(email.id))
                 saveEmailCache()
 
@@ -1155,6 +1162,7 @@ class MainActivity : AppCompatActivity() {
                     try {
                         jmapClient.setSeen(account, email.id, true)
                     } catch (e: Exception) {
+                        PendingMutations.forget(email.id)
                         Log.e(TAG, "Failed to mark email seen on server", e)
                     }
                 }
@@ -1316,6 +1324,7 @@ class MainActivity : AppCompatActivity() {
         ) {
             clearSelection()
             removeEmailsAnimated(ids)
+            PendingMutations.markDestroyed(ids)
             // Outside Trash (e.g. deleting a trashed hit from search results) the visible
             // list isn't the Trash folder, so drop the ids from its cache instead.
             folderCache[R.id.nav_trash] =
@@ -1425,6 +1434,7 @@ class MainActivity : AppCompatActivity() {
                             }
                         }
                     } catch (e: Exception) {
+                        PendingMutations.forget(ids)
                         Log.e(TAG, "Action failed", e)
                     }
                 }
@@ -1446,6 +1456,7 @@ class MainActivity : AppCompatActivity() {
                             BackgroundEmailSyncReceiver.addToBaseline(this@MainActivity, acc.email, listOf(id))
                         }
                     } catch (e: Exception) {
+                        PendingMutations.forget(ids)
                         Log.e(TAG, "Unarchive failed", e)
                     }
                 }
@@ -1455,6 +1466,7 @@ class MainActivity : AppCompatActivity() {
                 val newState = !allSeen
                 emails.forEach { if (it.id in ids) it.seen = newState }
                 baseEmails.forEach { if (it.id in ids) it.seen = newState }
+                PendingMutations.markSeen(ids, newState)
                 clearSelection()
                 emailAdapter.notifyItemsChangedByIds(ids)
                 saveEmailCache()
@@ -1465,7 +1477,10 @@ class MainActivity : AppCompatActivity() {
                             jmapClient.setSeen(acc, id, newState)
                         }
                     }
-                    catch (e: Exception) { Log.e(TAG, "toggleRead failed", e) }
+                    catch (e: Exception) {
+                        PendingMutations.forget(ids)
+                        Log.e(TAG, "toggleRead failed", e)
+                    }
                 }
             }
             "more" -> showMoreOptionsPopup(null)
@@ -1514,6 +1529,9 @@ class MainActivity : AppCompatActivity() {
 
     /** Moves an email back from Archive to the Inbox cache, keeping date order. */
     internal fun updateFolderCachesForInbox(email: DisplayEmail) {
+        // Hold the move until the server confirms it, so a sync landing meanwhile
+        // doesn't push the email back into Archive/Trash.
+        PendingMutations.markMoved(email.id, R.id.nav_inbox)
         val archiveCurrent = folderCache[R.id.nav_archive]
         if (archiveCurrent != null) {
             folderCache[R.id.nav_archive] = archiveCurrent.filter { it.id != email.id }
@@ -1529,7 +1547,26 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Drawer nav id that renders [mbox], used to record where an optimistic move landed.
+     * Custom folders resolve through the subfolder map; 0 for a folder with no drawer entry
+     * (the rows then simply stay hidden everywhere until the server confirms).
+     */
+    internal fun navIdForMailbox(mbox: JMapClient.MailboxInfo): Int =
+        when (mbox.role?.lowercase()) {
+            "inbox" -> R.id.nav_inbox
+            "archive" -> R.id.nav_archive
+            "trash" -> R.id.nav_trash
+            "junk", "spam" -> R.id.nav_spam
+            "sent" -> R.id.nav_sent
+            "drafts" -> R.id.nav_drafts
+            else -> subfolderNavIds.entries.firstOrNull { it.value == mbox.id }?.key ?: 0
+        }
+
     internal fun updateFolderCachesForMove(email: DisplayEmail, targetNavId: Int) {
+        // The server call runs in the background: keep the move authoritative until it
+        // lands, otherwise a sync in flight re-adds the row to the folder it just left.
+        PendingMutations.markMoved(email.id, targetNavId)
         // Insert into target cache at top (if already loaded and not already present)
         if (targetNavId == R.id.nav_archive || targetNavId == R.id.nav_trash) {
             val current = folderCache[targetNavId]
@@ -1627,6 +1664,7 @@ class MainActivity : AppCompatActivity() {
                             val keepVisible = selectedFolder == R.id.nav_favourite
                             if (!keepVisible) {
                                 removeEmailsAnimated(ids)
+                                PendingMutations.markMoved(ids, R.id.nav_archive)
                                 saveEmailCache()
                             }
 
@@ -1638,12 +1676,14 @@ class MainActivity : AppCompatActivity() {
                                         jmapClient.setMailbox(acc, id, archiveId)
                                     }
                                 } catch (e: Exception) {
+                                    PendingMutations.forget(ids)
                                     Log.e(TAG, "Failed to archive selection", e)
                                 }
                             }
                         }
                         2 -> { // Delete
                             removeEmailsAnimated(ids)
+                            PendingMutations.markMoved(ids, R.id.nav_trash)
                             saveEmailCache()
 
                             lifecycleScope.launch {
@@ -1654,6 +1694,7 @@ class MainActivity : AppCompatActivity() {
                                         jmapClient.setMailbox(acc, id, trashId)
                                     }
                                 } catch (e: Exception) {
+                                    PendingMutations.forget(ids)
                                     Log.e(TAG, "Failed to delete selection", e)
                                 }
                             }
@@ -1662,6 +1703,7 @@ class MainActivity : AppCompatActivity() {
                             val allSeen = ids.all { id -> emails.find { e -> e.id == id }?.seen == true }
                             val newState = !allSeen
                             emails.forEach { if (it.id in ids) it.seen = newState }
+                            PendingMutations.markSeen(ids, newState)
                             emailAdapter.notifyItemsChangedByIds(ids)
                             saveEmailCache()
 
@@ -1672,6 +1714,7 @@ class MainActivity : AppCompatActivity() {
                                         jmapClient.setSeen(acc, id, newState)
                                     }
                                 } catch (e: Exception) {
+                                    PendingMutations.forget(ids)
                                     Log.e(TAG, "Failed to toggle seen state for selection", e)
                                 }
                             }
@@ -1842,6 +1885,7 @@ class MainActivity : AppCompatActivity() {
                                         emptyList()
                                     }
                                 }.sortedByDescending { it.receivedAt }
+                                    .let { PendingMutations.apply(it, currentFolderId) }
                                 folderCache[currentFolderId] = merged
                                 updateEmailsList(merged)
                                 persistOfflineCache(currentFolderId, merged)
@@ -1917,7 +1961,9 @@ class MainActivity : AppCompatActivity() {
                                 } catch (_: Exception) { emptyList() }
                                 (newEmailsList + extra).sortedByDescending { it.receivedAt }
                             } else newEmailsList
-                            val mergedList = applyOptimisticFavorite(threadedList, isFav)
+                            val mergedList = PendingMutations.apply(
+                                applyOptimisticFavorite(threadedList, isFav), currentFolderId
+                            )
                             folderCache[currentFolderId] = mergedList
                             updateEmailsList(mergedList)
                             persistOfflineCache(currentFolderId, mergedList)
@@ -3380,6 +3426,10 @@ class MainActivity : AppCompatActivity() {
                         clearSelection()
                         onPicked?.invoke()
                         removeEmailsAnimated(ids)
+                        // Hold the move until the server confirms it. The destination is
+                        // resolved to its nav id so the rows stay visible in the folder they
+                        // were moved into, and hidden everywhere else.
+                        PendingMutations.markMoved(ids, navIdForMailbox(mbox))
                         saveEmailCache()
                         showThemedSnackbar("Moved to ${folderDisplayName(mbox)}")
                         lifecycleScope.launch {
@@ -3399,7 +3449,10 @@ class MainActivity : AppCompatActivity() {
                                     }
                                 }
                             }
-                            catch (e: Exception) { Log.e(TAG, "Failed label move", e) }
+                            catch (e: Exception) {
+                                PendingMutations.forget(ids)
+                                Log.e(TAG, "Failed label move", e)
+                            }
                         }
                     }
                 }

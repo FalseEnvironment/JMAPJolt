@@ -185,6 +185,7 @@ internal fun MainActivity.bindSettingsMenuNavigation() {
             // Re-render every surface that prints a clock time with the new pattern.
             calendarPanelView?.refresh()
             CalendarWidgetProvider.refreshAll(applicationContext)
+            CalendarWeekWidgetProvider.refreshAll(applicationContext)
         }
     }
     updateCalTimeFormatUi()
@@ -198,6 +199,9 @@ internal fun MainActivity.bindSettingsMenuNavigation() {
             updateCalTimeZoneUi()
             calendarPanelView?.refresh()
             CalendarWidgetProvider.refreshAll(applicationContext)
+            CalendarWeekWidgetProvider.refreshAll(applicationContext)
+            // Midnight moved with the zone: re-arm the day-roll alarm on the new one.
+            WidgetDayRollReceiver.schedule(applicationContext)
         }
     }
     updateCalTimeZoneUi()

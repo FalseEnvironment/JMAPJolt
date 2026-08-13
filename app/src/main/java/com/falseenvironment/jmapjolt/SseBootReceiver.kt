@@ -9,6 +9,8 @@ class SseBootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED &&
             intent.action != Intent.ACTION_MY_PACKAGE_REPLACED) return
+        // Alarms don't survive a reboot: re-arm the widgets' midnight rollover.
+        WidgetDayRollReceiver.schedule(context)
         if (CalendarPrefs.isEnabled(context)) {
             Log.d("SseBootReceiver", "Re-arming calendar reminders after ${intent.action}")
             CalendarReminderScheduler.reschedule(context)
