@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.IBinder
 import android.os.SystemClock
 import android.util.Log
+import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.work.Constraints
@@ -33,6 +34,10 @@ class JmapEventSourceService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     // Tracks emails of accounts that already have a running loop in this instance.
     private val activeLoops = ConcurrentHashMap.newKeySet<String>()
+    // Set when the system revokes the dataSync FGS budget: the service must then stay
+    // down instead of being restarted by onTaskRemoved, which would only time out again.
+    @Volatile
+    private var stoppedByTimeout = false
 
     // startForeground() must run as early as possible: onCreate fires before
     // onStartCommand, and a busy main thread at app launch can otherwise push the
@@ -54,11 +59,47 @@ class JmapEventSourceService : Service() {
         return START_STICKY
     }
 
+    // Android 14+ gives dataSync foreground services a rolling time budget (~6h per 24h).
+    // When it runs out the system calls onTimeout() and expects the service to stop right
+    // away; failing to do so crashes the process with
+    // ForegroundServiceDidNotStopInTimeException. The SSE loop is unbounded by design, so
+    // it always reaches this point eventually: hand over to the periodic WorkManager
+    // fallback so mail keeps syncing until the budget resets.
+    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    override fun onTimeout(startId: Int) {
+        handleForegroundTimeout()
+    }
+
+    @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        handleForegroundTimeout()
+    }
+
+    private fun handleForegroundTimeout() {
+        if (stoppedByTimeout) return
+        stoppedByTimeout = true
+        Log.w(TAG, "dataSync FGS budget exhausted — stopping SSE, falling back to periodic sync")
+        try {
+            EmailSyncWorker.schedule(this)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to schedule periodic sync fallback", e)
+        }
+        stopSelf()
+    }
+
     private fun tryStartForeground(): Boolean = try {
         startForeground(NOTIFICATION_ID, buildNotification())
         true
     } catch (e: Exception) {
         Log.e(TAG, "startForeground refused (FGS time-limit likely exhausted)", e)
+        // Same budget exhaustion as onTimeout(), just observed on the start path: keep the
+        // service down and let the periodic worker carry the sync.
+        stoppedByTimeout = true
+        try {
+            EmailSyncWorker.schedule(this)
+        } catch (scheduleError: Exception) {
+            Log.e(TAG, "Failed to schedule periodic sync fallback", scheduleError)
+        }
         false
     }
 
@@ -153,7 +194,7 @@ class JmapEventSourceService : Service() {
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        if (isEnabled(this)) {
+        if (isEnabled(this) && !stoppedByTimeout) {
             val restartIntent = Intent(this, JmapEventSourceService::class.java)
             val flags = PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
             // getService would restart without foreground allowance and crash with
