@@ -1337,6 +1337,11 @@ class MainActivity : AppCompatActivity() {
         selectedFolder == R.id.nav_spam ||
             (isSearchActive && email.originFolderId == R.id.nav_spam)
 
+    /** True when the email already sits in Archive — used to disable a redundant swipe/action. */
+    internal fun isArchivedEmail(email: DisplayEmail): Boolean =
+        selectedFolder == R.id.nav_archive ||
+            (isSearchActive && email.originFolderId == R.id.nav_archive)
+
     /** Asks for confirmation, then permanently destroys emails (used in Trash). */
     internal fun confirmPermanentDelete(account: JMapClient.ConnectedAccount, ids: List<String>) {
         showThemedConfirmDialog(

@@ -406,6 +406,22 @@ internal fun MainActivity.attachMailSwipe() {
                     return 0.35f
                 }
 
+                /** Redundant swipe: e.g. Archive in a row that's already archived, Spam in a row that's already spam. */
+                private fun isRedundant(action: MainActivity.SwipeAction, item: DisplayEmail): Boolean =
+                    when (action) {
+                        MainActivity.SwipeAction.ARCHIVE -> isArchivedEmail(item)
+                        MainActivity.SwipeAction.MARK_SPAM -> isSpamEmail(item)
+                        else -> false
+                    }
+
+                override fun getSwipeDirs(rv: RecyclerView, vh: RecyclerView.ViewHolder): Int {
+                    val item = emails.getOrNull(vh.adapterPosition) ?: return super.getSwipeDirs(rv, vh)
+                    var dirs = ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT
+                    if (isRedundant(getRightSwipeAction(), item)) dirs = dirs and ItemTouchHelper.RIGHT.inv()
+                    if (isRedundant(getLeftSwipeAction(), item)) dirs = dirs and ItemTouchHelper.LEFT.inv()
+                    return dirs
+                }
+
                 override fun getSwipeEscapeVelocity(defaultValue: Float): Float {
                     return Float.MAX_VALUE  // disabilita swipe da velocità — richiede rilascio dito
                 }
@@ -607,7 +623,8 @@ internal fun MainActivity.attachMailSwipe() {
                                     jmapClient.setSeen(account, item.id, item.seen)
                                 }
                                 MainActivity.SwipeAction.MARK_SPAM -> {
-                                    val spamId = jmapClient.resolveMailboxIdByRole(account, "spam")
+                                    jmapClient.setJunkKeyword(account, item.id, true)
+                                    val spamId = jmapClient.resolveMailboxIdByRole(account, "junk")
                                     if (spamId != null) {
                                         jmapClient.setMailbox(account, item.id, spamId)
                                     }
