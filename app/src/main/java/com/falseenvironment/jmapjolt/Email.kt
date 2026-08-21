@@ -30,6 +30,8 @@ data class DisplayEmail(
     @JvmField var isFavorite: Boolean = false,
     val receivedAt: Long = 0L,
     val toEmail: String = "",
+    val ccEmail: String = "",
+    val bccEmail: String = "",
     val attachments: List<EmailAttachmentInfo> = emptyList(),
     val accountEmail: String = "",
     @JvmField var labels: List<String> = emptyList(),

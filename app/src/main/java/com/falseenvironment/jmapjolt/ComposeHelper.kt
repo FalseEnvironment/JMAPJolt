@@ -12,6 +12,7 @@ import android.text.Html
 import android.text.Layout
 import android.text.Spannable
 import android.text.TextWatcher
+import android.util.Log
 import android.text.style.AlignmentSpan
 import android.text.style.BulletSpan
 import android.text.style.RelativeSizeSpan
@@ -92,7 +93,7 @@ internal fun MainActivity.performSend() {
     val body = userHtml + (pendingQuoteHtml ?: "")
 
     if (fromEmail == null || recipientEmails.isEmpty()) {
-        android.widget.Toast.makeText(this, "Please provide 'From' and 'To'", android.widget.Toast.LENGTH_SHORT).show()
+        showThemedSnackbar("Please provide 'From' and 'To'")
         return
     }
 
@@ -107,7 +108,7 @@ internal fun MainActivity.performSend() {
     } ?: connectedAccount
 
     if (accountToUse == null) {
-        android.widget.Toast.makeText(this, "No active account", android.widget.Toast.LENGTH_SHORT).show()
+        showThemedSnackbar("No active account")
         return
     }
 
@@ -120,6 +121,9 @@ internal fun MainActivity.performSend() {
             val bytes = contentResolver.openInputStream(att.uri)?.use { it.readBytes() } ?: return@mapNotNull null
             JMapClient.Attachment(att.name, att.mimeType, att.size, bytes)
         } catch (e: Exception) { null }
+    } + carriedAttachments.map { att ->
+        // Already on the server (carried over from an edited draft): reuse the blob.
+        JMapClient.Attachment(att.name, att.mimeType, att.size, ByteArray(0), existingBlobId = att.blobId)
     }
 
     val oldDraftId = editingDraftId
@@ -141,21 +145,68 @@ internal fun MainActivity.performSend() {
     }
 }
 
-/** Opens the compose editor pre-filled with a draft's recipient, subject and body. */
+/**
+ * Opens the compose editor pre-filled with a draft's recipients, subject, body and
+ * attachments. The row passed in usually comes from a folder list fetch, which only
+ * carries subject/preview — never the full body, Cc/Bcc or attachment blobs — so this
+ * re-fetches the draft by its (real, server-assigned) id before populating the fields.
+ * A still-unsaved local draft (fake "local-draft-..." id) has nothing to fetch and
+ * already carries everything locally, so that case just uses [email] directly.
+ */
 internal fun MainActivity.openDraftForEdit(email: DisplayEmail) {
     showComposeView()
     editingDraftId = email.id
-    email.toEmail.split(",").map { it.trim() }.filter { it.isNotBlank() }.forEach { addRecipientChip(it) }
-    composeSubjectInput.setText(
-        if (email.subject == "(No Subject)") "" else email.subject
-    )
-    @Suppress("DEPRECATION")
-    val bodySpanned = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N)
-        Html.fromHtml(email.fullBody, Html.FROM_HTML_MODE_LEGACY)
-    else
-        Html.fromHtml(email.fullBody)
-    composeBodyInput.setText(bodySpanned)
-    composeBodyInput.requestFocus()
+
+    fun populate(draft: DisplayEmail) {
+        selectComposeAccount(draft.accountEmail.ifBlank { draft.fromEmail })
+        draft.toEmail.split(",").map { it.trim() }.filter { it.isNotBlank() }
+            .forEach { addRecipientChip(it, category = 0) }
+        draft.ccEmail.split(",").map { it.trim() }.filter { it.isNotBlank() }
+            .forEach { addRecipientChip(it, category = 1) }
+        draft.bccEmail.split(",").map { it.trim() }.filter { it.isNotBlank() }
+            .forEach { addRecipientChip(it, category = 2) }
+        composeSubjectInput.setText(
+            if (draft.subject == "(No Subject)") "" else draft.subject
+        )
+        @Suppress("DEPRECATION")
+        val bodySpanned = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N)
+            Html.fromHtml(draft.fullBody, Html.FROM_HTML_MODE_LEGACY)
+        else
+            Html.fromHtml(draft.fullBody)
+        composeBodyInput.setText(bodySpanned)
+        composeBodyInput.requestFocus()
+        carriedAttachments.clear()
+        carriedAttachments.addAll(draft.attachments)
+        refreshAttachmentChips()
+    }
+
+    if (email.id.startsWith("local-draft-")) {
+        populate(email)
+        return
+    }
+    val account = resolveAccountFor(email) ?: connectedAccount
+    if (account == null) {
+        populate(email)
+        return
+    }
+    lifecycleScope.launch {
+        val fresh = try {
+            jmapClient.fetchEmailsById(account, listOf(email.id)).firstOrNull()
+        } catch (e: Exception) {
+            Log.e(MainActivity.TAG, "openDraftForEdit fetch failed", e)
+            null
+        }
+        if (editingDraftId != email.id) return@launch // user navigated away while fetching
+        populate(
+            if (fresh != null) email.copy(
+                fullBody = fresh.fullBody,
+                toEmail = fresh.toEmail,
+                ccEmail = fresh.ccEmail,
+                bccEmail = fresh.bccEmail,
+                attachments = fresh.attachments
+            ) else email
+        )
+    }
 }
 
 /** Picks the From account for a reply/forward, defaulting to the account that owns the email. */
@@ -264,6 +315,7 @@ internal fun MainActivity.handleMailtoIntent(intent: android.content.Intent?) {
 
 internal fun MainActivity.showComposeView() {
     editingDraftId = null
+    carriedAttachments.clear()
     clearPendingQuote()
     activeFormats.clear()
     composeListMode = 0
@@ -366,6 +418,7 @@ internal fun MainActivity.hideCompose() {
     activeFormats.clear()
     updateFormatButtonStates()
     pendingAttachments.clear()
+    carriedAttachments.clear()
     refreshAttachmentChips()
     topBarSendButton.visibility = View.GONE
     // Restore the detail top-bar state if compose was opened on top of an open email
@@ -387,7 +440,7 @@ internal fun MainActivity.composeIsEmpty(): Boolean =
         composeToInput.text.isNullOrBlank() &&
         composeSubjectInput.text.isNullOrBlank() &&
         composeBodyInput.text.isNullOrBlank() &&
-        pendingAttachments.isEmpty()
+        pendingAttachments.isEmpty() && carriedAttachments.isEmpty()
 
 internal fun MainActivity.clearComposeFields() {
     listOf(composeToChipsGroup, composeCcChipsGroup, composeBccChipsGroup).forEach {
@@ -632,6 +685,9 @@ internal fun MainActivity.saveDraftFromCompose() {
             val bytes = contentResolver.openInputStream(att.uri)?.use { it.readBytes() } ?: return@mapNotNull null
             JMapClient.Attachment(att.name, att.mimeType, att.size, bytes)
         } catch (e: Exception) { null }
+    } + carriedAttachments.map { att ->
+        // Already on the server (carried over from an edited draft): reuse the blob.
+        JMapClient.Attachment(att.name, att.mimeType, att.size, ByteArray(0), existingBlobId = att.blobId)
     }
 
     val oldDraftId = editingDraftId

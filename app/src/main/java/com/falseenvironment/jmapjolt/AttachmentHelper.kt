@@ -105,9 +105,148 @@ internal fun MainActivity.showAttachMenu() {
 internal fun MainActivity.refreshAttachmentChips() {
     attachmentChipContainer.removeAllViews()
     val dp = resources.displayMetrics.density
-    val hasAttachments = pendingAttachments.isNotEmpty()
+    val hasAttachments = pendingAttachments.isNotEmpty() || carriedAttachments.isNotEmpty()
     attachmentChipScroll.visibility = if (hasAttachments) android.view.View.VISIBLE else android.view.View.GONE
     attachmentChipDivider.visibility = if (hasAttachments) android.view.View.VISIBLE else android.view.View.GONE
+
+    // Attachments carried over from a draft opened for editing: already on the server,
+    // so the thumbnail/name come from a blob download instead of a local Uri.
+    val carriedAccount = savedAccounts.find { it.email == selectedFromEmail }?.let {
+        JMapClient.ConnectedAccount(
+            email = it.email, password = it.password,
+            sessionUrl = it.sessionUrl, apiUrl = it.apiUrl, accountId = it.accountId
+        )
+    }
+    carriedAttachments.forEachIndexed { index, att ->
+        val card = FrameLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                (88 * dp).toInt(), (76 * dp).toInt()
+            ).also { it.setMargins(0, 0, (8 * dp).toInt(), 0) }
+        }
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 10 * dp
+                setColor(when (currentTheme) {
+                    "light" -> "#EEEEEE".toColorInt()
+                    "oled"  -> "#111111".toColorInt()
+                    else    -> "#2A2A2A".toColorInt()
+                })
+            }
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            val pad = (8 * dp).toInt()
+            setPadding(pad, pad, pad, pad)
+        }
+        body.addView(ImageView(this).apply {
+            setImageResource(attachmentIcon(att.mimeType))
+            imageTintList = android.content.res.ColorStateList.valueOf(currentAccentColor.toColorInt())
+            val sz = (26 * dp).toInt()
+            layoutParams = LinearLayout.LayoutParams(sz, sz).also { it.bottomMargin = (4 * dp).toInt() }
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        })
+        body.addView(TextView(this).apply {
+            text = if (att.name.length > 10) att.name.take(8) + "…" else att.name
+            textSize = 10f
+            maxLines = 1
+            gravity = Gravity.CENTER
+            setTextColor(if (currentTheme == "light") "#555555".toColorInt() else "#BDBDBD".toColorInt())
+        })
+        card.addView(body)
+
+        // Image/video: fetch a real thumbnail from the server blob (same cache the
+        // sent/received attachment viewer uses), same as buildEmailAttachmentRow.
+        // Added before the ✕/✎ badges below so they stay on top, not covered by it.
+        val isImage = att.mimeType.startsWith("image/")
+        val isVideo = att.mimeType.startsWith("video/")
+        if ((isImage || isVideo) && carriedAccount != null) {
+            val radius = 10 * dp
+            val thumb = ImageView(this).apply {
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                layoutParams = FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+                )
+                clipToOutline = true
+                outlineProvider = object : ViewOutlineProvider() {
+                    override fun getOutline(v: View, o: Outline) =
+                        o.setRoundRect(0, 0, v.width, v.height, radius)
+                }
+                visibility = android.view.View.GONE
+            }
+            card.addView(thumb)
+            if (isVideo) {
+                card.addView(TextView(this).apply {
+                    text = "▶"
+                    textSize = 16f
+                    setTextColor(Color.WHITE)
+                    gravity = Gravity.CENTER
+                    layoutParams = FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                        Gravity.CENTER
+                    )
+                })
+            }
+            val targetPx = (88 * dp).toInt()
+            lifecycleScope.launch {
+                val bmp = withContext(Dispatchers.IO) {
+                    val bytes = blobByteCache.get(att.blobId)
+                        ?: jmapClient.downloadBlob(carriedAccount, att.blobId, att.name, att.mimeType)
+                            ?.also { blobByteCache.put(att.blobId, it) }
+                        ?: return@withContext null
+                    decodeBytesThumbnail(bytes, targetPx)
+                }
+                if (bmp != null) {
+                    thumb.setImageBitmap(bmp)
+                    thumb.visibility = android.view.View.VISIBLE
+                    body.visibility = android.view.View.GONE
+                }
+            }
+        }
+
+        card.addView(TextView(this).apply {
+            text = "✕"
+            textSize = 10f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            val sz = (18 * dp).toInt()
+            layoutParams = FrameLayout.LayoutParams(sz, sz, Gravity.TOP or Gravity.END).also {
+                it.topMargin = (2 * dp).toInt()
+                it.marginEnd = (2 * dp).toInt()
+            }
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor("#E53935".toColorInt())
+            }
+            setOnClickListener {
+                if (index in carriedAttachments.indices) {
+                    carriedAttachments.removeAt(index)
+                    refreshAttachmentChips()
+                }
+            }
+        })
+        card.addView(TextView(this).apply {
+            text = "✎"
+            textSize = 10f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            val sz = (18 * dp).toInt()
+            layoutParams = FrameLayout.LayoutParams(sz, sz, Gravity.TOP or Gravity.START).also {
+                it.topMargin = (2 * dp).toInt()
+                it.marginStart = (2 * dp).toInt()
+            }
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(currentAccentColor.toColorInt())
+            }
+            setOnClickListener { renameCarriedAttachmentDialog(index) }
+        })
+        attachmentChipContainer.addView(card)
+    }
 
     pendingAttachments.forEachIndexed { index, att ->
         val iconRes = attachmentIcon(att.mimeType)
@@ -302,6 +441,73 @@ internal fun MainActivity.renameAttachmentDialog(index: Int) {
         val origExt = att.name.substringAfterLast('.', "")
         if (origExt.isNotBlank() && !newName.contains('.')) newName = "$newName.$origExt"
         pendingAttachments[index] = att.copy(name = newName)
+        refreshAttachmentChips()
+        dialog.dismiss()
+    })
+    root.addView(btnRow)
+    dialog.show()
+}
+
+/** Renames an attachment carried over from an edited draft — just relabels the blob, no re-upload. */
+internal fun MainActivity.renameCarriedAttachmentDialog(index: Int) {
+    if (index !in carriedAttachments.indices) return
+    val att = carriedAttachments[index]
+    val dp = resources.displayMetrics.density
+    val textColor = if (currentTheme == "light") "#212121".toColorInt() else Color.WHITE
+    val secondaryColor = if (currentTheme == "light") "#757575".toColorInt() else "#9E9E9E".toColorInt()
+    val accentInt = currentAccentColor.toColorInt()
+
+    val input = android.widget.EditText(this).apply {
+        setText(att.name)
+        setSelection(att.name.length)
+        setTextColor(textColor)
+        setHintTextColor(secondaryColor)
+        backgroundTintList = android.content.res.ColorStateList.valueOf(secondaryColor)
+        textSize = 15f
+        maxLines = 1
+    }
+    val root = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        val p = (22 * dp).toInt()
+        setPadding(p, p, p, (14 * dp).toInt())
+        background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = 20 * dp
+            setColor(getDialogBackgroundColor())
+        }
+        addView(TextView(this@renameCarriedAttachmentDialog).apply {
+            text = "Rename file"
+            textSize = 18f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(textColor)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).also { it.bottomMargin = (16 * dp).toInt() }
+        })
+        addView(input)
+    }
+    val dialog = androidx.appcompat.app.AlertDialog.Builder(this).setView(root).create()
+    val btnRow = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.END
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ).also { it.topMargin = (8 * dp).toInt() }
+    }
+    fun btn(label: String, color: Int, bold: Boolean, onClick: () -> Unit) = TextView(this).apply {
+        text = label; textSize = 14f; setTextColor(color)
+        if (bold) setTypeface(null, Typeface.BOLD)
+        setPadding((14 * dp).toInt(), (10 * dp).toInt(), (14 * dp).toInt(), (8 * dp).toInt())
+        isClickable = true; isFocusable = true
+        setOnClickListener { onClick() }
+    }
+    btnRow.addView(btn("Cancel", secondaryColor, false) { dialog.dismiss() })
+    btnRow.addView(btn("Rename", accentInt, true) {
+        var newName = input.text.toString().trim()
+        if (newName.isBlank()) { dialog.dismiss(); return@btn }
+        val origExt = att.name.substringAfterLast('.', "")
+        if (origExt.isNotBlank() && !newName.contains('.')) newName = "$newName.$origExt"
+        carriedAttachments[index] = att.copy(name = newName)
         refreshAttachmentChips()
         dialog.dismiss()
     })

@@ -47,6 +47,8 @@ class JMapClient(private val context: Context) {
         val fullBody: String = "",
         val receivedAt: Long = 0L,
         val toEmail: String = "",
+        val ccEmail: String = "",
+        val bccEmail: String = "",
         val attachments: List<EmailAttachmentInfo> = emptyList(),
         val keywords: Set<String> = emptySet(),
         val threadId: String = ""
@@ -181,7 +183,7 @@ class JMapClient(private val context: Context) {
             val getCall = rs.ltt.jmap.common.method.call.email.GetEmailMethodCall.builder()
                 .accountId(accountId)
                 .ids(ids.toTypedArray())
-                .properties(arrayOf("id", "threadId", "subject", "from", "to", "preview", "keywords", "receivedAt", "htmlBody", "textBody", "bodyValues", "attachments"))
+                .properties(arrayOf("id", "threadId", "subject", "from", "to", "cc", "bcc", "preview", "keywords", "receivedAt", "htmlBody", "textBody", "bodyValues", "attachments"))
                 .fetchHTMLBodyValues(true)
                 .fetchTextBodyValues(true)
                 .build()
@@ -207,7 +209,10 @@ class JMapClient(private val context: Context) {
                     fromEmail = fromEmail, preview = email.preview ?: "",
                     seen = isSeen, isStarred = isStarred, fullBody = body,
                     receivedAt = email.receivedAt?.toEpochMilli() ?: 0L,
-                    toEmail = email.to?.firstOrNull()?.email ?: "", attachments = atts,
+                    toEmail = email.to.orEmpty().joinToString(", ") { it.email ?: "" },
+                    ccEmail = email.cc.orEmpty().joinToString(", ") { it.email ?: "" },
+                    bccEmail = email.bcc.orEmpty().joinToString(", ") { it.email ?: "" },
+                    attachments = atts,
                     keywords = customKeywords(email.keywords),
                     threadId = email.threadId ?: "")
             }
@@ -390,7 +395,10 @@ class JMapClient(private val context: Context) {
         val name: String,
         val mimeType: String,
         val size: Long,
-        val data: ByteArray
+        val data: ByteArray,
+        // Set when this attachment already lives on the server (e.g. carried over from
+        // an existing draft): reuse the blob instead of re-uploading [data].
+        val existingBlobId: String? = null
     )
 
     suspend fun fetchMailboxes(connectedAccount: ConnectedAccount): List<MailboxInfo> = withContext(Dispatchers.IO) {
@@ -928,9 +936,12 @@ class JMapClient(private val context: Context) {
 
                 // 3. Upload attachment blobs
                 val uploadUrlTemplate = session.getUploadUrl(accountId)?.toString() ?: ""
-                val attachmentParts = if (attachments.isNotEmpty() && uploadUrlTemplate.isNotBlank()) {
+                val attachmentParts = if (attachments.isNotEmpty()) {
                     attachments.mapNotNull { att ->
-                        val blobId = uploadBlob(connectedAccount, att, uploadUrlTemplate) ?: return@mapNotNull null
+                        val blobId = att.existingBlobId ?: run {
+                            if (uploadUrlTemplate.isBlank()) return@run null
+                            uploadBlob(connectedAccount, att, uploadUrlTemplate)
+                        } ?: return@mapNotNull null
                         EmailBodyPart.builder()
                             .blobId(blobId)
                             .type(att.mimeType)
@@ -1039,9 +1050,12 @@ class JMapClient(private val context: Context) {
                 val mailboxIds = mapOf(draftsMailboxId to true)
 
                 val uploadUrlTemplate = session.getUploadUrl(accountId)?.toString() ?: ""
-                val attachmentParts = if (attachments.isNotEmpty() && uploadUrlTemplate.isNotBlank()) {
+                val attachmentParts = if (attachments.isNotEmpty()) {
                     attachments.mapNotNull { att ->
-                        val blobId = uploadBlob(connectedAccount, att, uploadUrlTemplate) ?: return@mapNotNull null
+                        val blobId = att.existingBlobId ?: run {
+                            if (uploadUrlTemplate.isBlank()) return@run null
+                            uploadBlob(connectedAccount, att, uploadUrlTemplate)
+                        } ?: return@mapNotNull null
                         EmailBodyPart.builder()
                             .blobId(blobId)
                             .type(att.mimeType)

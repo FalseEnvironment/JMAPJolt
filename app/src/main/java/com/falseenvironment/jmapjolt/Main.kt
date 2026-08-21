@@ -283,6 +283,10 @@ class MainActivity : AppCompatActivity() {
 
     data class AttachmentData(val uri: Uri, val name: String, val mimeType: String, val size: Long)
     internal val pendingAttachments = mutableListOf<AttachmentData>()
+    /** Attachments carried over from a draft opened for editing — already on the server,
+     * so save/send reuses their blobId instead of re-uploading. Not shown as removable
+     * chips (those need a local Uri); cleared whenever the compose screen is reset. */
+    internal val carriedAttachments = mutableListOf<EmailAttachmentInfo>()
 
     internal val pickMediaLauncher = registerForActivityResult(
         ActivityResultContracts.PickVisualMedia()
@@ -1265,7 +1269,10 @@ class MainActivity : AppCompatActivity() {
         subject: String,
         bodyHtml: String,
         accountEmail: String,
-        removeId: String?
+        removeId: String?,
+        cc: String = "",
+        bcc: String = "",
+        attachments: List<EmailAttachmentInfo> = emptyList()
     ): String {
         @Suppress("DEPRECATION")
         val plain = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N)
@@ -1284,7 +1291,10 @@ class MainActivity : AppCompatActivity() {
             seen = true,
             isFavorite = false,
             receivedAt = System.currentTimeMillis(),
-            toEmail = to
+            toEmail = to,
+            ccEmail = cc,
+            bccEmail = bcc,
+            attachments = attachments
         )
         val current = (folderCache[R.id.nav_drafts] ?: emptyList()).toMutableList()
         if (removeId != null) current.removeAll { it.id == removeId }
@@ -1886,6 +1896,7 @@ class MainActivity : AppCompatActivity() {
                                                 e.id, e.subject, e.from, e.fromEmail,
                                                 e.preview, e.fullBody, e.seen, e.isStarred,
                                                 e.receivedAt, e.toEmail,
+                                                ccEmail = e.ccEmail, bccEmail = e.bccEmail,
                                                 attachments = e.attachments,
                                                 accountEmail = acc.email,
                                                 labels = e.keywords.toList(),
@@ -1902,6 +1913,7 @@ class MainActivity : AppCompatActivity() {
                                                 DisplayEmail(
                                                     it.id, it.subject, it.from, it.fromEmail, it.preview,
                                                     it.fullBody, it.seen, it.isStarred, it.receivedAt, it.toEmail,
+                                                    ccEmail = it.ccEmail, bccEmail = it.bccEmail,
                                                     attachments = it.attachments, accountEmail = acc.email,
                                                     labels = it.keywords.toList(), threadId = it.threadId
                                                 )
@@ -1967,6 +1979,8 @@ class MainActivity : AppCompatActivity() {
                                                 it.isStarred,
                                                 it.receivedAt,
                                                 it.toEmail,
+                                                ccEmail = it.ccEmail,
+                                                bccEmail = it.bccEmail,
                                                 attachments = it.attachments,
                                                 accountEmail = account.email,
                                                 labels = it.keywords.toList(),
@@ -1983,6 +1997,7 @@ class MainActivity : AppCompatActivity() {
                                         DisplayEmail(
                                             it.id, it.subject, it.from, it.fromEmail, it.preview,
                                             it.fullBody, it.seen, it.isStarred, it.receivedAt, it.toEmail,
+                                            ccEmail = it.ccEmail, bccEmail = it.bccEmail,
                                             attachments = it.attachments, accountEmail = account.email,
                                             labels = it.keywords.toList(), threadId = it.threadId
                                         )
@@ -3729,7 +3744,7 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     val newEmailsList = fresh.map {
-                        DisplayEmail(it.id, it.subject, it.from, it.fromEmail, it.preview, it.fullBody, it.seen, it.isStarred, it.receivedAt, attachments = it.attachments, labels = it.keywords.toList())
+                        DisplayEmail(it.id, it.subject, it.from, it.fromEmail, it.preview, it.fullBody, it.seen, it.isStarred, it.receivedAt, toEmail = it.toEmail, ccEmail = it.ccEmail, bccEmail = it.bccEmail, attachments = it.attachments, labels = it.keywords.toList())
                     }
                     folderCache[navId] = newEmailsList
 
