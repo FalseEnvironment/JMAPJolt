@@ -751,6 +751,51 @@ class JMapClient(private val context: Context) {
         }
     }
 
+    /**
+     * Sets or clears the IMAP-standard $Junk/$NotJunk keywords JMAP servers (Stalwart,
+     * Fastmail, ...) use to train their spam filter. This is the actual "report spam" /
+     * "report not spam" protocol signal — moving the email to/from the Junk mailbox alone
+     * only relocates it, it doesn't teach the filter anything.
+     */
+    suspend fun setJunkKeyword(
+        connectedAccount: ConnectedAccount,
+        emailId: String,
+        isJunk: Boolean
+    ): Boolean = withContext(Dispatchers.IO) {
+        val client = newClient(connectedAccount)
+        client.use { jmapClient ->
+            val session = jmapClient.getSession().get(12, TimeUnit.SECONDS)
+            val accountId = session.getPrimaryAccount(MailAccountCapability::class.java)
+                ?: return@withContext false
+
+            val getCall = rs.ltt.jmap.common.method.call.email.GetEmailMethodCall.builder()
+                .accountId(accountId)
+                .ids(arrayOf(emailId))
+                .properties(arrayOf("id", "keywords"))
+                .build()
+            val getResponse = jmapClient.call(getCall).get()
+                .getMain(rs.ltt.jmap.common.method.response.email.GetEmailMethodResponse::class.java)
+            val current = getResponse.list.firstOrNull()?.keywords ?: emptyMap()
+            val newKeywords = current
+                .filterKeys { it != "\$Junk" && it != "\$NotJunk" }
+                .plus(if (isJunk) mapOf("\$Junk" to true) else mapOf("\$NotJunk" to true))
+
+            val update = mapOf(emailId to mapOf<String, Any>("keywords" to newKeywords))
+            val setCall = rs.ltt.jmap.common.method.call.email.SetEmailMethodCall.builder()
+                .accountId(accountId)
+                .update(update)
+                .build()
+
+            try {
+                jmapClient.call(setCall).get()
+                true
+            } catch (e: Exception) {
+                Log.e(TAG, "setJunkKeyword failed", e)
+                false
+            }
+        }
+    }
+
     /** Renames a mailbox (folder) on the server. */
     suspend fun renameMailbox(
         connectedAccount: ConnectedAccount,
@@ -977,20 +1022,20 @@ class JMapClient(private val context: Context) {
         attachments: List<Attachment> = emptyList(),
         ccEmailAddress: String = "",
         bccEmailAddress: String = ""
-    ): Boolean = withContext(Dispatchers.IO) {
+    ): String? = withContext(Dispatchers.IO) {
         val client = newClient(connectedAccount)
         client.use { jmapClient ->
             try {
                 val session = jmapClient.getSession().get(12, TimeUnit.SECONDS)
                 val accountId = session.getPrimaryAccount(MailAccountCapability::class.java)
-                    ?: return@withContext false
+                    ?: return@withContext null
 
                 val identityCall = GetIdentityMethodCall.builder().accountId(accountId).build()
                 val identityResponse = jmapClient.call(identityCall).get().getMain(GetIdentityMethodResponse::class.java)
-                val identity = identityResponse.list.firstOrNull() ?: return@withContext false
+                val identity = identityResponse.list.firstOrNull() ?: return@withContext null
 
                 val draftsMailboxId = resolveMailboxIdByRole(connectedAccount, "drafts")
-                    ?: return@withContext false
+                    ?: return@withContext null
                 val mailboxIds = mapOf(draftsMailboxId to true)
 
                 val uploadUrlTemplate = session.getUploadUrl(accountId)?.toString() ?: ""
@@ -1052,12 +1097,12 @@ class JMapClient(private val context: Context) {
                 if (createdEmailId == null) {
                     val setError = emailResponse.notCreated?.get(creationId)
                     Log.e(TAG, "Failed to save draft: type=${setError?.type} desc=${setError?.description}")
-                    return@withContext false
+                    return@withContext null
                 }
-                true
+                createdEmailId
             } catch (e: Exception) {
                 Log.e(TAG, "saveDraft failed", e)
-                false
+                null
             }
         }
     }

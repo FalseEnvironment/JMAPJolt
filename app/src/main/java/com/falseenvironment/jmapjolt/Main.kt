@@ -1266,15 +1266,16 @@ class MainActivity : AppCompatActivity() {
         bodyHtml: String,
         accountEmail: String,
         removeId: String?
-    ) {
+    ): String {
         @Suppress("DEPRECATION")
         val plain = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N)
             Html.fromHtml(bodyHtml, Html.FROM_HTML_MODE_LEGACY)
         else
             Html.fromHtml(bodyHtml)).toString().trim()
 
+        val localId = "local-draft-" + System.currentTimeMillis()
         val draft = DisplayEmail(
-            id = "local-draft-" + System.currentTimeMillis(),
+            id = localId,
             subject = if (subject.isBlank()) "(No Subject)" else subject,
             from = accountEmail,
             fromEmail = accountEmail,
@@ -1290,6 +1291,26 @@ class MainActivity : AppCompatActivity() {
         current.add(0, draft)
         folderCache[R.id.nav_drafts] = current
         if (selectedFolder == R.id.nav_drafts) updateEmailsList(current)
+        return localId
+    }
+
+    /**
+     * Swaps a just-saved draft's local placeholder id for its real server id once
+     * [JMapClient.saveDraft] returns it, so opening the draft right after saving
+     * fetches the body/attachments by an id the server actually recognises instead
+     * of silently failing on the throwaway local-draft-<timestamp> id.
+     */
+    internal fun replaceOptimisticDraftId(localId: String, realId: String) {
+        val current = folderCache[R.id.nav_drafts] ?: return
+        folderCache[R.id.nav_drafts] = current.map { if (it.id == localId) it.copy(id = realId) else it }
+        if (selectedFolder == R.id.nav_drafts) {
+            val idx = emails.indexOfFirst { it.id == localId }
+            if (idx >= 0) {
+                emails[idx] = emails[idx].copy(id = realId)
+                emailAdapter.notifyItemChanged(idx)
+            }
+        }
+        saveEmailCache()
     }
 
     /**
@@ -1310,6 +1331,11 @@ class MainActivity : AppCompatActivity() {
             (isSearchActive &&
                 (email.originFolderId == R.id.nav_archive ||
                     email.originFolderId == R.id.nav_trash))
+
+    /** True when the email already sits in Spam — the overflow entry then reads "Not spam". */
+    internal fun isSpamEmail(email: DisplayEmail): Boolean =
+        selectedFolder == R.id.nav_spam ||
+            (isSearchActive && email.originFolderId == R.id.nav_spam)
 
     /** Asks for confirmation, then permanently destroys emails (used in Trash). */
     internal fun confirmPermanentDelete(account: JMapClient.ConnectedAccount, ids: List<String>) {
@@ -3575,6 +3601,42 @@ class MainActivity : AppCompatActivity() {
             mode?.finish()
             clearSelection()
             showLabelPicker(ids)
+        })
+
+        container.addView(View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1)
+            setBackgroundColor(0x22FFFFFF)
+        })
+
+        val inSpam = selectedFolder == R.id.nav_spam
+        container.addView(row(if (inSpam) "Not spam" else "Spam", R.drawable.ic_lucide_ban) {
+            val toSpam = !inSpam
+            val movedEmails = emails.filter { it.id in ids }
+            val accountsById = movedEmails.associate { it.id to (resolveAccountFor(it) ?: account) }
+            mode?.finish()
+            clearSelection()
+            removeEmailsAnimated(ids)
+            movedEmails.forEach {
+                if (toSpam) updateFolderCachesForMove(it, R.id.nav_spam) else updateFolderCachesForInbox(it)
+            }
+            saveEmailCache()
+            showThemedSnackbar(if (toSpam) "Moved to Spam" else "Moved to Inbox")
+            lifecycleScope.launch {
+                try {
+                    ids.forEach { id ->
+                        val acc = accountsById[id] ?: account
+                        jmapClient.setJunkKeyword(acc, id, toSpam)
+                        val mailboxId = jmapClient.resolveMailboxIdByRole(acc, if (toSpam) "junk" else "inbox")
+                        if (mailboxId != null) {
+                            jmapClient.setMailbox(acc, id, mailboxId)
+                            if (!toSpam) BackgroundEmailSyncReceiver.addToBaseline(this@MainActivity, acc.email, listOf(id))
+                        }
+                    }
+                } catch (e: Exception) {
+                    PendingMutations.forget(ids)
+                    Log.e(TAG, "Bulk spam toggle failed", e)
+                }
+            }
         })
 
         container.addView(View(this).apply {

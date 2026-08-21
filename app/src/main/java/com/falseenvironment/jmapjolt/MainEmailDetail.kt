@@ -517,20 +517,23 @@ internal fun MainActivity.onDetailSwipeEnd(dx: Float, velocityX: Float) {
 internal fun MainActivity.showDetailOverflowMenu() {
     val email = currentDetailEmail ?: return
     val inArchive = selectedFolder == R.id.nav_archive
+    val inSpam = isSpamEmail(email)
     showSettingsDropdown(
         detailMoreButton,
         listOf(
             if (inArchive) "Unarchive" else getString(R.string.swipe_action_archive),
             "Forward",
             "Move to",
-            "Label"
+            "Label",
+            if (inSpam) "Not spam" else "Spam"
         ),
         -1,
         icons = listOf(
             if (inArchive) R.drawable.ic_lucide_archive_restore else R.drawable.ic_lucide_archive,
             R.drawable.ic_lucide_forward,
             R.drawable.ic_lucide_folder_input,
-            R.drawable.ic_lucide_tag
+            R.drawable.ic_lucide_tag,
+            R.drawable.ic_lucide_ban
         )
     ) { idx ->
         when (idx) {
@@ -538,6 +541,7 @@ internal fun MainActivity.showDetailOverflowMenu() {
             1 -> startForward(email)
             2 -> moveDetailEmail(email)
             3 -> showLabelPicker(listOf(email.id))
+            4 -> if (inSpam) unmarkSpamDetailEmail(email) else markSpamDetailEmail(email)
         }
     }
 }
@@ -924,6 +928,48 @@ internal fun MainActivity.archiveDetailEmail(email: DisplayEmail) {
         } catch (e: Exception) {
             PendingMutations.forget(email.id)
             Log.e(MainActivity.TAG,"detail archive failed", e)
+        }
+    }
+}
+
+internal fun MainActivity.markSpamDetailEmail(email: DisplayEmail) {
+    val acc = resolveAccountFor(email) ?: connectedAccount ?: return
+    updateFolderCachesForMove(email, R.id.nav_spam)
+    closeEmailDetail()
+    removeEmailsAnimated(listOf(email.id))
+    saveEmailCache()
+    showThemedSnackbar("Moved to Spam")
+    lifecycleScope.launch {
+        try {
+            jmapClient.setJunkKeyword(acc, email.id, true)
+            val junkId = jmapClient.resolveMailboxIdByRole(acc, "junk")
+            if (junkId != null) jmapClient.setMailbox(acc, email.id, junkId)
+        } catch (e: Exception) {
+            PendingMutations.forget(email.id)
+            Log.e(MainActivity.TAG, "detail mark spam failed", e)
+        }
+    }
+}
+
+internal fun MainActivity.unmarkSpamDetailEmail(email: DisplayEmail) {
+    val activity = this
+    val acc = resolveAccountFor(email) ?: connectedAccount ?: return
+    updateFolderCachesForInbox(email)
+    closeEmailDetail()
+    removeEmailsAnimated(listOf(email.id))
+    saveEmailCache()
+    showThemedSnackbar("Moved to Inbox")
+    lifecycleScope.launch {
+        try {
+            jmapClient.setJunkKeyword(acc, email.id, false)
+            val inboxId = jmapClient.resolveMailboxIdByRole(acc, "inbox")
+            if (inboxId != null) {
+                jmapClient.setMailbox(acc, email.id, inboxId)
+                BackgroundEmailSyncReceiver.addToBaseline(activity, acc.email, listOf(email.id))
+            }
+        } catch (e: Exception) {
+            PendingMutations.forget(email.id)
+            Log.e(MainActivity.TAG, "detail unmark spam failed", e)
         }
     }
 }

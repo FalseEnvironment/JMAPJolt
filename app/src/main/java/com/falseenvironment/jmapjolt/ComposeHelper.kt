@@ -637,18 +637,19 @@ internal fun MainActivity.saveDraftFromCompose() {
     val oldDraftId = editingDraftId
 
     // Show the draft in the Drafts list immediately; the server save happens in the background.
-    insertOptimisticDraft(to, subject, body, accountToUse.email, oldDraftId)
+    val localDraftId = insertOptimisticDraft(to, subject, body, accountToUse.email, oldDraftId)
 
     // Leave the screen immediately; the save happens in the background.
     clearComposeFields()
     hideCompose()
 
     lifecycleScope.launch(Dispatchers.Main) {
-        val ok = jmapClient.saveDraft(accountToUse, to, subject, body, "text/html", jmapAttachments, cc, bcc)
-        if (ok && oldDraftId != null) {
-            jmapClient.destroyEmail(accountToUse, oldDraftId)
+        val realId = jmapClient.saveDraft(accountToUse, to, subject, body, "text/html", jmapAttachments, cc, bcc)
+        if (realId != null) {
+            replaceOptimisticDraftId(localDraftId, realId)
+            if (oldDraftId != null) jmapClient.destroyEmail(accountToUse, oldDraftId)
         }
-        showThemedSnackbar(if (ok) "Draft saved" else "Failed to save draft")
+        showThemedSnackbar(if (realId != null) "Draft saved" else "Failed to save draft")
     }
 }
 

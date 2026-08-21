@@ -196,11 +196,13 @@
     <string name="feature_jmap_title">Modern JMAP email</string>
     <string name="feature_jmap_desc">Built on the JMAP protocol for reliable, modern email.</string>
     <string name="feature_push_title">Private push notifications</string>
-    <string name="feature_push_desc">Mail alerts via UnifiedPush. No Google services required.</string>
+    <string name="feature_push_desc">Mail alert via JMAPSourceEvent, or UnifiedPush.</string>
     <string name="feature_security_title">Encrypted credentials</string>
     <string name="feature_security_desc">Your email and password are stored encrypted in the Android Keystore.</string>
     <string name="feature_accounts_title">Multiple accounts</string>
     <string name="feature_accounts_desc">Switch between accounts and keep favourites in one place.</string>
+    <string name="feature_davx5_title">Contacts &amp; calendar</string>
+    <string name="feature_davx5_desc">Sync contacts and calendars via DAVx5 (CardDAV/CalDAV).</string>
     <string name="feature_custom_title">Make it yours</string>
     <string name="feature_custom_desc">Custom themes, accent colors and swipe actions.</string>
     <string name="onboarding_next">Next</string>

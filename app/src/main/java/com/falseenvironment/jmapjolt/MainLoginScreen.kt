@@ -24,7 +24,12 @@ internal fun MainActivity.showLoginScreen() {
     loginBackBtn.setOnClickListener { showOnboarding() }
     mailboxContainer.visibility = View.GONE
     settingsContainer.visibility = View.GONE
-    status.visibility = View.VISIBLE
+    // The status bar is the debug timestamp/sync-state readout, not general login
+    // feedback — it must follow the "Debug mode" setting like everywhere else,
+    // not force itself on and leak into a fresh install with the setting off.
+    val debugModeEnabled = getSharedPreferences(MainActivity.PREFS_NAME, android.content.Context.MODE_PRIVATE)
+        .getBoolean("debug_mode", false)
+    status.visibility = if (debugModeEnabled) View.VISIBLE else View.GONE
     emailDetailContainer.visibility = View.GONE
     fabCompose.visibility = View.GONE
     customTopBar.visibility = View.GONE

@@ -269,6 +269,7 @@ internal fun MainActivity.buildOnboardingFeaturesPage(dp: Float, bgColor: Int, t
         FRow(R.drawable.ic_notifications_bell, R.string.feature_push_title, R.string.feature_push_desc),
         FRow(R.drawable.ic_lucide_lock, R.string.feature_security_title, R.string.feature_security_desc),
         FRow(R.drawable.ic_lucide_star, R.string.feature_accounts_title, R.string.feature_accounts_desc),
+        FRow(R.drawable.ic_lucide_calendar, R.string.feature_davx5_title, R.string.feature_davx5_desc),
         FRow(R.drawable.ic_lucide_settings, R.string.feature_custom_title, R.string.feature_custom_desc)
     ).forEach { f ->
         val row = LinearLayout(this).apply {
