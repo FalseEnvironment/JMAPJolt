@@ -405,11 +405,32 @@ internal fun MainActivity.showEditFolderDialog(
 
     showCardDialog("Edit folder", root, "Save") {
         val name = nameInput.text.toString().trim()
-        meta.displayName = if (name.isEmpty() || name == mbox.name) null else name
+        if (name.isEmpty()) {
+            nameInput.error = "Name required"
+            return@showCardDialog false
+        }
         meta.colorHex = hsvHex(pendingHsv)
-        saveFolderMeta()
-        rebuildDrawerMenuPublic()
-        onSaved()
+        val account = connectedAccount
+        if (name == mbox.name || account == null) {
+            saveFolderMeta()
+            rebuildDrawerMenuPublic()
+            onSaved()
+            return@showCardDialog true
+        }
+        lifecycleScope.launch {
+            val ok = jmapClient.renameMailbox(account, mbox.id, name)
+            if (ok) {
+                mailboxCache = mailboxCache?.map {
+                    if (it.id == mbox.id) it.copy(name = name) else it
+                }
+                meta.displayName = null
+                saveFolderMeta()
+                rebuildDrawerMenuPublic()
+            } else {
+                showThemedSnackbar("Could not rename folder")
+            }
+            onSaved()
+        }
         true
     }
 }

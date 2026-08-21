@@ -751,6 +751,40 @@ class JMapClient(private val context: Context) {
         }
     }
 
+    /** Renames a mailbox (folder) on the server. */
+    suspend fun renameMailbox(
+        connectedAccount: ConnectedAccount,
+        mailboxId: String,
+        name: String
+    ): Boolean = withContext(Dispatchers.IO) {
+        val client = newClient(connectedAccount)
+        client.use { jmapClient ->
+            val session = jmapClient.getSession().get(12, TimeUnit.SECONDS)
+            val accountId = session.getPrimaryAccount(MailAccountCapability::class.java)
+                ?: return@withContext false
+
+            val setCall = rs.ltt.jmap.common.method.call.mailbox.SetMailboxMethodCall.builder()
+                .accountId(accountId)
+                .update(mapOf(mailboxId to mapOf<String, Any>("name" to name)))
+                .build()
+
+            try {
+                val response = jmapClient.call(setCall).get()
+                    .getMain(rs.ltt.jmap.common.method.response.mailbox.SetMailboxMethodResponse::class.java)
+                val notUpdated = response.notUpdated?.get(mailboxId)
+                if (notUpdated != null) {
+                    Log.e(TAG, "renameMailbox '$mailboxId' not updated: type=${notUpdated.type} desc=${notUpdated.description}")
+                    false
+                } else {
+                    true
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "renameMailbox '$mailboxId' failed", e)
+                false
+            }
+        }
+    }
+
     suspend fun resolveMailboxIdByRole(
         connectedAccount: ConnectedAccount,
         role: String
