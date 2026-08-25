@@ -1028,6 +1028,7 @@ internal fun MainActivity.moveDetailEmail(email: DisplayEmail) {
 }
 
 internal fun MainActivity.closeEmailDetail() {
+    markSeenJob?.cancel()
     // Hard-clear WebView immediately so next open starts blank
     detailWebView.stopLoading()
     detailWebView.loadDataWithBaseURL("https://jmapjolt.invalid/email/","", "text/html", "UTF-8", null)

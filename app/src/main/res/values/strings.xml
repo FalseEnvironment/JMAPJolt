@@ -150,6 +150,12 @@
     <string name="settings_theme_oled">Dark OLED</string>
     <string name="settings_theme_violet">Iris</string>
     <string name="settings_general">Display</string>
+    <string name="settings_mark_read_delay">Mark as read after</string>
+    <string name="mark_read_delay_instant">Instant</string>
+    <string name="mark_read_delay_custom">Custom…</string>
+    <string name="mark_read_delay_custom_seconds">%1$ds</string>
+    <string name="mark_read_delay_dialog_title">Custom delay (1–60s)</string>
+    <string name="mark_read_delay_dialog_hint">Seconds</string>
     <string name="settings_labels">Labels</string>
     <string name="settings_edit_labels">Manage Labels</string>
     <string name="settings_edit_labels_button">Edit</string>

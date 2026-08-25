@@ -221,6 +221,10 @@ class MainActivity : AppCompatActivity() {
     internal lateinit var swipeLeftDropdown: LinearLayout
     internal lateinit var swipeRightDropdownText: TextView
     internal lateinit var swipeLeftDropdownText: TextView
+    /** Seconds an email must stay open before it's marked seen; 0 = instant (default). */
+    internal var markReadDelaySeconds: Int = 0
+    internal lateinit var markReadDelayDropdown: LinearLayout
+    internal lateinit var markReadDelayDropdownText: TextView
     internal lateinit var settingsCalProviderDropdown: LinearLayout
     internal lateinit var settingsCalProviderText: TextView
     internal lateinit var settingsCalTimeFormatDropdown: LinearLayout
@@ -601,6 +605,8 @@ class MainActivity : AppCompatActivity() {
         swipeLeftDropdown = findViewById(R.id.swipeLeftDropdown)
         swipeRightDropdownText = findViewById(R.id.swipeRightDropdownText)
         swipeLeftDropdownText = findViewById(R.id.swipeLeftDropdownText)
+        markReadDelayDropdown = findViewById(R.id.markReadDelayDropdown)
+        markReadDelayDropdownText = findViewById(R.id.markReadDelayDropdownText)
         settingsCalProviderDropdown = findViewById(R.id.settingsCalProviderDropdown)
         settingsCalProviderText = findViewById(R.id.settingsCalProviderText)
         settingsCalTimeFormatDropdown = findViewById(R.id.settingsCalTimeFormatDropdown)
@@ -688,6 +694,7 @@ class MainActivity : AppCompatActivity() {
         setupAdapters()
         setupSwipeSpinners()
         setupThemeSpinner()
+        setupMarkReadDelaySpinner()
         loadThemePreference()
         // Calendar views read the zone override from a static cache (no Context there).
         CalendarPrefs.warmTimeZone(this)
@@ -859,6 +866,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     internal var isShowingEmailDetail = false
+
+    /** Pending "mark as read" coroutine honoring [markReadDelaySeconds]; cancelled on navigation away. */
+    internal var markSeenJob: Job? = null
 
     /** Calendar UI hosted in the content area so the app drawer stays available over it. */
     internal var calendarPanelView: CalendarPanel? = null
@@ -1152,17 +1162,22 @@ class MainActivity : AppCompatActivity() {
         searchChipsScroll.visibility = View.GONE
 
 
+        markSeenJob?.cancel()
         if (!email.seen) {
             val account = connectedAccount
             if (account != null) {
-                // 1. Optimistic local UI update
-                email.seen = true
-                PendingMutations.markSeen(email.id, true)
-                emailAdapter.notifyItemsChangedByIds(listOf(email.id))
-                saveEmailCache()
+                markSeenJob = lifecycleScope.launch {
+                    if (markReadDelaySeconds > 0) delay(markReadDelaySeconds * 1000L)
+                    // The user may have swiped away or closed the detail while waiting.
+                    if (currentDetailEmail?.id != email.id) return@launch
 
-                // 2. Asynchronous JMAP server update
-                lifecycleScope.launch {
+                    // 1. Optimistic local UI update
+                    email.seen = true
+                    PendingMutations.markSeen(email.id, true)
+                    emailAdapter.notifyItemsChangedByIds(listOf(email.id))
+                    saveEmailCache()
+
+                    // 2. Asynchronous JMAP server update
                     try {
                         jmapClient.setSeen(account, email.id, true)
                     } catch (e: Exception) {
@@ -3191,6 +3206,8 @@ class MainActivity : AppCompatActivity() {
         private const val KEY_LAST_UP_ENDPOINT = "last_up_endpoint"
         internal const val KEY_SWIPE_RIGHT_ACTION = "swipe_right_action"
         internal const val KEY_SWIPE_LEFT_ACTION = "swipe_left_action"
+        internal const val KEY_MARK_READ_DELAY_SECONDS = "mark_read_delay_seconds"
+        internal const val MARK_READ_DELAY_MAX_SECONDS = 60
         private const val KEY_ACCOUNTS_JSON = "accounts_json"
         private const val KEY_LAST_SYNC_APP_VERSION = "last_sync_app_version"
         internal const val KEY_ACCENT_COLOR = "accent_color"

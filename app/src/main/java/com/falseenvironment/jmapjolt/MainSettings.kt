@@ -613,6 +613,9 @@ internal fun MainActivity.loadGeneralPreferences() {
     status.visibility = if (prefs.getBoolean("debug_mode", false)) android.view.View.VISIBLE else android.view.View.GONE
     loadImagesSwitch.isChecked = prefs.getBoolean("load_images", false)
     loadFaviconsSwitch.isChecked = prefs.getBoolean("load_favicons", false)
+    markReadDelaySeconds = prefs.getInt(MainActivity.KEY_MARK_READ_DELAY_SECONDS, 0)
+        .coerceIn(0, MainActivity.MARK_READ_DELAY_MAX_SECONDS)
+    updateSettingsDropdownDisplays()
 }
 
 internal fun MainActivity.saveGeneralPreferences() {
@@ -620,6 +623,7 @@ internal fun MainActivity.saveGeneralPreferences() {
     prefs.edit()
         .putBoolean("load_images", loadImagesSwitch.isChecked)
         .putBoolean("load_favicons", loadFaviconsSwitch.isChecked)
+        .putInt(MainActivity.KEY_MARK_READ_DELAY_SECONDS, markReadDelaySeconds)
         .apply()
 }
 
@@ -703,6 +707,100 @@ internal fun MainActivity.setupSwipeSpinners() {
     }
 }
 
+/** Preset choices for the "mark as read after" delay; the last slot is always "Custom…". */
+private val MARK_READ_DELAY_PRESETS = listOf(0, 1, 3, 5, 10, 15, 30, 60)
+
+internal fun MainActivity.markReadDelayLabel(seconds: Int): String =
+    if (seconds == 0) getString(R.string.mark_read_delay_instant)
+    else getString(R.string.mark_read_delay_custom_seconds, seconds)
+
+internal fun MainActivity.setupMarkReadDelaySpinner() {
+    markReadDelayDropdown.setOnClickListener {
+        val options = MARK_READ_DELAY_PRESETS.map { markReadDelayLabel(it) } +
+            getString(R.string.mark_read_delay_custom)
+        val presetIdx = MARK_READ_DELAY_PRESETS.indexOf(markReadDelaySeconds)
+        val currentIdx = if (presetIdx >= 0) presetIdx else options.lastIndex
+        showSettingsDropdown(markReadDelayDropdown, options, currentIdx) { idx ->
+            if (idx == options.lastIndex) {
+                showMarkReadDelayCustomDialog()
+            } else {
+                markReadDelaySeconds = MARK_READ_DELAY_PRESETS[idx]
+                updateSettingsDropdownDisplays()
+                saveGeneralPreferences()
+            }
+        }
+    }
+}
+
+/** Free-form entry for a delay outside the presets, clamped to 1–60s. */
+internal fun MainActivity.showMarkReadDelayCustomDialog() {
+    val dp = resources.displayMetrics.density
+    val textColor = if (currentTheme == "light") "#212121".toColorInt() else Color.WHITE
+    val secondaryColor = if (currentTheme == "light") "#757575".toColorInt() else "#9E9E9E".toColorInt()
+    val accentInt = currentAccentColor.toColorInt()
+
+    val input = android.widget.EditText(this).apply {
+        inputType = android.text.InputType.TYPE_CLASS_NUMBER
+        hint = getString(R.string.mark_read_delay_dialog_hint)
+        setText(
+            (if (markReadDelaySeconds in 1..MainActivity.MARK_READ_DELAY_MAX_SECONDS) markReadDelaySeconds else 20).toString()
+        )
+        setTextColor(textColor)
+        setHintTextColor(secondaryColor)
+        backgroundTintList = android.content.res.ColorStateList.valueOf(secondaryColor)
+        textSize = 15f
+        maxLines = 1
+    }
+    val root = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        val p = (22 * dp).toInt()
+        setPadding(p, p, p, (14 * dp).toInt())
+        background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = 20 * dp
+            setColor(getDialogBackgroundColor())
+        }
+        addView(TextView(this@showMarkReadDelayCustomDialog).apply {
+            text = getString(R.string.mark_read_delay_dialog_title)
+            textSize = 18f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setTextColor(textColor)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).also { it.bottomMargin = (16 * dp).toInt() }
+        })
+        addView(input)
+    }
+    val dialog = androidx.appcompat.app.AlertDialog.Builder(this).setView(root).create()
+    dialog.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+    val btnRow = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.END
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ).also { it.topMargin = (8 * dp).toInt() }
+    }
+    fun btn(label: String, color: Int, bold: Boolean, onClick: () -> Unit) = TextView(this).apply {
+        text = label; textSize = 14f; setTextColor(color)
+        if (bold) setTypeface(null, android.graphics.Typeface.BOLD)
+        setPadding((14 * dp).toInt(), (10 * dp).toInt(), (14 * dp).toInt(), (8 * dp).toInt())
+        isClickable = true; isFocusable = true
+        setOnClickListener { onClick() }
+    }
+    btnRow.addView(btn(getString(R.string.action_cancel), secondaryColor, false) { dialog.dismiss() })
+    btnRow.addView(btn(getString(android.R.string.ok), accentInt, true) {
+        val seconds = input.text.toString().toIntOrNull()?.coerceIn(1, MainActivity.MARK_READ_DELAY_MAX_SECONDS)
+        if (seconds != null) {
+            markReadDelaySeconds = seconds
+            updateSettingsDropdownDisplays()
+            saveGeneralPreferences()
+        }
+        dialog.dismiss()
+    })
+    root.addView(btnRow)
+    dialog.show()
+}
+
 internal fun MainActivity.setupThemeSpinner() {
     val themeOptions = listOf(
         getString(R.string.settings_theme_gray),
@@ -730,6 +828,7 @@ internal fun MainActivity.updateSettingsDropdownDisplays() {
     val swipeLabels = MainActivity.SwipeAction.entries.map { labelForSwipeAction(it) }
     swipeLeftDropdownText.text = swipeLabels.getOrElse(swipeLeftActionIdx) { "" }
     swipeRightDropdownText.text = swipeLabels.getOrElse(swipeRightActionIdx) { "" }
+    markReadDelayDropdownText.text = markReadDelayLabel(markReadDelaySeconds)
     val themeLabels = listOf(
         getString(R.string.settings_theme_gray),
         getString(R.string.settings_theme_light),

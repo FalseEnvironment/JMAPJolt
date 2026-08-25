@@ -357,7 +357,8 @@ internal fun MainActivity.applyAccentColor() {
     val dropdownStroke = darkenColor(accentInt, 1.15f)
     for (dropdown in listOf(swipeLeftDropdown, swipeRightDropdown, themeDropdown,
                             settingsCalProviderDropdown, settingsCalTimeFormatDropdown,
-                            settingsCalTimeZoneDropdown, settingsContactsShowDropdown)) {
+                            settingsCalTimeZoneDropdown, settingsContactsShowDropdown,
+                            markReadDelayDropdown)) {
         dropdown.background = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             cornerRadius = 999 * d
