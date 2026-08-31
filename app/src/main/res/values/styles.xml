@@ -27,12 +27,12 @@
     <!-- Navigation drawer items -->
     <style name="NavItemActive">
         <item name="android:textStyle">bold</item>
-        <item name="android:textSize">15sp</item>
+        <item name="android:textSize">@dimen/text_md</item>
         <item name="android:letterSpacing">0.01</item>
     </style>
     <style name="NavItemInactive">
         <item name="android:textStyle">normal</item>
-        <item name="android:textSize">15sp</item>
+        <item name="android:textSize">@dimen/text_md</item>
         <item name="android:letterSpacing">0.01</item>
     </style>
 
@@ -61,7 +61,7 @@
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:textColor">?attr/colorOnSurface</item>
-        <item name="android:textSize">16sp</item>
+        <item name="android:textSize">@dimen/text_lg</item>
         <item name="android:textStyle">bold</item>
         <item name="android:letterSpacing">0.005</item>
     </style>
@@ -70,7 +70,7 @@
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">@dimen/space_xs</item>
         <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
-        <item name="android:textSize">14sp</item>
+        <item name="android:textSize">@dimen/text_body</item>
         <item name="android:lineSpacingMultiplier">1.4</item>
     </style>
     <!-- Outlined field with a floating label (Courier-style): the label starts

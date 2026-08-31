@@ -588,8 +588,7 @@ internal fun MainActivity.attachMailSwipe() {
                         MainActivity.SwipeAction.DELETE, MainActivity.SwipeAction.ARCHIVE, MainActivity.SwipeAction.MARK_SPAM -> {
                             emails.removeAt(position)
                             emailAdapter.notifyItemRemoved(position)
-                            emptyStateView.visibility = if (emails.isEmpty()) View.VISIBLE else View.GONE
-                            emailsRecyclerView.visibility = if (emails.isEmpty()) View.GONE else View.VISIBLE
+                            updateEmptyState()
                             val targetNavId = when (action) {
                                 MainActivity.SwipeAction.DELETE -> R.id.nav_trash
                                 MainActivity.SwipeAction.ARCHIVE -> R.id.nav_archive
@@ -654,6 +653,7 @@ internal fun MainActivity.attachMailSwipe() {
                     // 3. Recovery path for the destructive actions: a mis-swipe otherwise
                     // relocates mail on the account with nothing to reverse it.
                     if (undoTarget != 0) {
+                        emailsRecyclerView.hapticConfirm()
                         showUndoSnackbar(
                             message = undoMessage,
                             email = item,
@@ -804,8 +804,7 @@ internal fun MainActivity.updateEmailsList(rawList: List<DisplayEmail>) {
 
     saveEmailCache()
 
-    emptyStateView.visibility = if (emails.isEmpty()) View.VISIBLE else View.GONE
-    emailsRecyclerView.visibility = if (emails.isEmpty()) View.GONE else View.VISIBLE
+    updateEmptyState()
 
     if (pendingMailboxShow) {
         pendingMailboxShow = false
@@ -892,11 +891,14 @@ internal fun MainActivity.getFolderRole(navId: Int): String? =
     }
 
 internal fun MainActivity.toggleSelection(id: String) {
+    val wasEmpty = selectedEmails.isEmpty()
     if (selectedEmails.contains(id)) {
         selectedEmails.remove(id)
     } else {
         selectedEmails.add(id)
     }
+    // Entering or leaving selection mode is a mode change; tick so it is felt.
+    if (wasEmpty != selectedEmails.isEmpty()) emailsRecyclerView.hapticHeavy()
     updateSelectionBar()
     val pos = emails.indexOfFirst { it.id == id }
     if (pos >= 0) emailAdapter.notifyItemChanged(pos) else emailAdapter.notifyDataSetChanged()
@@ -987,8 +989,7 @@ internal fun MainActivity.removeEmailsAnimated(ids: Collection<String>) {
         }
     }
     baseEmails.removeAll { it.id in idSet }
-    emptyStateView.visibility = if (emails.isEmpty()) View.VISIBLE else View.GONE
-    emailsRecyclerView.visibility = if (emails.isEmpty()) View.GONE else View.VISIBLE
+    updateEmptyState()
 }
 
 internal fun MainActivity.applyOptimisticFavorite(

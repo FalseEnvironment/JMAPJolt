@@ -175,8 +175,7 @@ internal fun MainActivity.deactivateSearch() {
     // Recompute the threaded view rather than dumping baseEmails flat: baseEmails
     // holds the raw per-folder list, not thread head/child grouping.
     setVisibleEmails(buildThreadedView(baseEmails))
-    emptyStateView.visibility = if (emails.isEmpty()) View.VISIBLE else View.GONE
-    emailsRecyclerView.visibility = if (emails.isEmpty()) View.GONE else View.VISIBLE
+    updateEmptyState()
 }
 
 internal fun MainActivity.animateChipsBarOut() {
@@ -327,7 +326,6 @@ internal fun MainActivity.applySearchFilter(query: String) {
         it.isThreadChildRow = false
         it.isThreadMoreRow = false
     })
-    emptyStateView.visibility = if (emails.isEmpty()) View.VISIBLE else View.GONE
-    emailsRecyclerView.visibility = if (emails.isEmpty()) View.GONE else View.VISIBLE
+    updateEmptyState()
 }
 

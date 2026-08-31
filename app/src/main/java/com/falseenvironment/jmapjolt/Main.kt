@@ -565,10 +565,10 @@ class MainActivity : AppCompatActivity() {
 
         emptyStateView =
                 TextView(this).apply {
-                    text = "Nothing here ¯\\_(ツ)_/¯"
-                    textSize = 18f
-                    setTextColor(Color.GRAY)
+                    // Text and colour are set per context by updateEmptyState/applyTheme.
+                    textSize = 17f
                     gravity = Gravity.CENTER
+                    setLineSpacing(0f, 1.4f)
                     visibility = View.GONE
                     layoutParams =
                             FrameLayout.LayoutParams(
@@ -3707,8 +3707,7 @@ class MainActivity : AppCompatActivity() {
             } else {
                 emailAdapter.notifyItemsChangedByIds(ids)
             }
-            emptyStateView.visibility = if (emails.isEmpty()) View.VISIBLE else View.GONE
-            emailsRecyclerView.visibility = if (emails.isEmpty()) View.GONE else View.VISIBLE
+            updateEmptyState()
             saveEmailCache()
             lifecycleScope.launch {
                 ids.forEach { id ->

@@ -516,7 +516,7 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
                 activity.baseEmails.removeAll { it.id == item.id }
                 activity.folderCache[R.id.nav_favourite] = activity.emails.toList()
                 notifyItemRemoved(pos)
-                activity.emptyStateView.visibility = if (activity.emails.isEmpty()) android.view.View.VISIBLE else android.view.View.GONE
+                activity.updateEmptyState()
                 activity.emailsRecyclerView.visibility = if (activity.emails.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
             }
             activity.saveEmailCache()

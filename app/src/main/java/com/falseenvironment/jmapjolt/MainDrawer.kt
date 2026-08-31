@@ -323,7 +323,7 @@ internal fun MainActivity.showThemedSnackbar(
 
     pill.alpha = 0f
     pill.translationY = 24 * dp
-    pill.animate().alpha(1f).translationY(0f).setDuration(180)
+    pill.animate().alpha(1f).translationY(0f).setDuration(pill.scaledDuration(180))
         .setInterpolator(android.view.animation.DecelerateInterpolator(2f)).start()
 
     pill.postDelayed({ dismissThemedPill(pill) }, if (hasAction) 3500L else 2200L)
@@ -332,7 +332,7 @@ internal fun MainActivity.showThemedSnackbar(
 private fun MainActivity.dismissThemedPill(pill: LinearLayout) {
     if (pill.parent == null) return
     val dp = resources.displayMetrics.density
-    pill.animate().alpha(0f).translationY(24 * dp).setDuration(160)
+    pill.animate().alpha(0f).translationY(24 * dp).setDuration(pill.scaledDuration(160))
         .withEndAction { (pill.parent as? ViewGroup)?.removeView(pill) }
         .start()
 }

@@ -74,8 +74,7 @@ internal fun MainActivity.showUndoSnackbar(
             emailAdapter.notifyItemInserted(at)
         }
         if (baseEmails.none { it.id == email.id }) baseEmails.add(email)
-        emptyStateView.visibility = if (emails.isEmpty()) View.VISIBLE else View.GONE
-        emailsRecyclerView.visibility = if (emails.isEmpty()) View.GONE else View.VISIBLE
+        updateEmptyState()
 
         // 2. Caches back in sync.
         undoFolderMove(email, movedTo, sourceNavId)

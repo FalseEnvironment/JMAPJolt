@@ -585,7 +585,7 @@ internal fun android.view.View.animateScreenIn() {
     animate()
         .alpha(1f)
         .translationX(0f)
-        .setDuration(300)
+        .setDuration(scaledDuration(300))
         .setInterpolator(android.view.animation.DecelerateInterpolator(2f))
         .start()
 }
@@ -596,7 +596,7 @@ internal fun android.view.View.animateScreenIn() {
 internal fun android.view.View.animateScreenOut(onEnd: (() -> Unit)? = null) {
     animate()
         .alpha(0f)
-        .setDuration(160)
+        .setDuration(scaledDuration(160))
         .setInterpolator(android.view.animation.AccelerateInterpolator(1.5f))
         .withEndAction {
             visibility = android.view.View.GONE
@@ -615,7 +615,7 @@ internal fun android.view.View.animateScreenInBack() {
     translationX = 0f
     animate()
         .alpha(1f)
-        .setDuration(250)
+        .setDuration(scaledDuration(250))
         .setInterpolator(android.view.animation.DecelerateInterpolator(2f))
         .start()
 }
@@ -627,7 +627,7 @@ internal fun android.view.View.animateScreenOutBack(onEnd: (() -> Unit)? = null)
     animate()
         .alpha(0f)
         .translationX(width * 0.06f)
-        .setDuration(200)
+        .setDuration(scaledDuration(200))
         .setInterpolator(android.view.animation.AccelerateInterpolator(1.5f))
         .withEndAction {
             visibility = android.view.View.GONE
@@ -640,10 +640,10 @@ internal fun android.view.View.animateScreenOutBack(onEnd: (() -> Unit)? = null)
 
 /** Scale-pulse feedback for icon buttons (star, etc.). */
 internal fun android.view.View.animateTap() {
-    animate().scaleX(0.75f).scaleY(0.75f).setDuration(80)
+    animate().scaleX(0.75f).scaleY(0.75f).setDuration(scaledDuration(80))
         .withEndAction {
             animate().scaleX(1f).scaleY(1f)
-                .setDuration(160)
+                .setDuration(scaledDuration(160))
                 .setInterpolator(android.view.animation.OvershootInterpolator(2f))
                 .start()
         }.start()
@@ -655,8 +655,8 @@ internal fun android.view.View.animateFabIn() {
     scaleX = 0f; scaleY = 0f; alpha = 0f
     visibility = android.view.View.VISIBLE
     animate().scaleX(1f).scaleY(1f).alpha(1f)
-        .setStartDelay(120)
-        .setDuration(250)
+        .setStartDelay(scaledDuration(120))
+        .setDuration(scaledDuration(250))
         .setInterpolator(android.view.animation.OvershootInterpolator(1.5f))
         .start()
 }
@@ -665,7 +665,7 @@ internal fun android.view.View.animateFabIn() {
 internal fun android.view.View.animateFabOut() {
     if (visibility != android.view.View.VISIBLE) return
     animate().scaleX(0f).scaleY(0f).alpha(0f)
-        .setDuration(150)
+        .setDuration(scaledDuration(150))
         .setInterpolator(android.view.animation.AccelerateInterpolator(1.5f))
         .withEndAction { visibility = android.view.View.GONE; scaleX = 1f; scaleY = 1f; alpha = 1f }
         .start()

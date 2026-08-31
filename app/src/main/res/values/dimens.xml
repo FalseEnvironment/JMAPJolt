@@ -13,4 +13,14 @@
     <!-- Touch targets -->
 
     <!-- Email row -->
+
+    <!-- Type scale. Replaces eight ad-hoc sp values; every text size in the app
+         resolves to one of these steps. 12sp is the floor (was 11sp). -->
+    <dimen name="text_xs">12sp</dimen>
+    <dimen name="text_sm">13sp</dimen>
+    <dimen name="text_body">14sp</dimen>
+    <dimen name="text_md">15sp</dimen>
+    <dimen name="text_lg">16sp</dimen>
+    <dimen name="text_title">17sp</dimen>
+    <dimen name="text_display">26sp</dimen>
 </resources>
