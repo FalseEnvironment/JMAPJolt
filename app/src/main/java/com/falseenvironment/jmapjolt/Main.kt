@@ -1548,7 +1548,7 @@ class MainActivity : AppCompatActivity() {
      * position, so optimistic updates match the order the server sync will produce
      * (no visible "jump" once the background sync lands).
      */
-    private fun insertSortedByDate(
+    internal fun insertSortedByDate(
         list: List<DisplayEmail>,
         email: DisplayEmail
     ): List<DisplayEmail> {

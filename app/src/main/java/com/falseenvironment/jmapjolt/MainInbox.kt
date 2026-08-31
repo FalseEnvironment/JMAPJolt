@@ -581,6 +581,9 @@ internal fun MainActivity.attachMailSwipe() {
                     }
 
                     // 1. Optimistic local UI update
+                    // Where the row goes, so the undo below knows what to reverse.
+                    var undoTarget = 0
+                    var undoMessage = ""
                     when (action) {
                         MainActivity.SwipeAction.DELETE, MainActivity.SwipeAction.ARCHIVE, MainActivity.SwipeAction.MARK_SPAM -> {
                             emails.removeAt(position)
@@ -591,6 +594,16 @@ internal fun MainActivity.attachMailSwipe() {
                                 MainActivity.SwipeAction.DELETE -> R.id.nav_trash
                                 MainActivity.SwipeAction.ARCHIVE -> R.id.nav_archive
                                 else -> -1 // MARK_SPAM: removals only
+                            }
+                            undoTarget = when (action) {
+                                MainActivity.SwipeAction.DELETE -> R.id.nav_trash
+                                MainActivity.SwipeAction.ARCHIVE -> R.id.nav_archive
+                                else -> R.id.nav_spam
+                            }
+                            undoMessage = when (action) {
+                                MainActivity.SwipeAction.DELETE -> "Moved to Trash"
+                                MainActivity.SwipeAction.ARCHIVE -> "Moved to Archive"
+                                else -> "Moved to Spam"
                             }
                             updateFolderCachesForMove(item, targetNavId)
                             saveEmailCache()
@@ -604,7 +617,7 @@ internal fun MainActivity.attachMailSwipe() {
                     }
 
                     // 2. Asynchronous JMAP server update
-                    lifecycleScope.launch {
+                    val moveJob = lifecycleScope.launch {
                         try {
                             when (action) {
                                 MainActivity.SwipeAction.DELETE -> {
@@ -636,6 +649,20 @@ internal fun MainActivity.attachMailSwipe() {
                             PendingMutations.forget(item.id)
                             Log.e(MainActivity.TAG,"Failed to perform optimistic swipe action $action on server", e)
                         }
+                    }
+
+                    // 3. Recovery path for the destructive actions: a mis-swipe otherwise
+                    // relocates mail on the account with nothing to reverse it.
+                    if (undoTarget != 0) {
+                        showUndoSnackbar(
+                            message = undoMessage,
+                            email = item,
+                            row = position,
+                            movedTo = undoTarget,
+                            sourceNavId = sourceNavIdForUndo(),
+                            wasSpam = action == MainActivity.SwipeAction.MARK_SPAM,
+                            pendingMove = moveJob
+                        )
                     }
                 }
             }

@@ -271,13 +271,8 @@ internal fun MainActivity.showThemedSnackbar(
     val root = window.decorView.findViewById<ViewGroup>(android.R.id.content)
     val dp = resources.displayMetrics.density
     val hasAction = actionLabel != null && action != null
-    val bg = when (currentTheme) {
-        "light"  -> "#FFFFFF".toColorInt()
-        "oled"   -> "#1C1C1E".toColorInt()
-        "violet" -> "#2C1F46".toColorInt()
-        else     -> "#333338".toColorInt()
-    }
-    val fg = if (currentTheme == "light") "#1B1B1F".toColorInt() else Color.WHITE
+    val bg = tokens.surfaceSnackbar
+    val fg = tokens.textPrimary
     val accent = currentAccentColor.toColorInt()
 
     val pill = LinearLayout(this).apply {

@@ -916,12 +916,13 @@ internal fun MainActivity.toggleDetailFavorite(email: DisplayEmail) {
 
 internal fun MainActivity.archiveDetailEmail(email: DisplayEmail) {
     val acc = resolveAccountFor(email) ?: connectedAccount ?: return
+    val row = emails.indexOfFirst { it.id == email.id }.coerceAtLeast(0)
+    val source = sourceNavIdForUndo()
     updateFolderCachesForMove(email, R.id.nav_archive)
     closeEmailDetail()
     removeEmailsAnimated(listOf(email.id))
     saveEmailCache()
-    showThemedSnackbar("Moved to Archive")
-    lifecycleScope.launch {
+    val moveJob = lifecycleScope.launch {
         try {
             val archiveId = resolveOrCreateArchive(acc)
             if (archiveId != null) jmapClient.setMailbox(acc, email.id, archiveId)
@@ -930,16 +931,18 @@ internal fun MainActivity.archiveDetailEmail(email: DisplayEmail) {
             Log.e(MainActivity.TAG,"detail archive failed", e)
         }
     }
+    showUndoSnackbar("Moved to Archive", email, row, R.id.nav_archive, source, pendingMove = moveJob)
 }
 
 internal fun MainActivity.markSpamDetailEmail(email: DisplayEmail) {
     val acc = resolveAccountFor(email) ?: connectedAccount ?: return
+    val row = emails.indexOfFirst { it.id == email.id }.coerceAtLeast(0)
+    val source = sourceNavIdForUndo()
     updateFolderCachesForMove(email, R.id.nav_spam)
     closeEmailDetail()
     removeEmailsAnimated(listOf(email.id))
     saveEmailCache()
-    showThemedSnackbar("Moved to Spam")
-    lifecycleScope.launch {
+    val moveJob = lifecycleScope.launch {
         try {
             jmapClient.setJunkKeyword(acc, email.id, true)
             val junkId = jmapClient.resolveMailboxIdByRole(acc, "junk")
@@ -949,6 +952,8 @@ internal fun MainActivity.markSpamDetailEmail(email: DisplayEmail) {
             Log.e(MainActivity.TAG, "detail mark spam failed", e)
         }
     }
+    showUndoSnackbar("Moved to Spam", email, row, R.id.nav_spam, source,
+        wasSpam = true, pendingMove = moveJob)
 }
 
 internal fun MainActivity.unmarkSpamDetailEmail(email: DisplayEmail) {
@@ -982,11 +987,13 @@ internal fun MainActivity.trashDetailEmail(email: DisplayEmail) {
         confirmPermanentDelete(acc, listOf(email.id))
         return
     }
+    val row = emails.indexOfFirst { it.id == email.id }.coerceAtLeast(0)
+    val source = sourceNavIdForUndo()
     updateFolderCachesForMove(email, R.id.nav_trash)
     closeEmailDetail()
     removeEmailsAnimated(listOf(email.id))
     saveEmailCache()
-    lifecycleScope.launch {
+    val moveJob = lifecycleScope.launch {
         try {
             val trashId = jmapClient.resolveMailboxIdByRole(acc, "trash")
             if (trashId != null) jmapClient.setMailbox(acc, email.id, trashId)
@@ -995,6 +1002,7 @@ internal fun MainActivity.trashDetailEmail(email: DisplayEmail) {
             Log.e(MainActivity.TAG,"detail trash failed", e)
         }
     }
+    showUndoSnackbar("Moved to Trash", email, row, R.id.nav_trash, source, pendingMove = moveJob)
 }
 
 internal fun MainActivity.moveDetailEmail(email: DisplayEmail) {

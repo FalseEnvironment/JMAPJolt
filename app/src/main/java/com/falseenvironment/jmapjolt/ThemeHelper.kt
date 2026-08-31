@@ -45,22 +45,11 @@ internal fun MainActivity.saveThemePreference() {
 }
 
 internal fun MainActivity.applyTheme() {
-    val themeColors =
-            when (currentTheme) {
-                "light"  -> arrayOf("#F6F6F8", "#FFFFFF",  "#1B1B1F", "#5F5F66")
-                "oled"   -> arrayOf("#000000", "#0B0B0D",  "#ECECF1", "#90909A")
-                "violet" -> arrayOf("#160E24", "#1E1430",  "#ECECF1", "#9B7DC8")
-                else     -> arrayOf("#212126", "#2A2A30",  "#ECECF1", "#90909A")
-            }
-    val bgColor = themeColors[0]
-    val toolbarColor = themeColors[1]
-    val textColor = themeColors[2]
-    val secondaryTextColor = themeColors[3]
-
-    val bgInt = bgColor.toColorInt()
-    val toolbarInt = toolbarColor.toColorInt()
-    val textInt = textColor.toColorInt()
-    val secondaryTextInt = secondaryTextColor.toColorInt()
+    val t = tokens
+    val bgInt = t.background
+    val toolbarInt = t.surface
+    val textInt = t.textPrimary
+    val secondaryTextInt = t.textSecondary
 
     // The window itself keeps the Material3 grey unless it is repainted: it shows through
     // wherever a view is translated or briefly uncovered (detail swipe), on every theme.
@@ -111,13 +100,7 @@ internal fun MainActivity.applyTheme() {
     mailboxContainer.setBackgroundColor(bgInt)
     composeContainer.setBackgroundColor(bgInt)
     updateContainerTextColors(composeContainer, textInt, secondaryTextInt)
-    val fmtBg = when (currentTheme) {
-        "light"  -> "#E8E8EC".toColorInt()
-        "oled"   -> "#080808".toColorInt()
-        "violet" -> "#0E0A1A".toColorInt()
-        else     -> "#1C1C22".toColorInt()
-    }
-    formatToolbarRow.setBackgroundColor(fmtBg)
+    formatToolbarRow.setBackgroundColor(t.surfaceVariant)
 
     // Recursively update text colors in settings container
     updateContainerTextColors(settingsContainer, textInt, secondaryTextInt)
@@ -125,12 +108,8 @@ internal fun MainActivity.applyTheme() {
     // Settings grouped-list cards: tint per theme instead of a single fixed gray,
     // so Iris/OLED/Snow read as their own surface instead of borrowing the app's
     // static Material3 colorSurfaceVariant.
-    val cardBg = when (currentTheme) {
-        "light"  -> "#EAEAEF".toColorInt()
-        "oled"   -> "#141416".toColorInt()
-        "violet" -> "#271C3E".toColorInt()
-        else     -> null // Legacy keeps the original bg_settings_card drawable.
-    }
+    // Legacy (surfaceCard == null) keeps the original bg_settings_card drawable.
+    val cardBg = t.surfaceCard
     if (cardBg != null) {
         val d = resources.displayMetrics.density
         val cardDrawable = { GradientDrawable().apply {
@@ -191,6 +170,10 @@ internal fun MainActivity.applyTheme() {
         }
     }
 
+    // Tagged views (hairlines, secondary labels) — repainted last so this pass wins
+    // over updateContainerTextColors, which paints every TextView with the primary colour.
+    applyTokenTags(drawerLayout)
+
     applyAccentColor()
     emailAdapter.notifyDataSetChanged()
     // applyTheme nulls itemBackground above; rebuild to restore the accent highlight
@@ -213,16 +196,11 @@ internal fun MainActivity.styleOutlinedField(
     layout: com.google.android.material.textfield.TextInputLayout
 ) {
     val accent = currentAccentColor.toColorInt()
-    val isLight = currentTheme == "light"
-    val textColor = if (isLight) "#212121".toColorInt() else Color.WHITE
-    val idleLabel = if (isLight) "#8A8A90".toColorInt() else "#B0B0BA".toColorInt()
-    val idleStroke = if (isLight) "#D0D0D4".toColorInt() else "#454552".toColorInt()
-    val boxFill = when (currentTheme) {
-        "light"  -> "#FFFFFF".toColorInt()
-        "oled"   -> "#141414".toColorInt()
-        "violet" -> "#241634".toColorInt()
-        else     -> "#2E2E34".toColorInt()
-    }
+    val t = tokens
+    val textColor = t.inputText
+    val idleLabel = t.inputLabel
+    val idleStroke = t.inputStroke
+    val boxFill = t.inputBox
 
     val states = arrayOf(
         intArrayOf(android.R.attr.state_focused),
@@ -340,7 +318,7 @@ internal fun MainActivity.applyAccentColor() {
     fabCompose.imageTintList = ColorStateList.valueOf(onAccent)
     composeSendButton.imageTintList = ColorStateList.valueOf(accentInt)
     composeAttachButton.imageTintList = ColorStateList.valueOf(accentInt)
-    val quoteTint = ColorStateList.valueOf(if (currentTheme == "light") "#757575".toColorInt() else "#9E9E9E".toColorInt())
+    val quoteTint = ColorStateList.valueOf(tokens.textSecondary)
     quoteIndicatorRemove.imageTintList = quoteTint
     updateAccentColorPreview()
     // Selection bar icons and count text
@@ -586,27 +564,12 @@ internal fun MainActivity.lightenColor(color: Int, factor: Float = 1.3f): Int = 
 )
 
 /** Main surface colour of the active theme — the same value [applyTheme] paints containers with. */
-internal fun MainActivity.getThemeBackgroundColor(): Int = when (currentTheme) {
-    "light"  -> "#F6F6F8".toColorInt()
-    "oled"   -> "#000000".toColorInt()
-    "violet" -> "#160E24".toColorInt()
-    else     -> "#212126".toColorInt()
-}
+internal fun MainActivity.getThemeBackgroundColor(): Int = tokens.background
 
 /** Toolbar/header surface of the active theme (second slot of the palette). */
-internal fun MainActivity.getThemeToolbarColor(): Int = when (currentTheme) {
-    "light"  -> "#FFFFFF".toColorInt()
-    "oled"   -> "#0B0B0D".toColorInt()
-    "violet" -> "#1E1430".toColorInt()
-    else     -> "#2A2A30".toColorInt()
-}
+internal fun MainActivity.getThemeToolbarColor(): Int = tokens.surface
 
-internal fun MainActivity.getDialogBackgroundColor(): Int = when (currentTheme) {
-    "light"  -> "#F0EEEE".toColorInt()
-    "oled"   -> "#0A0A0A".toColorInt()
-    "violet" -> "#140B22".toColorInt()
-    else     -> "#242429".toColorInt()
-}
+internal fun MainActivity.getDialogBackgroundColor(): Int = tokens.surfaceDialog
 
 // ---------------------------------------------------------------------------
 // Screen transition helpers

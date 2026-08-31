@@ -3,8 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/drawerLayout"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="#1F1F1F">
+    android:layout_height="match_parent">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -260,7 +259,6 @@
                         android:layout_centerVertical="true"
                         android:src="@drawable/ic_lucide_chevron_right"
                         android:contentDescription="@string/onboarding_next"
-                        app:backgroundTint="#3D8BFD"
                         app:fabSize="normal" />
 
                 </RelativeLayout>
@@ -291,7 +289,6 @@
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="8dp"
                     android:text="@string/app_name"
-                    android:textColor="#FFFFFF"
                     android:textSize="26sp"
                     android:textStyle="bold" />
 
@@ -389,7 +386,6 @@
                     android:layout_gravity="bottom|end"
                     android:layout_margin="16dp"
                     android:src="@android:drawable/ic_menu_edit"
-                    app:backgroundTint="#3D8BFD"
                     android:contentDescription="Compose Email" />
 
             </FrameLayout>
@@ -398,7 +394,6 @@
                 android:id="@+id/composeContainer"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:background="#1A1A1A"
                 android:orientation="vertical"
                 android:visibility="gone">
 
@@ -415,7 +410,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="From:"
-                        android:textColor="#757575"
+                        android:tag="token:textSecondary"
                         android:textSize="13sp"
                         android:paddingEnd="8dp" />
 
@@ -433,7 +428,6 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:maxWidth="200dp"
-                            android:textColor="#FFFFFF"
                             android:textSize="12sp"
                             android:ellipsize="end"
                             android:maxLines="1" />
@@ -443,7 +437,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginStart="4dp"
                             android:text="▾"
-                            android:textColor="#AAAAAA"
+                            android:tag="token:textSecondary"
                             android:textSize="13sp" />
 
                     </LinearLayout>
@@ -457,7 +451,7 @@
                         android:visibility="gone" />
                 </LinearLayout>
 
-                <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#262626" />
+                <View android:layout_width="match_parent" android:layout_height="1dp" android:tag="token:divider" />
 
                 <!-- Recipients (To / Cc / Bcc) -->
                 <LinearLayout
@@ -491,8 +485,6 @@
                             android:hint="Add recipient"
                             android:inputType="textEmailAddress"
                             android:imeOptions="actionDone"
-                            android:textColor="#FFFFFF"
-                            android:textColorHint="#4A4A4A"
                             android:textSize="14sp" />
 
                         <!-- Address book picker for the active recipient category -->
@@ -529,7 +521,7 @@
 
                 </LinearLayout>
 
-                <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#262626" />
+                <View android:layout_width="match_parent" android:layout_height="1dp" android:tag="token:divider" />
 
                 <!-- Subject row -->
                 <LinearLayout
@@ -545,7 +537,7 @@
                         android:layout_width="72dp"
                         android:layout_height="wrap_content"
                         android:text="Subject:"
-                        android:textColor="#757575"
+                        android:tag="token:textSecondary"
                         android:textSize="13sp" />
 
                     <EditText
@@ -556,12 +548,10 @@
                         android:background="@null"
                         android:hint="Subject"
                         android:inputType="text"
-                        android:textColor="#FFFFFF"
-                        android:textColorHint="#4A4A4A"
                         android:textSize="14sp" />
                 </LinearLayout>
 
-                <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#262626" />
+                <View android:layout_width="match_parent" android:layout_height="1dp" android:tag="token:divider" />
 
                 <!-- Quoted-message indicator (shown for reply/forward; removable) -->
                 <LinearLayout
@@ -590,7 +580,7 @@
                         android:layout_weight="1"
                         android:maxLines="1"
                         android:ellipsize="end"
-                        android:textColor="#9E9E9E"
+                        android:tag="token:textSecondary"
                         android:textSize="13sp"
                         android:text="Quoted message included" />
 
@@ -607,7 +597,7 @@
                     android:id="@+id/quoteIndicatorDivider"
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
-                    android:background="#262626"
+                    android:tag="token:divider"
                     android:visibility="gone" />
 
                 <!-- Attachment chips (shown only when attachments are pending) -->
@@ -634,7 +624,7 @@
                     android:id="@+id/attachmentChipDivider"
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
-                    android:background="#262626"
+                    android:tag="token:divider"
                     android:visibility="gone" />
 
                 <!-- Formatting toolbar row -->
@@ -643,8 +633,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="44dp"
                     android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:background="#212121">
+                    android:gravity="center_vertical">
 
                     <HorizontalScrollView
                         android:layout_width="0dp"
@@ -665,7 +654,7 @@
                     <View
                         android:layout_width="1dp"
                         android:layout_height="match_parent"
-                        android:background="#2C2C2C" />
+                        android:tag="token:divider" />
 
                     <ImageView
                         android:id="@+id/composeAttachButton"
@@ -676,7 +665,7 @@
                         android:contentDescription="Attach file" />
                 </LinearLayout>
 
-                <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#262626" />
+                <View android:layout_width="match_parent" android:layout_height="1dp" android:tag="token:divider" />
 
                 <!-- Message body -->
                 <EditText
@@ -692,8 +681,6 @@
                     android:paddingEnd="16dp"
                     android:paddingTop="14dp"
                     android:paddingBottom="16dp"
-                    android:textColor="#FFFFFF"
-                    android:textColorHint="#4A4A4A"
                     android:textSize="15sp" />
 
             </LinearLayout>
@@ -1879,13 +1866,11 @@
             android:id="@+id/status"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="#2A2A2A"
             android:minHeight="32dp"
             android:paddingStart="16dp"
             android:paddingTop="4dp"
             android:paddingEnd="16dp"
             android:paddingBottom="6dp"
-            android:textColor="#FFFFFF"
             android:textSize="12sp" />
 
     </LinearLayout>
@@ -1899,13 +1884,10 @@
             android:id="@+id/navigationView"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:background="#2A2A2A"
             android:paddingBottom="36dp"
             android:clipToPadding="false"
             app:headerLayout="@layout/drawer_header"
             app:itemRippleColor="@android:color/transparent"
-            app:itemIconTint="#E0E0E0"
-            app:itemTextColor="#E0E0E0"
             app:itemTextAppearanceActive="@style/NavItemActive"
             app:itemTextAppearanceInactive="@style/NavItemInactive"
             app:itemIconSize="26dp"
@@ -1921,7 +1903,7 @@
             android:gravity="center"
             android:padding="8dp"
             android:text="JMAPJolt v0.15"
-            android:textColor="#616161"
+            android:tag="token:textSecondary"
             android:textSize="11sp" />
 
     </FrameLayout>
