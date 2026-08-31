@@ -31,11 +31,9 @@ class BackgroundEmailSyncReceiver {
         private const val KEY_ACCOUNTS_JSON = "accounts_json"
         private const val KEY_LAST_EMAIL_IDS = "background_last_email_ids"   // legacy, migrated
         private const val KEY_SEEN_EMAIL_IDS = "background_seen_email_ids"
-        /**
-         * Cap on remembered ids. They are stored newest-first, so the oldest fall off.
-         * Well above the inbox page size, otherwise an email moved out and back in
-         * after a long absence would look new again.
-         */
+        // Cap on remembered ids. Stored newest-first, so the oldest fall off. Well above
+        // the inbox page size, otherwise an email moved out and back in after a long
+        // absence would look new again.
         private const val MAX_SEEN_IDS = 2000
 
         suspend fun fetchAndNotify(context: Context) {
@@ -70,13 +68,10 @@ class BackgroundEmailSyncReceiver {
             showNewEmailNotification(context, newEmails)
         }
 
-        /**
-         * Ids already observed for this account, newest first, or null when this account
-         * has never synced (the caller then records a baseline and notifies nothing).
-         *
-         * Reads the legacy unordered `background_last_email_ids` set once, so an upgrade
-         * does not treat the whole inbox as new mail.
-         */
+        // Ids already observed for this account, newest first, or null when this account
+        // has never synced (the caller then records a baseline and notifies nothing).
+        // Reads the legacy unordered background_last_email_ids set once, so an upgrade
+        // does not treat the whole inbox as new mail.
         private fun readSeenIds(context: Context, accountEmail: String): LinkedHashSet<String>? {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             prefs.getString("$KEY_SEEN_EMAIL_IDS:$accountEmail", null)?.let { stored ->
@@ -86,7 +81,7 @@ class BackgroundEmailSyncReceiver {
             return LinkedHashSet(legacy)
         }
 
-        /** Persist [ids] newest-first, de-duplicated and capped at [MAX_SEEN_IDS]. */
+        // Persist newest-first, de-duplicated and capped at MAX_SEEN_IDS.
         private fun writeSeenIds(context: Context, accountEmail: String, ids: Collection<String>) {
             val capped = LinkedHashSet(ids).take(MAX_SEEN_IDS)
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -147,18 +142,6 @@ class BackgroundEmailSyncReceiver {
             )
         }
 
-        // Server-generated previews of forwarded/replied mail are cluttered with
-        // boilerplate: dashed "Forwarded message" / "Original Message" separators,
-        // reply intros, quoted ">" lines, and the forwarded header block
-        // (From:/To:/Date:/Subject:/...). Drop those lines and keep the real body.
-        private val FORWARD_SEPARATOR = Regex("^-+\\s*(forwarded|original)\\b.*", RegexOption.IGNORE_CASE)
-        private val REPLY_INTRO = Regex("^On .+wrote:\\s*$", RegexOption.IGNORE_CASE)
-        private val BEGIN_FORWARD = Regex("^begin forwarded message:?\\s*$", RegexOption.IGNORE_CASE)
-        private val HEADER_LINE = Regex(
-            "^(from|to|cc|bcc|date|sent|subject|reply-to)\\s*:.*",
-            RegexOption.IGNORE_CASE
-        )
-
         // Generic local-parts that carry no sender identity — fall back to the
         // domain's main label (noreply@bethesda.net -> Bethesda).
         private val GENERIC_LOCALPARTS = setOf(
@@ -202,36 +185,12 @@ class BackgroundEmailSyncReceiver {
         // separated. Collapsed body just shows the message.
         private fun notificationBody(email: JMapClient.EmailSummary): String {
             val subject = cleanSubject(email.subject)
-            val message = cleanPreview(email.preview)
+            val message = PreviewText.clean(email.preview)
             return when {
                 subject.isBlank() -> message
                 message.isBlank() -> subject
                 else -> "$subject\n\n$message"
             }
-        }
-
-        private fun cleanPreview(raw: String): String {
-            val cleaned = raw.lineSequence()
-                .map { it.trim() }
-                .filterNot { t ->
-                    t.isEmpty() ||
-                        t.startsWith(">") ||
-                        FORWARD_SEPARATOR.matches(t) ||
-                        BEGIN_FORWARD.matches(t) ||
-                        REPLY_INTRO.matches(t) ||
-                        HEADER_LINE.matches(t)
-                }
-                .joinToString(" ")
-                // Strip leaked CSS: brace blocks ({ margin:0; padding:0; }) and any
-                // leftover "property: value;" declarations.
-                .replace(Regex("\\{[^{}]*\\}"), " ")
-                .replace(Regex("[.#@]?[\\w-]+\\s*\\{[^{}]*", RegexOption.IGNORE_CASE), " ")
-                .replace(Regex("[a-zA-Z-]+\\s*:\\s*[^;{}\\n]+;"), " ")
-                .replace(Regex("<https?://[^>]*>", RegexOption.IGNORE_CASE), " ")
-                .replace(Regex("https?://\\S+", RegexOption.IGNORE_CASE), " ")
-                .replace(Regex("\\s+"), " ")
-                .trim()
-            return cleaned.ifBlank { raw.trim() }
         }
 
         private fun showNewEmailNotification(

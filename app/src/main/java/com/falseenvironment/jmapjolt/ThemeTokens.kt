@@ -5,31 +5,28 @@ import android.view.ViewGroup
 import android.widget.TextView
 import androidx.core.graphics.toColorInt
 
-/**
- * Semantic colour tokens for one app theme.
- *
- * Single source of truth for every surface, text and divider colour. Before this
- * existed the same palette was re-declared as raw hex in `applyTheme`, in
- * `styleOutlinedField`, in the snackbar builder, in three `getTheme*Color`
- * helpers and again in the layout XML — so a colour added to one of them silently
- * kept the Legacy value in Snow/OLED/Iris.
- */
+// Semantic colour tokens for one app theme.
+// Single source of truth for every surface, text and divider colour. Before this
+// existed the same palette was re-declared as raw hex in `applyTheme`, in
+// `styleOutlinedField`, in the snackbar builder, in three `getTheme*Color`
+// helpers and again in the layout XML — so a colour added to one of them silently
+// kept the Legacy value in Snow/OLED/Iris.
 internal data class ThemeTokens(
-    /** App window and screen containers. */
+    // App window and screen containers.
     val background: Int,
-    /** Toolbar, status strip, detail header — the surface that sits on [background]. */
+    // Toolbar, status strip, detail header — the surface that sits on [background].
     val surface: Int,
-    /** Inset strips (compose formatting bar) — recedes below [background]. */
+    // Inset strips (compose formatting bar) — recedes below [background].
     val surfaceVariant: Int,
-    /** Settings grouped-list cards; null keeps the Legacy `bg_settings_card` drawable. */
+    // Settings grouped-list cards; null keeps the Legacy `bg_settings_card` drawable.
     val surfaceCard: Int?,
     val surfaceDialog: Int,
     val surfaceSnackbar: Int,
     val textPrimary: Int,
     val textSecondary: Int,
-    /** Hairline separators between rows. */
+    // Hairline separators between rows.
     val divider: Int,
-    /** Outlined text field box fill / idle stroke / idle floating label / input text. */
+    // Outlined text field box fill / idle stroke / idle floating label / input text.
     val inputBox: Int,
     val inputStroke: Int,
     val inputLabel: Int,
@@ -66,7 +63,7 @@ private fun tokens(
     inputText = inputText.toColorInt(),
 )
 
-/** Palette per theme key, keyed by the value stored in `app_theme`. */
+// Palette per theme key, keyed by the value stored in `app_theme`.
 internal val THEME_TOKENS: Map<String, ThemeTokens> = mapOf(
     "gray" to tokens(
         background = "#212126", surface = "#2A2A30", surfaceVariant = "#1C1C22",
@@ -98,7 +95,7 @@ internal val THEME_TOKENS: Map<String, ThemeTokens> = mapOf(
     ),
 )
 
-/** Tokens of the theme currently selected in Settings. */
+// Tokens of the theme currently selected in Settings.
 internal val MainActivity.tokens: ThemeTokens
     get() = THEME_TOKENS[currentTheme] ?: THEME_TOKENS.getValue("gray")
 
@@ -106,12 +103,10 @@ internal val MainActivity.tokens: ThemeTokens
 // Tagged views
 // ---------------------------------------------------------------------------
 
-/**
- * `android:tag` values a layout can carry so [applyTokenTags] repaints the view on
- * every theme change. Used for the elements a generic pass would otherwise get
- * wrong: hairlines (no text, no id worth wiring) and labels that must stay
- * secondary after `updateContainerTextColors` paints every TextView primary.
- */
+// `android:tag` values a layout can carry so [applyTokenTags] repaints the view on
+// every theme change. Used for the elements a generic pass would otherwise get
+// wrong: hairlines (no text, no id worth wiring) and labels that must stay
+// secondary after `updateContainerTextColors` paints every TextView primary.
 internal object ViewTokenTag {
     const val DIVIDER = "token:divider"
     const val TEXT_SECONDARY = "token:textSecondary"
@@ -119,7 +114,7 @@ internal object ViewTokenTag {
     const val SURFACE_VARIANT = "token:surfaceVariant"
 }
 
-/** Repaint every view tagged with a [ViewTokenTag] under [root], recursively. */
+// Repaint every view tagged with a [ViewTokenTag] under [root], recursively.
 internal fun MainActivity.applyTokenTags(root: View) {
     when (root.tag as? String) {
         ViewTokenTag.DIVIDER -> root.setBackgroundColor(tokens.divider)

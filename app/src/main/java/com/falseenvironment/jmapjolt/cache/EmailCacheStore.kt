@@ -8,6 +8,7 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.falseenvironment.jmapjolt.DisplayEmail
 import com.falseenvironment.jmapjolt.EmailAttachmentInfo
+import com.falseenvironment.jmapjolt.PreviewText
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 import org.json.JSONArray
 import org.json.JSONObject
@@ -107,7 +108,10 @@ object EmailCacheStore {
         subject = subject,
         from = from,
         fromEmail = fromEmail,
-        preview = preview,
+        // Cleaned on read as well as at the source: rows cached before the cleanup
+        // existed still hold the raw stylesheet preview, and they would keep showing
+        // it until each one happened to resync.
+        preview = PreviewText.clean(preview),
         fullBody = fullBody,
         seen = seen,
         isFavorite = isFavorite,

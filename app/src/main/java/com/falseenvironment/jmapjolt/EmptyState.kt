@@ -2,13 +2,10 @@ package com.falseenvironment.jmapjolt
 
 import android.view.View
 
-/**
- * Contextual empty state for the message list.
- *
- * The list previously showed one fixed string everywhere, so "no results for this
- * search" and "your Trash is empty" read identically. The message now names the
- * place the user is actually looking at, and search adds a recovery hint.
- */
+// Contextual empty state for the message list.
+// The list previously showed one fixed string everywhere, so "no results for this
+// search" and "your Trash is empty" read identically. The message now names the
+// place the user is actually looking at, and search adds a recovery hint.
 internal fun MainActivity.emptyStateMessage(): String = when {
     isSearchActive ->
         getString(R.string.empty_search) + "\n" + getString(R.string.empty_search_hint)
@@ -23,11 +20,9 @@ internal fun MainActivity.emptyStateMessage(): String = when {
     else -> getString(R.string.empty_folder)
 }
 
-/**
- * Show or hide the empty state for the current list, keeping the recycler's
- * visibility in sync. Replaces the visibility toggles that were repeated at seven
- * call sites, each of which had to remember to flip both views.
- */
+// Show or hide the empty state for the current list, keeping the recycler's
+// visibility in sync. Replaces the visibility toggles that were repeated at seven
+// call sites, each of which had to remember to flip both views.
 internal fun MainActivity.updateEmptyState() {
     val isEmpty = emails.isEmpty()
     if (isEmpty) {

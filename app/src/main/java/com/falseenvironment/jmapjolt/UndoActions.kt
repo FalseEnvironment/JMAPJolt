@@ -6,24 +6,19 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
-/**
- * Undo for the optimistic destructive moves (archive / spam / trash).
- *
- * Those mutations paint first and push to the server in the background, so without
- * a recovery path a mis-swipe silently relocates mail on the account. The undo
- * reverses all three layers in the same order the move applied them: the visible
- * row, the folder caches, then the server.
- */
+// Undo for the optimistic destructive moves (archive / spam / trash).
+// Those mutations paint first and push to the server in the background, so without
+// a recovery path a mis-swipe silently relocates mail on the account. The undo
+// reverses all three layers in the same order the move applied them: the visible
+// row, the folder caches, then the server.
 
-/** Where the email came from, for both the cache restore and the server move back. */
+// Where the email came from, for both the cache restore and the server move back.
 internal fun MainActivity.sourceNavIdForUndo(): Int =
     if (selectedFolder == R.id.nav_favourite || selectedFolder == 0) R.id.nav_inbox
     else selectedFolder
 
-/**
- * Reverse of [MainActivity.updateFolderCachesForMove]: put [email] back into
- * [sourceNavId] and drop it from the folder the move sent it to.
- */
+// Reverse of [MainActivity.updateFolderCachesForMove]: put [email] back into
+// [sourceNavId] and drop it from the folder the move sent it to.
 internal fun MainActivity.undoFolderMove(
     email: DisplayEmail,
     movedToNavId: Int,
@@ -46,15 +41,12 @@ internal fun MainActivity.undoFolderMove(
     }
 }
 
-/**
- * Show "<message> · Undo" and, if tapped, put [email] back where it was.
- *
- * @param row       index the row occupied before the move; it is re-inserted there.
- * @param movedTo   drawer nav id the move targeted, so the undo can clear that cache.
- * @param wasSpam   also clears the `$junk` keyword the spam action set.
- * @param pendingMove the in-flight server call; awaited first so the undo cannot
- *                    overtake it and be overwritten by the move it is undoing.
- */
+// Show "<message> · Undo" and, if tapped, put [email] back where it was.
+// @param row       index the row occupied before the move; it is re-inserted there.
+// @param movedTo   drawer nav id the move targeted, so the undo can clear that cache.
+// @param wasSpam   also clears the `$junk` keyword the spam action set.
+// @param pendingMove the in-flight server call; awaited first so the undo cannot
+// overtake it and be overwritten by the move it is undoing.
 internal fun MainActivity.showUndoSnackbar(
     message: String,
     email: DisplayEmail,
