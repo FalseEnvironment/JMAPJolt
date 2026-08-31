@@ -29,7 +29,14 @@ class BackgroundEmailSyncReceiver {
         private const val EMAIL_GROUP_KEY = "com.falseenvironment.jmapjolt.email_group"
         private const val PREFS_NAME = "mail_prefs"
         private const val KEY_ACCOUNTS_JSON = "accounts_json"
-        private const val KEY_LAST_EMAIL_IDS = "background_last_email_ids"
+        private const val KEY_LAST_EMAIL_IDS = "background_last_email_ids"   // legacy, migrated
+        private const val KEY_SEEN_EMAIL_IDS = "background_seen_email_ids"
+        /**
+         * Cap on remembered ids. They are stored newest-first, so the oldest fall off.
+         * Well above the inbox page size, otherwise an email moved out and back in
+         * after a long absence would look new again.
+         */
+        private const val MAX_SEEN_IDS = 2000
 
         suspend fun fetchAndNotify(context: Context) {
             val accounts = readAllAccounts(context)
@@ -40,41 +47,67 @@ class BackgroundEmailSyncReceiver {
         suspend fun fetchAndNotify(context: Context, account: JMapClient.ConnectedAccount) {
             Log.d(TAG, "fetchAndNotify: fetching for ${account.email}")
             val emails = JMapClient(context).fetchEmails(account)
-            val currentIds = emails.map { it.id }.toSet()
             Log.d(TAG, "fetchAndNotify: got ${emails.size} emails for ${account.email}")
-            if (currentIds.isEmpty()) return
+            if (emails.isEmpty()) return
+            val currentIds = emails.map { it.id }
 
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val key = "$KEY_LAST_EMAIL_IDS:${account.email}"
-            val previousIds = prefs.getStringSet(key, null)
-            if (previousIds == null) {
+            val seenIds = readSeenIds(context, account.email)
+            if (seenIds == null) {
                 Log.d(TAG, "fetchAndNotify: first run, saving baseline (${currentIds.size} ids)")
-                prefs.edit().putStringSet(key, HashSet(currentIds)).apply()
+                writeSeenIds(context, account.email, currentIds)
                 return
             }
 
-            val newEmails = emails.filter { it.id !in previousIds }
-            Log.d(TAG, "fetchAndNotify: ${newEmails.size} new emails (prev baseline=${previousIds.size})")
-            prefs.edit().putStringSet(key, HashSet(currentIds)).apply()
+            // "New" means never observed before — not merely absent from the inbox last
+            // time. An email the user moved to Archive/Trash and later moved back keeps
+            // its id in the seen set, so it does not notify a second time.
+            val newEmails = emails.filter { it.id !in seenIds }
+            Log.d(TAG, "fetchAndNotify: ${newEmails.size} new emails (seen=${seenIds.size})")
+            // Newest first so the cap in writeSeenIds drops the oldest ids, never these.
+            writeSeenIds(context, account.email, currentIds + seenIds)
             if (newEmails.isEmpty()) return
 
             showNewEmailNotification(context, newEmails)
         }
 
-        fun updateBaseline(context: Context, accountEmail: String, emailIds: Set<String>) {
-            if (accountEmail.isBlank() || emailIds.isEmpty()) return
+        /**
+         * Ids already observed for this account, newest first, or null when this account
+         * has never synced (the caller then records a baseline and notifies nothing).
+         *
+         * Reads the legacy unordered `background_last_email_ids` set once, so an upgrade
+         * does not treat the whole inbox as new mail.
+         */
+        private fun readSeenIds(context: Context, accountEmail: String): LinkedHashSet<String>? {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.getString("$KEY_SEEN_EMAIL_IDS:$accountEmail", null)?.let { stored ->
+                return LinkedHashSet(stored.split('\n').filter { it.isNotBlank() })
+            }
+            val legacy = prefs.getStringSet("$KEY_LAST_EMAIL_IDS:$accountEmail", null) ?: return null
+            return LinkedHashSet(legacy)
+        }
+
+        /** Persist [ids] newest-first, de-duplicated and capped at [MAX_SEEN_IDS]. */
+        private fun writeSeenIds(context: Context, accountEmail: String, ids: Collection<String>) {
+            val capped = LinkedHashSet(ids).take(MAX_SEEN_IDS)
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                     .edit()
-                    .putStringSet("$KEY_LAST_EMAIL_IDS:$accountEmail", HashSet(emailIds))
+                    .putString("$KEY_SEEN_EMAIL_IDS:$accountEmail", capped.joinToString("\n"))
+                    .remove("$KEY_LAST_EMAIL_IDS:$accountEmail")
                     .apply()
+        }
+
+        fun updateBaseline(context: Context, accountEmail: String, emailIds: Set<String>) {
+            if (accountEmail.isBlank() || emailIds.isEmpty()) return
+            // Union, never replace: dropping ids here is what made a moved-back email
+            // look new again.
+            val existing = readSeenIds(context, accountEmail).orEmpty()
+            writeSeenIds(context, accountEmail, emailIds + existing)
         }
 
         fun addToBaseline(context: Context, accountEmail: String, emailIds: Collection<String>) {
             if (accountEmail.isBlank() || emailIds.isEmpty()) return
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val key = "$KEY_LAST_EMAIL_IDS:$accountEmail"
-            val existing = prefs.getStringSet(key, null) ?: return
-            prefs.edit().putStringSet(key, HashSet(existing + emailIds)).apply()
+            val existing = readSeenIds(context, accountEmail) ?: return
+            writeSeenIds(context, accountEmail, emailIds + existing)
         }
 
         fun readAllAccounts(context: Context): List<JMapClient.ConnectedAccount> {
