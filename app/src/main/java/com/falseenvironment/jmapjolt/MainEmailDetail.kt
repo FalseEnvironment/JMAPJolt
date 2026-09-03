@@ -640,23 +640,6 @@ internal fun MainActivity.showDetailAddressDialog() {
     }
 }
 
-internal fun MainActivity.sanitizeEmailHtml(html: String): String {
-    return html
-        .replace(Regex("<script[\\s>][\\s\\S]*?</script\\s*>", RegexOption.IGNORE_CASE), "")
-        .replace(Regex("<script\\s*/?>", RegexOption.IGNORE_CASE), "")
-        // Embedding/navigation vectors: strip the tags, keep inner text content.
-        .replace(Regex("</?(iframe|object|embed|frame|frameset|base|applet|form)\\b[^>]*>", RegexOption.IGNORE_CASE), "")
-        .replace(Regex("<meta\\b[^>]*http-equiv\\s*=\\s*[\"']?refresh[^>]*>", RegexOption.IGNORE_CASE), "")
-        .replace(Regex("""(\s)on[a-zA-Z]+\s*=\s*"[^"]*""""), "$1")
-        .replace(Regex("""(\s)on[a-zA-Z]+\s*=\s*'[^']*'"""), "$1")
-        .replace(Regex("""(\s)on[a-zA-Z]+\s*=\s*[^\s>]+"""), "$1")
-        .replace(Regex("""(\s)srcdoc\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)""", RegexOption.IGNORE_CASE), "$1")
-        // Block script-bearing URI schemes; data: stays allowed in src so inline images keep working.
-        .replace(Regex("""(href|action|formaction)\s*=\s*["']?\s*(javascript|data|vbscript):[^"'\s>]*""", RegexOption.IGNORE_CASE), "$1=\"#\"")
-        .replace(Regex("""(src|background)\s*=\s*["']?\s*(javascript|vbscript):[^"'\s>]*""", RegexOption.IGNORE_CASE), "$1=\"\"")
-        .replace(Regex("""expression\s*\(""", RegexOption.IGNORE_CASE), "no-expression(")
-}
-
 internal fun MainActivity.looksLikeHtml(body: String): Boolean = MainActivity.HTML_MARKUP_REGEX.containsMatchIn(body)
 
 internal fun MainActivity.buildSkeletonHtml(): String {
