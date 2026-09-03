@@ -2199,6 +2199,9 @@ class MainActivity : AppCompatActivity() {
                 showThemedSnackbar(getString(R.string.settings_unifiedpush_waiting_endpoint))
                 return@launch
             }
+            // The test push travels unencrypted, so onMessage would otherwise drop it:
+            // open the short window that lets exactly this payload be shown.
+            UnifiedPushService.markPendingTest(this@MainActivity)
             val result =
                     withContext(Dispatchers.IO) {
                         try {

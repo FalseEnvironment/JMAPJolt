@@ -19,11 +19,27 @@ class UnifiedPushService : MessagingReceiver() {
     override fun onMessage(context: android.content.Context, message: ByteArray, instance: String) {
         Log.d(TAG, "UnifiedPush message received (instance=$instance, bytes=${message.size})")
 
-        val plainBytes = WebPushKeys.decrypt(context, message) ?: message
-        val msgStr = plainBytes.toString(Charsets.UTF_8)
+        if (WebPushKeys.decrypt(context, message) == null) {
+            // Anyone who learns the endpoint URL can POST to it, so an undecryptable payload
+            // is unauthenticated data: never render it, and never let it drive a sync.
+            if (consumePendingTest(context)) {
+                Log.d(TAG, "Undecryptable payload matched a pending Settings test — showing test notification")
+                BackgroundEmailSyncReceiver.showPushNotification(
+                    context, context.getString(R.string.settings_unifiedpush_test_body)
+                )
+                return
+            }
+            if (WebPushKeys.hasKeys(context)) {
+                Log.w(TAG, "Dropping push message that failed WebPush decryption (${message.size} bytes)")
+                return
+            }
+            // No keys yet: the subscription was never registered with encryption, so there is
+            // nothing to authenticate against. Treat it as a bare wake-up — sync, show nothing.
+            Log.w(TAG, "Push received before WebPush keys exist — syncing without rendering the payload")
+        }
 
-        BackgroundEmailSyncReceiver.showPushNotification(context, msgStr)
-
+        // A decrypted payload is a JMAP StateChange, not user-facing text. The new-mail
+        // notification is raised by EmailSyncWorker once it knows what actually changed.
         WorkManager.getInstance(context).enqueue(
             OneTimeWorkRequestBuilder<EmailSyncWorker>()
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
@@ -86,6 +102,30 @@ class UnifiedPushService : MessagingReceiver() {
         private const val KEY_DEVICE_CLIENT_ID = "up_device_client_id"
 
         private val receiverScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+        private const val KEY_PUSH_TEST_PENDING_UNTIL = "up_test_pending_until"
+        private const val PUSH_TEST_WINDOW_MS = 2 * 60 * 1000L
+
+        /**
+         * Marks that Settings just sent a test push, so the plaintext payload that comes back
+         * is allowed to raise a notification. Without this window an undecryptable message is
+         * always dropped, and a stranger POSTing to the endpoint cannot make the app buzz.
+         */
+        fun markPendingTest(context: android.content.Context) {
+            context.getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                .edit()
+                .putLong(KEY_PUSH_TEST_PENDING_UNTIL, System.currentTimeMillis() + PUSH_TEST_WINDOW_MS)
+                .apply()
+        }
+
+        /** Single-use: the window closes on the first message that claims it. */
+        private fun consumePendingTest(context: android.content.Context): Boolean {
+            val prefs = context.getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+            val until = prefs.getLong(KEY_PUSH_TEST_PENDING_UNTIL, 0L)
+            if (until <= 0L) return false
+            prefs.edit().remove(KEY_PUSH_TEST_PENDING_UNTIL).apply()
+            return System.currentTimeMillis() <= until
+        }
 
         private fun getOrCreateDeviceClientId(context: android.content.Context): String {
             val prefs = context.getSharedPreferences(PREFS_NAME, MODE_PRIVATE)

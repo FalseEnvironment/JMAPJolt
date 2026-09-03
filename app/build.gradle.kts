@@ -92,6 +92,12 @@ android {
         }
     }
 
+    testOptions {
+        // Unit tests exercise WebPushKeys' crypto path, which logs via android.util.Log;
+        // without this every stubbed Android call throws instead of returning a default.
+        unitTests.isReturnDefaultValues = true
+    }
+
     lint {
         abortOnError = false
         checkReleaseBuilds = false
