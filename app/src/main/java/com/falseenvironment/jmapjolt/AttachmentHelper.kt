@@ -1245,13 +1245,9 @@ private fun MainActivity.openAttachment(
             return@launch
         }
         val safeName = sanitizeAttachmentName(att.name)
-        withContext(Dispatchers.IO) {
-            val dir = File(cacheDir, "attachments").also { it.mkdirs() }
-            val file = File(dir, safeName)
-            file.writeBytes(bytes)
+        val file = withContext(Dispatchers.IO) {
+            File(AttachmentCache.prepare(this@openAttachment), safeName).apply { writeBytes(bytes) }
         }
-        val dir = File(cacheDir, "attachments")
-        val file = File(dir, safeName)
         val uri = FileProvider.getUriForFile(this@openAttachment,
             "${packageName}.fileprovider", file)
         val intent = Intent(Intent.ACTION_VIEW).apply {
@@ -1342,7 +1338,7 @@ private fun MainActivity.shareAttachment(
         val safeName = sanitizeAttachmentName(att.name)
         val uri = withContext(Dispatchers.IO) {
             try {
-                val dir = File(cacheDir, "attachments").apply { mkdirs() }
+                val dir = AttachmentCache.prepare(this@shareAttachment)
                 val f = File(dir, safeName).apply { writeBytes(bytes) }
                 FileProvider.getUriForFile(this@shareAttachment, "${packageName}.fileprovider", f)
             } catch (e: Exception) {
@@ -1390,4 +1386,34 @@ private fun formatAttachmentSize(bytes: Long): String = when {
     bytes < 1024 -> "$bytes B"
     bytes < 1024 * 1024 -> "${bytes / 1024} KB"
     else -> String.format("%.1f MB", bytes / 1048576.0)
+}
+
+/**
+ * Staging area for attachments handed to other apps through the FileProvider.
+ *
+ * Files written here used to live forever: every open or share left a copy behind, so the
+ * cache grew with the mailbox. Contacts already sweep their own share directory
+ * (`ContactsPanel.shareSelected`); this applies the same idea with an age limit instead of a
+ * blanket wipe, because the receiving app may still be reading the URI it was just granted.
+ */
+internal object AttachmentCache {
+
+    private const val DIR_NAME = "attachments"
+    private const val MAX_AGE_MS = 24L * 60 * 60 * 1000
+
+    /** Blocking — call from [Dispatchers.IO]. Returns the directory, swept and ready to write. */
+    fun prepare(context: android.content.Context): File {
+        purgeExpired(context)
+        return File(context.cacheDir, DIR_NAME).apply { mkdirs() }
+    }
+
+    /** Blocking — call from [Dispatchers.IO]. Drops cached attachments older than 24h. */
+    fun purgeExpired(context: android.content.Context) {
+        val dir = File(context.cacheDir, DIR_NAME)
+        if (!dir.isDirectory) return
+        val cutoff = System.currentTimeMillis() - MAX_AGE_MS
+        val stale = dir.listFiles()?.filter { it.lastModified() < cutoff } ?: return
+        val deleted = stale.count { runCatching { it.delete() }.getOrDefault(false) }
+        if (deleted > 0) Log.d("AttachmentCache", "Purged $deleted expired cached attachment(s)")
+    }
 }

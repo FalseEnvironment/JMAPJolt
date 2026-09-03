@@ -649,11 +649,14 @@ class MainActivity : AppCompatActivity() {
         // Purge the WebView disk cache: detail views run with LOAD_NO_CACHE, but
         // caches accumulated before that (or by other WebView writes) linger forever.
         try { android.webkit.WebView(this).apply { clearCache(true); destroy() } } catch (_: Exception) {}
-        // One-time cleanup of the legacy flat JSON cache (replaced by the Room store).
+        // One-time cleanup of the legacy flat JSON cache (replaced by the Room store), plus
+        // the attachments staged for other apps, which are only needed while the share or
+        // open is in flight.
         lifecycleScope.launch(Dispatchers.IO) {
             filesDir.listFiles()
                 ?.filter { it.name.startsWith("cache_") && it.name.endsWith(".json") }
                 ?.forEach { it.delete() }
+            runCatching { AttachmentCache.purgeExpired(this@MainActivity) }
         }
 
         // Warm the address book once so the email list can draw contact photos for known senders
