@@ -7,7 +7,6 @@ import android.graphics.Color
 import android.view.View
 import android.widget.RemoteViews
 import androidx.core.graphics.toColorInt
-import org.json.JSONObject
 
 /**
  * Shared helpers for the inbox home-screen widget: theme palette resolution,
@@ -21,7 +20,6 @@ object WidgetSupport {
     const val UNIFIED = "__unified__"
 
     private const val WIDGET_PREFS = "widget_prefs"
-    private const val KEY_ACCOUNTS_JSON = "accounts_json"
 
     /** Palette: [bg, header, text, secondaryText] mirroring ThemeHelper.applyTheme. */
     fun palette(theme: String): IntArray {
@@ -55,13 +53,8 @@ object WidgetSupport {
     }
 
     /** Account emails saved in encrypted storage, in stored order. */
-    fun savedAccountEmails(context: Context): List<String> {
-        val raw = SecureStorage.prefs(context).getString(KEY_ACCOUNTS_JSON, null) ?: return emptyList()
-        val accounts = runCatching { JSONObject(raw).optJSONArray("accounts") }.getOrNull() ?: return emptyList()
-        return (0 until accounts.length()).mapNotNull {
-            accounts.optJSONObject(it)?.optString("email")?.takeIf { e -> e.isNotBlank() }
-        }
-    }
+    fun savedAccountEmails(context: Context): List<String> =
+        SecureStorage.connectedAccounts(context).map { it.email }.filter { it.isNotBlank() }
 
     /**
      * Shows a spinning [android.widget.ProgressBar] in place of the refresh icon while the

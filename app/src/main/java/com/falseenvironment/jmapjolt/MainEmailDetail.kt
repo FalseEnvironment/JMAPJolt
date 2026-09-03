@@ -13,7 +13,6 @@ import android.graphics.Paint
 import android.graphics.Shader
 import android.graphics.Typeface
 import android.view.MotionEvent
-import android.os.Build
 import android.os.Bundle
 import android.text.Editable
 import android.text.Html
@@ -271,54 +270,18 @@ internal fun MainActivity.setupEmailDetailView() {
     })
 
 
-    detailWebView =
-            android.webkit.WebView(this).apply {
-                layoutParams =
-                        LinearLayout.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.WRAP_CONTENT
-                        )
-                setBackgroundColor(Color.WHITE)
-                overScrollMode = View.OVER_SCROLL_NEVER
-                isNestedScrollingEnabled = false
-                settings.javaScriptEnabled = false
-                settings.allowFileAccess = false
-                settings.allowContentAccess = false
-                @Suppress("DEPRECATION")
-                settings.allowUniversalAccessFromFileURLs = false
-                @Suppress("DEPRECATION")
-                settings.allowFileAccessFromFileURLs = false
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
-                }
-                settings.useWideViewPort = true
-                settings.loadWithOverviewMode = true
-                settings.setSupportZoom(true)
-                settings.builtInZoomControls = true
-                settings.displayZoomControls = false
-                // Body HTML is local; without this WebView grows an unbounded
-                // disk cache of remote images (~12 MB observed).
-                settings.cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
-            }
-    detailWebView.webViewClient = object : android.webkit.WebViewClient() {
-        override fun shouldOverrideUrlLoading(
-            view: android.webkit.WebView,
-            request: android.webkit.WebResourceRequest
-        ): Boolean {
-            showLinkConfirmationDialog(request.url.toString())
-            return true
-        }
-        @Suppress("DEPRECATION")
-        override fun shouldOverrideUrlLoading(
-            view: android.webkit.WebView,
-            url: String
-        ): Boolean {
-            showLinkConfirmationDialog(url)
-            return true
-        }
-        override fun onPageFinished(view: android.webkit.WebView, url: String) {
-            super.onPageFinished(view, url)
-        }
+    val act = this
+    detailWebView = android.webkit.WebView(this).apply {
+        layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+        setBackgroundColor(getThemeBackgroundColor())
+        overScrollMode = View.OVER_SCROLL_NEVER
+        isNestedScrollingEnabled = false
+        settings.setSupportZoom(true)
+        settings.builtInZoomControls = true
+        settings.displayZoomControls = false
+        EmailWebView.harden(this, { EmailWebView.isImageLoadingEnabled(act) }, act::showLinkConfirmationDialog)
     }
     detailBody.addView(detailWebView)
     // Weighted spacer: when the body is shorter than the viewport (fillViewport stretches
@@ -362,22 +325,11 @@ internal fun MainActivity.detailSwipeTarget(forward: Boolean): DisplayEmail? {
 
 internal fun MainActivity.ensureDetailPreviewPanel(): LinearLayout {
     detailPreviewPanel?.let { return it }
+    val act = this
     val wv = android.webkit.WebView(this).apply {
         layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
         overScrollMode = View.OVER_SCROLL_NEVER
-        settings.javaScriptEnabled = false
-        settings.allowFileAccess = false
-        settings.allowContentAccess = false
-        @Suppress("DEPRECATION")
-        settings.allowUniversalAccessFromFileURLs = false
-        @Suppress("DEPRECATION")
-        settings.allowFileAccessFromFileURLs = false
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
-        }
-        settings.useWideViewPort = true
-        settings.loadWithOverviewMode = true
-        settings.cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
+        EmailWebView.harden(this, { EmailWebView.isImageLoadingEnabled(act) })
     }
     val panel = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
@@ -411,13 +363,12 @@ internal fun MainActivity.prepareDetailPreview(target: DisplayEmail, forward: Bo
     // Transparent like the real detail WebView (see showEmailDetail): an opaque WebView
     // paints its own dark-mode surface (#121212) over the theme colour while dragging.
     wv.setBackgroundColor(android.graphics.Color.TRANSPARENT)
-    wv.settings.blockNetworkImage =
-        !getSharedPreferences(MainActivity.PREFS_NAME, Context.MODE_PRIVATE).getBoolean("load_images", false)
+    wv.settings.blockNetworkImage = !EmailWebView.isImageLoadingEnabled(this)
     val html = if (target.fullBody.isNotBlank())
         buildHtmlContent(target.fullBody)
     else
         buildSkeletonHtml()
-    wv.loadDataWithBaseURL("https://jmapjolt.invalid/email/", html, "text/html", "UTF-8", null)
+    wv.loadEmailHtml(html)
 }
 
 internal fun MainActivity.onDetailSwipeDrag(dx: Float) {
@@ -1039,7 +990,7 @@ internal fun MainActivity.closeEmailDetail() {
     markSeenJob?.cancel()
     // Hard-clear WebView immediately so next open starts blank
     detailWebView.stopLoading()
-    detailWebView.loadDataWithBaseURL("https://jmapjolt.invalid/email/","", "text/html", "UTF-8", null)
+    detailWebView.loadEmailHtml("")
     currentDetailEmail = null
     emailDetailContainer.animateScreenOutBack()
     mailSwipeRefresh.visibility = View.VISIBLE

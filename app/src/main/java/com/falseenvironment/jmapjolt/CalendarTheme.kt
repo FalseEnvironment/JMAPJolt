@@ -2,8 +2,6 @@ package com.falseenvironment.jmapjolt
 
 import android.content.Context
 import androidx.core.graphics.toColorInt
-import org.json.JSONArray
-import org.json.JSONObject
 
 /**
  * Standalone theme reader for the calendar screens, mirroring the palette logic in
@@ -58,30 +56,5 @@ object CalendarTheme {
 
 /** Reads the active JMAP account from secure storage for calendar sync. */
 object CalendarAccount {
-    fun current(context: Context): JMapClient.ConnectedAccount? {
-        val raw = SecureStorage.prefs(context).getString("accounts_json", null) ?: return null
-        return runCatching {
-            val root = JSONObject(raw)
-            val list = root.optJSONArray("accounts") ?: JSONArray()
-            if (list.length() == 0) return null
-            val current = root.optString("current", "")
-            var chosen: JSONObject? = null
-            for (i in 0 until list.length()) {
-                val item = list.optJSONObject(i) ?: continue
-                if (current.isNotBlank() && item.optString("email").equals(current, true)) {
-                    chosen = item; break
-                }
-                if (chosen == null) chosen = item
-            }
-            chosen?.let {
-                JMapClient.ConnectedAccount(
-                    email = it.optString("email"),
-                    password = it.optString("password"),
-                    sessionUrl = it.optString("sessionUrl"),
-                    apiUrl = it.optString("apiUrl"),
-                    accountId = it.optString("accountId")
-                )
-            }
-        }.getOrNull()
-    }
+    fun current(context: Context): JMapClient.ConnectedAccount? = SecureStorage.currentAccount(context)
 }

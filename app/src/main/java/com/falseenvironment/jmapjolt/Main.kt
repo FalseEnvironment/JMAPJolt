@@ -1108,15 +1108,8 @@ class MainActivity : AppCompatActivity() {
         detailBody.setBackgroundColor(wvBgInt)
         // Show cached body immediately (zero latency) or a shimmer skeleton while fetching.
         val bodyAvailableNow = email.fullBody.isNotBlank()
-        if (bodyAvailableNow) {
-            detailWebView.loadDataWithBaseURL("https://jmapjolt.invalid/email/",buildHtmlContent(email.fullBody), "text/html", "UTF-8", null)
-        } else {
-            detailWebView.loadDataWithBaseURL("https://jmapjolt.invalid/email/",buildSkeletonHtml(), "text/html", "UTF-8", null)
-        }
-        // Auto-load images based on preference
-        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-        val loadImages = prefs.getBoolean("load_images", false)
-        detailWebView.settings.blockNetworkImage = !loadImages
+        detailWebView.loadEmailHtml(if (bodyAvailableNow) buildHtmlContent(email.fullBody) else buildSkeletonHtml())
+        detailWebView.settings.blockNetworkImage = !EmailWebView.isImageLoadingEnabled(this)
 
         lifecycleScope.launch {
             try {
@@ -1149,8 +1142,7 @@ class MainActivity : AppCompatActivity() {
                 currentDetailEmail = displayEmail
                 // Only render if body was skeleton (not already rendered synchronously above).
                 if (!bodyAvailableNow) {
-                    val htmlContent = buildHtmlContent(displayEmail.fullBody)
-                    detailWebView.loadDataWithBaseURL("https://jmapjolt.invalid/email/",htmlContent, "text/html", "UTF-8", null)
+                    detailWebView.loadEmailHtml(buildHtmlContent(displayEmail.fullBody))
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load email HTML", e)

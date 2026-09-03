@@ -7,6 +7,7 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import java.io.IOException
 import java.security.GeneralSecurityException
+import org.json.JSONObject
 
 object SecureStorage {
     private const val SECURE_PREFS_NAME = "secure_accounts"
@@ -27,6 +28,31 @@ object SecureStorage {
             cached = prefs
             return prefs
         }
+    }
+
+    /** Every saved account, in stored order. Single parser for the accounts JSON blob. */
+    fun connectedAccounts(context: Context): List<JMapClient.ConnectedAccount> {
+        val raw = prefs(context).getString(KEY_ACCOUNTS_JSON, null) ?: return emptyList()
+        val list = runCatching { JSONObject(raw).optJSONArray("accounts") }.getOrNull() ?: return emptyList()
+        return (0 until list.length()).mapNotNull { i ->
+            list.optJSONObject(i)?.let {
+                JMapClient.ConnectedAccount(
+                    email = it.optString("email"),
+                    password = it.optString("password"),
+                    sessionUrl = it.optString("sessionUrl"),
+                    apiUrl = it.optString("apiUrl"),
+                    accountId = it.optString("accountId")
+                )
+            }
+        }
+    }
+
+    /** The account marked as current, else the first saved one. */
+    fun currentAccount(context: Context): JMapClient.ConnectedAccount? {
+        val accounts = connectedAccounts(context)
+        val current = prefs(context).getString(KEY_ACCOUNTS_JSON, null)
+            ?.let { runCatching { JSONObject(it).optString("current", "") }.getOrNull() }.orEmpty()
+        return accounts.firstOrNull { it.email.equals(current, ignoreCase = true) } ?: accounts.firstOrNull()
     }
 
     private fun create(context: Context): SharedPreferences {

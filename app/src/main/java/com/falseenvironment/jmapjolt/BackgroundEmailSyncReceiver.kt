@@ -14,8 +14,6 @@ import android.text.style.StyleSpan
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import org.json.JSONArray
-import org.json.JSONObject
 
 class BackgroundEmailSyncReceiver {
 
@@ -28,7 +26,6 @@ class BackgroundEmailSyncReceiver {
         private const val SYNC_NOTIFICATION_ID = 4003
         private const val EMAIL_GROUP_KEY = "com.falseenvironment.jmapjolt.email_group"
         private const val PREFS_NAME = "mail_prefs"
-        private const val KEY_ACCOUNTS_JSON = "accounts_json"
         private const val KEY_LAST_EMAIL_IDS = "background_last_email_ids"   // legacy, migrated
         private const val KEY_SEEN_EMAIL_IDS = "background_seen_email_ids"
         // Cap on remembered ids. Stored newest-first, so the oldest fall off. Well above
@@ -105,42 +102,11 @@ class BackgroundEmailSyncReceiver {
             writeSeenIds(context, accountEmail, emailIds + existing)
         }
 
-        fun readAllAccounts(context: Context): List<JMapClient.ConnectedAccount> {
-            val raw = SecureStorage.prefs(context).getString(KEY_ACCOUNTS_JSON, null)
-                ?: return emptyList()
-            val root = runCatching { JSONObject(raw) }.getOrNull() ?: return emptyList()
-            val accounts = root.optJSONArray("accounts") ?: return emptyList()
-            return (0 until accounts.length()).mapNotNull { accounts.optJSONObject(it)?.toConnectedAccount() }
-        }
+        fun readAllAccounts(context: Context): List<JMapClient.ConnectedAccount> =
+            SecureStorage.connectedAccounts(context)
 
-        internal fun readCurrentAccount(context: Context): JMapClient.ConnectedAccount? {
-            val raw =
-                    SecureStorage.prefs(context)
-                            .getString(KEY_ACCOUNTS_JSON, null)
-                            ?: return null
-            val root = JSONObject(raw)
-            val accounts = root.optJSONArray("accounts") ?: JSONArray()
-            val current = root.optString("current", "")
-            var fallback: JSONObject? = null
-            for (i in 0 until accounts.length()) {
-                val account = accounts.optJSONObject(i) ?: continue
-                if (fallback == null) fallback = account
-                if (account.optString("email").equals(current, ignoreCase = true)) {
-                    return account.toConnectedAccount()
-                }
-            }
-            return fallback?.toConnectedAccount()
-        }
-
-        private fun JSONObject.toConnectedAccount(): JMapClient.ConnectedAccount {
-            return JMapClient.ConnectedAccount(
-                    email = optString("email"),
-                    password = optString("password"),
-                    sessionUrl = optString("sessionUrl"),
-                    apiUrl = optString("apiUrl"),
-                    accountId = optString("accountId")
-            )
-        }
+        internal fun readCurrentAccount(context: Context): JMapClient.ConnectedAccount? =
+            SecureStorage.currentAccount(context)
 
         // Generic local-parts that carry no sender identity — fall back to the
         // domain's main label (noreply@bethesda.net -> Bethesda).
