@@ -1110,13 +1110,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Email view background = the home/inbox background per theme, so the whole screen matches.
-        val wvBgHex = when (currentTheme) {
-            "light"  -> "#F6F6F8"
-            "oled"   -> "#000000"
-            "violet" -> "#160E24"
-            else     -> "#212126"
-        }
-        val wvBgInt = android.graphics.Color.parseColor(wvBgHex)
+        val wvBgInt = tokens.background
         // Paint the whole scroll area (webview + spacer + attachment footer) with one colour so
         // the screen reads as a single email view. The webview itself is transparent so its own
         // (possibly skeleton) backdrop never shows a different shade.
@@ -3366,8 +3360,8 @@ class MainActivity : AppCompatActivity() {
         val dp = resources.displayMetrics.density
         val dialogBg = getDialogBackgroundColor()
         val accentInt = currentAccentColor.toColorInt()
-        val textColor = if (currentTheme == "light") "#212121".toColorInt() else Color.WHITE
-        val secondaryColor = if (currentTheme == "light") "#757575".toColorInt() else "#9E9E9E".toColorInt()
+        val textColor = tokens.textPrimary
+        val secondaryColor = tokens.textSecondary
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL

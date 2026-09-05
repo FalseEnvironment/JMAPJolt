@@ -31,7 +31,18 @@ internal data class ThemeTokens(
     val inputStroke: Int,
     val inputLabel: Int,
     val inputText: Int,
+    // Loading-shimmer pair for the email detail skeleton: the bar and the band
+    // that sweeps across it.
+    val skeletonBase: Int,
+    val skeletonShine: Int,
+    // Light text on a dark ground, or the reverse. Single answer to "is this theme
+    // dark?" — it used to be re-derived by listing theme keys at each call site,
+    // so a new theme had to be added to every one of those lists.
+    val isDark: Boolean,
 )
+
+/** ARGB int as a CSS "#RRGGBB" literal, for the colours handed to the WebView. */
+internal fun Int.toCssHex(): String = String.format("#%06X", this and 0xFFFFFF)
 
 private fun tokens(
     background: String,
@@ -47,6 +58,9 @@ private fun tokens(
     inputStroke: String,
     inputLabel: String,
     inputText: String,
+    skeletonBase: String,
+    skeletonShine: String,
+    isDark: Boolean,
 ) = ThemeTokens(
     background = background.toColorInt(),
     surface = surface.toColorInt(),
@@ -61,6 +75,9 @@ private fun tokens(
     inputStroke = inputStroke.toColorInt(),
     inputLabel = inputLabel.toColorInt(),
     inputText = inputText.toColorInt(),
+    skeletonBase = skeletonBase.toColorInt(),
+    skeletonShine = skeletonShine.toColorInt(),
+    isDark = isDark,
 )
 
 // Palette per theme key, keyed by the value stored in `app_theme`.
@@ -71,6 +88,7 @@ internal val THEME_TOKENS: Map<String, ThemeTokens> = mapOf(
         textPrimary = "#ECECF1", textSecondary = "#90909A", divider = "#38383F",
         inputBox = "#2E2E34", inputStroke = "#454552", inputLabel = "#B0B0BA",
         inputText = "#FFFFFF",
+        skeletonBase = "#2A2A2A", skeletonShine = "#3A3A3A", isDark = true,
     ),
     "light" to tokens(
         background = "#F6F6F8", surface = "#FFFFFF", surfaceVariant = "#E8E8EC",
@@ -78,6 +96,7 @@ internal val THEME_TOKENS: Map<String, ThemeTokens> = mapOf(
         textPrimary = "#1B1B1F", textSecondary = "#5F5F66", divider = "#DCDCE3",
         inputBox = "#FFFFFF", inputStroke = "#D0D0D4", inputLabel = "#8A8A90",
         inputText = "#212121",
+        skeletonBase = "#E0E0E0", skeletonShine = "#F0F0F0", isDark = false,
     ),
     "oled" to tokens(
         background = "#000000", surface = "#0B0B0D", surfaceVariant = "#080808",
@@ -85,6 +104,7 @@ internal val THEME_TOKENS: Map<String, ThemeTokens> = mapOf(
         textPrimary = "#ECECF1", textSecondary = "#90909A", divider = "#232327",
         inputBox = "#141414", inputStroke = "#454552", inputLabel = "#B0B0BA",
         inputText = "#FFFFFF",
+        skeletonBase = "#111111", skeletonShine = "#1E1E1E", isDark = true,
     ),
     "violet" to tokens(
         background = "#160E24", surface = "#1E1430", surfaceVariant = "#0E0A1A",
@@ -92,6 +112,7 @@ internal val THEME_TOKENS: Map<String, ThemeTokens> = mapOf(
         textPrimary = "#ECECF1", textSecondary = "#9B7DC8", divider = "#33254F",
         inputBox = "#241634", inputStroke = "#454552", inputLabel = "#B0B0BA",
         inputText = "#FFFFFF",
+        skeletonBase = "#2A2A2A", skeletonShine = "#3A3A3A", isDark = true,
     ),
 )
 

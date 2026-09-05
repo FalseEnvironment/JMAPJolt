@@ -643,15 +643,9 @@ internal fun MainActivity.showDetailAddressDialog() {
 internal fun MainActivity.looksLikeHtml(body: String): Boolean = MainActivity.HTML_MARKUP_REGEX.containsMatchIn(body)
 
 internal fun MainActivity.buildSkeletonHtml(): String {
-    val isDark = currentTheme == "gray" || currentTheme == "oled" || currentTheme == "violet"
-    val bg = when (currentTheme) {
-        "light"  -> "#F6F6F8"
-        "oled"   -> "#000000"
-        "violet" -> "#160E24"
-        else     -> "#212126"
-    }
-    val base = if (currentTheme == "oled") "#111111" else if (isDark) "#2a2a2a" else "#e0e0e0"
-    val shine = if (currentTheme == "oled") "#1e1e1e" else if (isDark) "#3a3a3a" else "#f0f0f0"
+    val bg = tokens.background.toCssHex()
+    val base = tokens.skeletonBase.toCssHex()
+    val shine = tokens.skeletonShine.toCssHex()
     return """<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:$bg;padding:20px}
@@ -684,14 +678,9 @@ internal fun MainActivity.buildHtmlContent(rawBodyIn: String, subject: String = 
     val rawBody = rawBodyIn.replace(
         Regex("<img\\b[^>]*\\bsrc\\s*=\\s*[\"']cid:[^>]*>", RegexOption.IGNORE_CASE), ""
     )
-    val isDark = currentTheme == "gray" || currentTheme == "oled" || currentTheme == "violet"
-    val bgColor = when (currentTheme) {
-        "light"  -> "#F6F6F8"
-        "oled"   -> "#000000"
-        "violet" -> "#160E24"
-        else     -> "#212126"
-    }
-    val textColor = if (isDark) "#e0e0e0" else "#212121"
+    val isDark = tokens.isDark
+    val bgColor = tokens.background.toCssHex()
+    val textColor = tokens.textPrimary.toCssHex()
     val linkColor = currentAccentColor
 
     // Subject is rendered inside the scrollable WebView content so it scrolls away,
@@ -761,7 +750,7 @@ internal fun MainActivity.buildHtmlContent(rawBodyIn: String, subject: String = 
         "<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=3.0\"><meta name=\"color-scheme\" content=\"$colorScheme\">$darkCss$accentQuoteCss<style>body{color:$textColor;background:$bgColor;font-family:-apple-system,sans-serif;word-wrap:break-word;padding:12px;margin:0;max-width:100%;box-sizing:border-box}img{max-width:100%;height:auto}a{color:$linkColor}</style></head><body>$subjectHeading$body</body></html>"
     } else {
         // Plain text: escape HTML entities, then style quoted lines (lines starting with ">")
-        val quoteColor = if (isDark) "#616161" else "#9E9E9E"
+        val quoteColor = tokens.textSecondary.toCssHex()
         val escaped = rawBody
             .replace("&", "&amp;")
             .replace("<", "&lt;")
@@ -821,8 +810,7 @@ internal fun MainActivity.collapseDeepQuotes(html: String, threshold: Int = 4): 
 }
 
 internal fun MainActivity.updateDetailStarIcon(isFavorite: Boolean) {
-    val color = if (isFavorite) currentAccentColor.toColorInt()
-                else if (currentTheme == "light") "#9E9E9E".toColorInt() else "#888888".toColorInt()
+    val color = if (isFavorite) currentAccentColor.toColorInt() else tokens.textSecondary
     detailStarButton.imageTintList = ColorStateList.valueOf(color)
 }
 
