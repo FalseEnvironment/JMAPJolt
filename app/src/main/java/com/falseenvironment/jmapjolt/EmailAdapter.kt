@@ -537,6 +537,7 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
             holder.avatarImage.tag = null
             val selPad = (7 * holder.itemView.resources.displayMetrics.density).toInt()
             holder.avatarImage.setPadding(selPad, selPad, selPad, selPad)
+            holder.avatarImage.scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
             // load() via Coil cancels any in-flight favicon request on this view
             holder.avatarImage.load(R.drawable.ic_lucide_check) { crossfade(false) }
             holder.avatarImage.imageTintList = ColorStateList.valueOf(activity.getOnAccentColor())
@@ -574,6 +575,7 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
                 (holder.avatarImage.getTag(R.id.tag_favicon_job) as? kotlinx.coroutines.Job)?.cancel()
                 holder.avatarImage.tag = null
                 holder.avatarImage.setPadding(0, 0, 0, 0)
+                holder.avatarImage.scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
                 holder.avatarImage.visibility = android.view.View.VISIBLE
                 holder.avatarImage.load(contactPhoto) {
                     crossfade(false)
@@ -590,8 +592,9 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
                     else    -> "#383838".toColorInt()
                 }
                 bg.setColor(neutralBg)
-                val favPad = (6 * holder.itemView.resources.displayMetrics.density).toInt()
-                holder.avatarImage.setPadding(favPad, favPad, favPad, favPad)
+                // Full-bleed: the favicon fills the whole circle, no inset ring.
+                holder.avatarImage.setPadding(0, 0, 0, 0)
+                holder.avatarImage.scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
                 holder.avatar.text = letter
                 holder.avatarImage.visibility = android.view.View.VISIBLE
                 holder.avatarImage.setImageDrawable(null)

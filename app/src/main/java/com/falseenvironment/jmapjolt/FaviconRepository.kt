@@ -14,9 +14,10 @@ object FaviconRepository {
     private const val NEGATIVE_CACHE_TTL_MS = 24L * 60 * 60 * 1000
     private const val NEGATIVE_CACHE_MAX_SIZE = 2000
     private const val MAX_ICON_BYTES = 512 * 1024
-    // Favicons render in a small avatar slot; decoding at full resolution wastes
-    // heap. Cap the decoded edge so a 512px .ico doesn't sit in memory at 512px.
-    private const val MAX_ICON_PX = 96
+    // Favicons render full-bleed in a 44dp avatar circle (~132px at xxhdpi), so the
+    // decoded edge is capped just above that: high enough to stay sharp, low enough
+    // that a 512px .ico doesn't sit in memory at 512px.
+    private const val MAX_ICON_PX = 192
 
     private data class CacheEntry(val bitmap: Bitmap, val fetchedAt: Long)
 
