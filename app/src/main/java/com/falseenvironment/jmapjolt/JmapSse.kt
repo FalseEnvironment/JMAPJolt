@@ -4,11 +4,8 @@ import android.util.Base64
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.concurrent.TimeUnit
 
 /**
@@ -22,21 +19,25 @@ object JmapSse {
     private const val TAG = "JmapSse"
     const val PING_SECONDS = 90
 
-    // No read timeout on the base client; each SSE call overrides it per stream.
-    private val baseClient: OkHttpClient by lazy {
-        OkHttpClient.Builder()
-            .retryOnConnectionFailure(true)
-            .build()
-    }
+    private const val SESSION_TIMEOUT_SECONDS = 10L
 
     suspend fun resolveEventSourceUrl(account: JMapClient.ConnectedAccount): String? =
         withContext(Dispatchers.IO) {
-            val conn = URL(account.sessionUrl).openConnection() as HttpURLConnection
-            conn.setRequestProperty("Authorization", basicAuth(account))
-            conn.connectTimeout = 10_000
-            conn.readTimeout = 10_000
+            // The session fetch carries Basic auth, so it runs on the no-redirect
+            // client: a 30x must not replay the credentials somewhere else.
+            val http = AppHttp.noRedirects.newBuilder()
+                .readTimeout(SESSION_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                .build()
+            val request = Request.Builder()
+                .url(account.sessionUrl)
+                .header("Authorization", basicAuth(account))
+                .get()
+                .build()
             try {
-                val body = conn.inputStream.bufferedReader().readText()
+                val body = http.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) return@withContext null
+                    response.body?.string() ?: return@withContext null
+                }
                 val template = JSONObject(body).optString("eventSourceUrl").takeIf { it.isNotBlank() }
                     ?: return@withContext null
                 val resolved = template
@@ -52,8 +53,6 @@ object JmapSse {
             } catch (e: Throwable) {
                 Log.e(TAG, "Failed to fetch JMAP session for ${LogRedact.email(account.email)}", e)
                 null
-            } finally {
-                try { conn.disconnect() } catch (_: Throwable) {}
             }
         }
 
@@ -72,7 +71,7 @@ object JmapSse {
         // response source line-by-line. readTimeout is set just above the
         // server ping interval so a stale half-open connection is detected
         // within seconds and the outer loop reconnects.
-        val client = baseClient.newBuilder()
+        val client = AppHttp.noRedirects.newBuilder()
             .readTimeout((PING_SECONDS + 30).toLong(), TimeUnit.SECONDS)
             .build()
         val request = Request.Builder()

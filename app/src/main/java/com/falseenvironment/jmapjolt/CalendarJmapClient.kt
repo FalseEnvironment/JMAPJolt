@@ -23,22 +23,14 @@ class CalendarJmapClient {
 
     // Stalwart rejects a charset parameter on the content type with notRequest; use bare json.
     private val json = "application/json".toMediaType()
-    private val http = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        // Basic-auth header is attached manually; disable redirects so credentials are never
-        // replayed to a host other than the trusted JMAP endpoint on a 30x response.
-        .followRedirects(false)
-        .followSslRedirects(false)
-        .build()
+    // Basic-auth header is attached manually; the no-redirect variant of the shared
+    // stack keeps credentials from being replayed to another host on a 30x response.
+    private val http = AppHttp.noRedirects
 
     // Session discovery hits /.well-known/jmap, which Stalwart answers with a 307 redirect to the
     // real session endpoint. This client follows redirects (OkHttp drops the Authorization header
     // on cross-host hops) so autodiscovery resolves; method calls still use the no-redirect client.
-    private val httpFollow = http.newBuilder()
-        .followRedirects(true)
-        .followSslRedirects(true)
-        .build()
+    private val httpFollow = AppHttp.client
 
     companion object {
         const val CAP_CALENDARS = "urn:ietf:params:jmap:calendars"

@@ -4,8 +4,9 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.net.HttpURLConnection
-import java.net.URL
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.util.concurrent.TimeUnit
 
 object FaviconRepository {
 
@@ -14,6 +15,7 @@ object FaviconRepository {
     private const val NEGATIVE_CACHE_TTL_MS = 24L * 60 * 60 * 1000
     private const val NEGATIVE_CACHE_MAX_SIZE = 2000
     private const val MAX_ICON_BYTES = 512 * 1024
+    private const val ICON_TIMEOUT_MS = 5_000
     // Favicons render full-bleed in a 44dp avatar circle (~132px at xxhdpi), so the
     // decoded edge is capped just above that: high enough to stay sharp, low enough
     // that a 512px .ico doesn't sit in memory at 512px.
@@ -497,22 +499,33 @@ object FaviconRepository {
         bitmap
     }
 
+    // Short-fuse variant of the shared stack: an icon is decoration, so it never
+    // holds a connection for long, and it must not follow a redirect off the proxy.
+    private val iconHttp: OkHttpClient by lazy {
+        AppHttp.noRedirects.newBuilder()
+            .connectTimeout(ICON_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
+            .readTimeout(ICON_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
+            .build()
+    }
+
     private fun fetchBytes(urlString: String): ByteArray? {
         if (!urlString.startsWith("https://")) return null
-        val conn = URL(urlString).openConnection() as HttpURLConnection
+        val request = Request.Builder()
+            .url(urlString)
+            .header("User-Agent", "Mozilla/5.0")
+            .get()
+            .build()
         return try {
-            conn.instanceFollowRedirects = false
-            conn.connectTimeout = 5000
-            conn.readTimeout = 5000
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0")
-            if (conn.responseCode != 200) return null
-            if (conn.contentLength > MAX_ICON_BYTES) return null
-            conn.inputStream.use { input ->
+            iconHttp.newCall(request).execute().use { response ->
+                if (response.code != 200) return null
+                val body = response.body ?: return null
+                if (body.contentLength() > MAX_ICON_BYTES) return null
+                val source = body.source()
                 val out = java.io.ByteArrayOutputStream()
                 val buf = ByteArray(8192)
                 var total = 0
                 while (true) {
-                    val n = input.read(buf)
+                    val n = source.read(buf)
                     if (n == -1) break
                     total += n
                     // Server-controlled stream: cap it so a hostile/broken host can't exhaust memory.
@@ -523,8 +536,6 @@ object FaviconRepository {
             }
         } catch (_: Exception) {
             null
-        } finally {
-            conn.disconnect()
         }
     }
 }

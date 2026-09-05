@@ -1307,9 +1307,9 @@ class JMapClient(private val context: Context) {
         // sharing the JmapClient instance itself (which is not thread-safe).
         private val sessionCache = rs.ltt.jmap.client.session.InMemorySessionCache()
 
-        // One shared client: reuses connection pool and dispatcher threads across
-        // uploads/downloads instead of allocating a fresh stack per call.
-        private val sharedHttp = OkHttpClient()
+        // Uploads/downloads ride the app-wide stack (see [AppHttp]); the
+        // per-call variants below only extend the call timeout.
+        private val sharedHttp get() = AppHttp.client
 
         /**
          * Server-provided URLs (upload/download/eventSource templates) receive Basic auth
