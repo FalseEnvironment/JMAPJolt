@@ -193,7 +193,7 @@
     <string name="contacts_export_done">Exported %1$d contact(s)</string>
     <string name="contacts_export_failed">Export failed</string>
     <string name="settings_load_images">Auto-load images</string>
-    <string name="settings_load_favicons">Auto-load favicons</string>
+    <string name="settings_load_favicons">Auto-load favicons (sends sender domains to icons.duckduckgo.com)</string>
 
     <!-- Onboarding: features screen -->
     <string name="onboarding_welcome_title">Welcome to\nJMAPJolt</string>

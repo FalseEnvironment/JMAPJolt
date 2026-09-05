@@ -3,8 +3,6 @@ package com.falseenvironment.jmapjolt
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
@@ -475,11 +473,10 @@ object FaviconRepository {
             return@withContext entry.bitmap
         }
 
-        val bytes = coroutineScope {
-            val ddg = async { fetchBytes("https://icons.duckduckgo.com/ip3/$domain.ico") }
-            val local = async { fetchBytes("https://$domain/favicon.ico") }
-            ddg.await() ?: local.await()
-        }
+        // Only the DuckDuckGo proxy is queried. Fetching https://<domain>/favicon.ico
+        // directly would hand the sender the user's IP and confirm the address is
+        // live the moment the message shows up in the list — a read receipt.
+        val bytes = fetchBytes("https://icons.duckduckgo.com/ip3/$domain.ico")
 
         if (bytes == null || bytes.size < 10) {
             synchronized(negCacheLock) { negativeCache[domain] = System.currentTimeMillis() }
