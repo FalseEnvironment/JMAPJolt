@@ -49,6 +49,11 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
         return h
     }
 
+    companion object {
+        /** Partial-rebind marker: only the avatar needs repainting. */
+        const val PAYLOAD_AVATAR = "avatar"
+    }
+
     /**
      * Rebinds only the rows whose email id is in [ids]. Row count and positions must be
      * unchanged — callers that add/remove/reorder rows still need a full refresh.
@@ -341,6 +346,129 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
 
     override fun getItemCount(): Int = activity.emails.size
 
+
+    /**
+     * Paints the 44dp avatar circle: selection check, contact photo, favicon or
+     * letter. Split out of onBindViewHolder so the contact index landing after the
+     * first rows are drawn can repaint just the avatars (see [PAYLOAD_AVATAR]).
+     */
+    private fun bindAvatar(holder: EmailHolder, item: DisplayEmail) {
+        val isSelected = activity.selectedEmails.contains(item.id)
+        val bg = android.graphics.drawable.GradientDrawable()
+        bg.shape = android.graphics.drawable.GradientDrawable.OVAL
+
+        if (isSelected) {
+            bg.setColor(activity.currentAccentColor.toColorInt())
+            holder.avatar.text = ""
+            holder.avatarImage.tag = null
+            val selPad = (7 * holder.itemView.resources.displayMetrics.density).toInt()
+            holder.avatarImage.setPadding(selPad, selPad, selPad, selPad)
+            holder.avatarImage.scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+            // load() via Coil cancels any in-flight favicon request on this view
+            holder.avatarImage.load(R.drawable.ic_lucide_check) { crossfade(false) }
+            holder.avatarImage.imageTintList = ColorStateList.valueOf(activity.getOnAccentColor())
+            holder.avatarImage.visibility = android.view.View.VISIBLE
+            val themeBg = activity.getDialogBackgroundColor()
+            holder.itemView.setBackgroundColor(darkenColor(themeBg, 0.85f))
+        } else {
+            holder.avatarImage.imageTintList = null
+            holder.avatarImage.setPadding(0, 0, 0, 0)
+            val letter =
+                    if (item.from.isNotBlank()) item.from.first().uppercaseChar().toString()
+                    else "?"
+
+            val domain =
+                    item.fromEmail.substringAfter("@", "").ifEmpty {
+                        EMAIL_IN_TEXT_REGEX
+                                .find(item.from)
+                                ?.value
+                                ?.substringAfter("@")
+                                ?: ""
+                    }
+            val normalizedDomain = if (domain.isNotEmpty()) FaviconRepository.getRootDomain(domain.lowercase()) else ""
+
+            val hashKey = if (normalizedDomain.isNotEmpty()) normalizedDomain else item.from
+            val hash = hashKey.hashCode()
+            val hue = kotlin.math.abs(hash % 360).toFloat()
+            val hashColor = android.graphics.Color.HSVToColor(floatArrayOf(hue, 0.55f, 0.75f))
+            holder.itemView.setBackgroundColor(Color.TRANSPARENT)
+
+            val loadFavicons = loadFaviconsEnabled
+            // A contact with a photo wins over the domain favicon: the sender is a person we know.
+            val contactPhoto = ContactAvatars.photoFor(item.fromEmail)
+
+            if (contactPhoto != null) {
+                (holder.avatarImage.getTag(R.id.tag_favicon_job) as? kotlinx.coroutines.Job)?.cancel()
+                holder.avatarImage.tag = null
+                holder.avatarImage.setPadding(0, 0, 0, 0)
+                holder.avatarImage.scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
+                holder.avatarImage.visibility = android.view.View.VISIBLE
+                holder.avatarImage.load(contactPhoto) {
+                    crossfade(false)
+                    transformations(CircleCropTransformation())
+                }
+                holder.avatar.text = ""
+                bg.setColor(hashColor)
+            } else if (loadFavicons && normalizedDomain.isNotEmpty()) {
+                // Offset from the theme background so dark favicons stay visible on dark themes
+                // (and light favicons on the light theme).
+                val neutralBg = when (activity.currentTheme) {
+                    "light" -> "#E8E8E8".toColorInt()
+                    "oled"  -> "#212121".toColorInt()
+                    else    -> "#383838".toColorInt()
+                }
+                bg.setColor(neutralBg)
+                // Full-bleed: the favicon fills the whole circle, no inset ring.
+                holder.avatarImage.setPadding(0, 0, 0, 0)
+                holder.avatarImage.scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
+                holder.avatar.text = letter
+                holder.avatarImage.visibility = android.view.View.VISIBLE
+                holder.avatarImage.setImageDrawable(null)
+                holder.avatarImage.tag = normalizedDomain
+                // Cancel any in-flight job so stale crossfades don't flicker on rebind.
+                (holder.avatarImage.getTag(R.id.tag_favicon_job) as? kotlinx.coroutines.Job)?.cancel()
+                val faviconJob = activity.lifecycleScope.launch {
+                    val bitmap = FaviconRepository.fetchFavicon(normalizedDomain)
+                    if (holder.avatarImage.tag != normalizedDomain) return@launch
+                    if (activity.selectedEmails.contains(item.id)) return@launch
+                    if (bitmap != null) {
+                        holder.avatarImage.load(bitmap) {
+                            crossfade(false)
+                            transformations(CircleCropTransformation())
+                        }
+                        holder.avatar.text = ""
+                    } else {
+                        (holder.avatar.background as? android.graphics.drawable.GradientDrawable)
+                            ?.setColor(hashColor)
+                        holder.avatar.text = letter
+                        holder.avatarImage.visibility = android.view.View.GONE
+                    }
+                }
+                holder.avatarImage.setTag(R.id.tag_favicon_job, faviconJob)
+            } else {
+                bg.setColor(hashColor)
+                holder.avatar.text = letter
+                holder.avatarImage.visibility = android.view.View.GONE
+            }
+        }
+        holder.avatar.background = bg
+    }
+
+    /**
+     * Partial rebind. [PAYLOAD_AVATAR] repaints only the avatar; anything else falls
+     * through to the full bind.
+     */
+    override fun onBindViewHolder(holder: EmailHolder, position: Int, payloads: MutableList<Any>) {
+        val item = activity.emails.getOrNull(position)
+        if (item != null && !item.isThreadMoreRow &&
+            payloads.isNotEmpty() && payloads.all { it == PAYLOAD_AVATAR }
+        ) {
+            bindAvatar(holder, item)
+            return
+        }
+        super.onBindViewHolder(holder, position, payloads)
+    }
+
     override fun onBindViewHolder(holder: EmailHolder, position: Int) {
         val item = activity.emails[position]
         val dp = holder.itemView.resources.displayMetrics.density
@@ -527,105 +655,7 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
             }
         }
 
-        val isSelected = activity.selectedEmails.contains(item.id)
-        val bg = android.graphics.drawable.GradientDrawable()
-        bg.shape = android.graphics.drawable.GradientDrawable.OVAL
-
-        if (isSelected) {
-            bg.setColor(activity.currentAccentColor.toColorInt())
-            holder.avatar.text = ""
-            holder.avatarImage.tag = null
-            val selPad = (7 * holder.itemView.resources.displayMetrics.density).toInt()
-            holder.avatarImage.setPadding(selPad, selPad, selPad, selPad)
-            holder.avatarImage.scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
-            // load() via Coil cancels any in-flight favicon request on this view
-            holder.avatarImage.load(R.drawable.ic_lucide_check) { crossfade(false) }
-            holder.avatarImage.imageTintList = ColorStateList.valueOf(activity.getOnAccentColor())
-            holder.avatarImage.visibility = android.view.View.VISIBLE
-            val themeBg = activity.getDialogBackgroundColor()
-            holder.itemView.setBackgroundColor(darkenColor(themeBg, 0.85f))
-        } else {
-            holder.avatarImage.imageTintList = null
-            holder.avatarImage.setPadding(0, 0, 0, 0)
-            val letter =
-                    if (item.from.isNotBlank()) item.from.first().uppercaseChar().toString()
-                    else "?"
-
-            val domain =
-                    item.fromEmail.substringAfter("@", "").ifEmpty {
-                        EMAIL_IN_TEXT_REGEX
-                                .find(item.from)
-                                ?.value
-                                ?.substringAfter("@")
-                                ?: ""
-                    }
-            val normalizedDomain = if (domain.isNotEmpty()) FaviconRepository.getRootDomain(domain.lowercase()) else ""
-
-            val hashKey = if (normalizedDomain.isNotEmpty()) normalizedDomain else item.from
-            val hash = hashKey.hashCode()
-            val hue = kotlin.math.abs(hash % 360).toFloat()
-            val hashColor = android.graphics.Color.HSVToColor(floatArrayOf(hue, 0.55f, 0.75f))
-            holder.itemView.setBackgroundColor(Color.TRANSPARENT)
-
-            val loadFavicons = loadFaviconsEnabled
-            // A contact with a photo wins over the domain favicon: the sender is a person we know.
-            val contactPhoto = ContactAvatars.photoFor(item.fromEmail)
-
-            if (contactPhoto != null) {
-                (holder.avatarImage.getTag(R.id.tag_favicon_job) as? kotlinx.coroutines.Job)?.cancel()
-                holder.avatarImage.tag = null
-                holder.avatarImage.setPadding(0, 0, 0, 0)
-                holder.avatarImage.scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
-                holder.avatarImage.visibility = android.view.View.VISIBLE
-                holder.avatarImage.load(contactPhoto) {
-                    crossfade(false)
-                    transformations(CircleCropTransformation())
-                }
-                holder.avatar.text = ""
-                bg.setColor(hashColor)
-            } else if (loadFavicons && normalizedDomain.isNotEmpty()) {
-                // Offset from the theme background so dark favicons stay visible on dark themes
-                // (and light favicons on the light theme).
-                val neutralBg = when (activity.currentTheme) {
-                    "light" -> "#E8E8E8".toColorInt()
-                    "oled"  -> "#212121".toColorInt()
-                    else    -> "#383838".toColorInt()
-                }
-                bg.setColor(neutralBg)
-                // Full-bleed: the favicon fills the whole circle, no inset ring.
-                holder.avatarImage.setPadding(0, 0, 0, 0)
-                holder.avatarImage.scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
-                holder.avatar.text = letter
-                holder.avatarImage.visibility = android.view.View.VISIBLE
-                holder.avatarImage.setImageDrawable(null)
-                holder.avatarImage.tag = normalizedDomain
-                // Cancel any in-flight job so stale crossfades don't flicker on rebind.
-                (holder.avatarImage.getTag(R.id.tag_favicon_job) as? kotlinx.coroutines.Job)?.cancel()
-                val faviconJob = activity.lifecycleScope.launch {
-                    val bitmap = FaviconRepository.fetchFavicon(normalizedDomain)
-                    if (holder.avatarImage.tag != normalizedDomain) return@launch
-                    if (activity.selectedEmails.contains(item.id)) return@launch
-                    if (bitmap != null) {
-                        holder.avatarImage.load(bitmap) {
-                            crossfade(false)
-                            transformations(CircleCropTransformation())
-                        }
-                        holder.avatar.text = ""
-                    } else {
-                        (holder.avatar.background as? android.graphics.drawable.GradientDrawable)
-                            ?.setColor(hashColor)
-                        holder.avatar.text = letter
-                        holder.avatarImage.visibility = android.view.View.GONE
-                    }
-                }
-                holder.avatarImage.setTag(R.id.tag_favicon_job, faviconJob)
-            } else {
-                bg.setColor(hashColor)
-                holder.avatar.text = letter
-                holder.avatarImage.visibility = android.view.View.GONE
-            }
-        }
-        holder.avatar.background = bg
+        bindAvatar(holder, item)
 
         holder.avatarContainer.setOnClickListener { activity.toggleSelection(item.id) }
         holder.itemView.setOnLongClickListener {

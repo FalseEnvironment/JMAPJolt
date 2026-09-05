@@ -79,19 +79,25 @@ object EmailCacheStore {
     /** Snapshot key for an account + folder pair. */
     fun bucket(accountEmail: String, folderId: Int): String = "$accountEmail#$folderId"
 
+    // load/save are called from lifecycleScope (Main). Room dispatches its own
+    // queries, but the row mapping below is per-row JSON work over a whole folder:
+    // keep the entire body off the main thread.
     suspend fun load(context: Context, bucket: String): List<DisplayEmail> =
-        database(context).cachedEmailDao().loadBucket(bucket).map { it.toDisplayEmail() }
+        withContext(Dispatchers.IO) {
+            database(context).cachedEmailDao().loadBucket(bucket).map { it.toDisplayEmail() }
+        }
 
     /** Replace a folder snapshot with the freshly fetched list (atomic). */
-    suspend fun save(context: Context, bucket: String, emails: List<DisplayEmail>) {
-        val rows = emails.map { it.toRow(bucket) }
-        val database = database(context)
-        database.withTransaction {
-            val dao = database.cachedEmailDao()
-            dao.clearBucket(bucket)
-            dao.upsert(rows)
+    suspend fun save(context: Context, bucket: String, emails: List<DisplayEmail>) =
+        withContext(Dispatchers.IO) {
+            val rows = emails.map { it.toRow(bucket) }
+            val database = database(context)
+            database.withTransaction {
+                val dao = database.cachedEmailDao()
+                dao.clearBucket(bucket)
+                dao.upsert(rows)
+            }
         }
-    }
 
     // --- mapping -----------------------------------------------------------
 

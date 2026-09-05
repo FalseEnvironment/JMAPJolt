@@ -484,6 +484,14 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Creating the EncryptedSharedPreferences (Tink keyset + Keystore) costs
+        // tens of ms. Start it here so it runs alongside layout inflation and the
+        // later loadAccounts()/loadUnifiedPushPreferences() hit the cached instance.
+        // SecureStorage.prefs stays synchronized, so a main-thread call that wins
+        // the race simply builds it itself — no behaviour depends on this landing.
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { SecureStorage.prefs(this@MainActivity) }
+        }
         // Android 15 (API 35) enforces edge-to-edge by default; opt out to keep
         // the existing layout which does not handle system bar insets manually.
         androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, true)
@@ -656,7 +664,9 @@ class MainActivity : AppCompatActivity() {
         jmapClient = JMapClient(this)
         // Purge the WebView disk cache: detail views run with LOAD_NO_CACHE, but
         // caches accumulated before that (or by other WebView writes) linger forever.
-        try { android.webkit.WebView(this).apply { clearCache(true); destroy() } } catch (_: Exception) {}
+        // Instantiating a WebView starts Chromium (100-300 ms), so this runs once
+        // ever, and after the first frame rather than inline in onCreate.
+        purgeWebViewCacheOnce()
         // One-time cleanup of the legacy flat JSON cache (replaced by the Room store), plus
         // the attachments staged for other apps, which are only needed while the share or
         // open is in flight.
@@ -671,11 +681,7 @@ class MainActivity : AppCompatActivity() {
         // (and the compose picker opens instantly) without waiting for the contacts tab.
         // The book lands after the first rows are already bound, so repaint the list once the
         // photo index exists (and again whenever the address book is reloaded or edited).
-        ContactAvatars.onIndexed = {
-            runOnUiThread {
-                if (::emailAdapter.isInitialized) emailAdapter.notifyDataSetChanged()
-            }
-        }
+        ContactAvatars.onIndexed = { runOnUiThread { rebindVisibleAvatars() } }
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching { ContactsRepository(this@MainActivity).warmCache() }
         }
@@ -1845,6 +1851,40 @@ class MainActivity : AppCompatActivity() {
             else -> listOf(role.lowercase())
         }
         return candidates.any { n == it }
+    }
+
+    /**
+     * One-shot WebView disk cache purge, posted past the first frame. The flag is
+     * versioned so a future cleanup can re-run by bumping the key.
+     */
+    private fun purgeWebViewCacheOnce() {
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        if (prefs.getBoolean(KEY_WEBVIEW_CACHE_CLEARED, false)) return
+        window.decorView.post {
+            try {
+                android.webkit.WebView(this).apply { clearCache(true); destroy() }
+                prefs.edit().putBoolean(KEY_WEBVIEW_CACHE_CLEARED, true).apply()
+            } catch (_: Exception) {
+                // Leave the flag unset so the purge is retried on the next launch.
+            }
+        }
+    }
+
+    /**
+     * Repaints the avatars of the rows currently on screen. The contact photo index
+     * lands after the first rows are bound; off-screen rows pick the photo up when
+     * they are bound, so only the visible range needs the nudge.
+     */
+    internal fun rebindVisibleAvatars() {
+        if (!::emailAdapter.isInitialized || !::emailsRecyclerView.isInitialized) return
+        // A notify during a layout pass corrupts RecyclerView child state; defer past it.
+        emailsRecyclerView.post {
+            val lm = emailsRecyclerView.layoutManager as? LinearLayoutManager ?: return@post
+            val first = lm.findFirstVisibleItemPosition()
+            val last = lm.findLastVisibleItemPosition()
+            if (first == RecyclerView.NO_POSITION || last < first) return@post
+            emailAdapter.notifyItemRangeChanged(first, last - first + 1, EmailAdapter.PAYLOAD_AVATAR)
+        }
     }
 
     private fun requestBatteryOptimizationExemption() {
@@ -3180,6 +3220,7 @@ class MainActivity : AppCompatActivity() {
     companion object {
         internal const val TAG = "MainActivity"
         private const val KEY_LAST_SELECTED_FOLDER = "last_selected_folder"
+        private const val KEY_WEBVIEW_CACHE_CLEARED = "webview_cache_cleared_v1"
         // Fallback poll cadence; each tick is only a cheap Email-state probe,
         // the full refetch runs just when the state actually moved.
         private const val SYNC_POLL_INTERVAL_MS = 10_000L
