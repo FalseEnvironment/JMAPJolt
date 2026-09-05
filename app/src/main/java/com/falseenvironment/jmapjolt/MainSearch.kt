@@ -229,6 +229,8 @@ internal fun MainActivity.warmSearchFolderCache() {
             }.getOrDefault(emptyList())
             if (cached.isNotEmpty() && folderCache[folderId] == null) {
                 folderCache[folderId] = cached
+                // Straight off disk — nothing to write back.
+                folderCache.markClean(folderId)
                 if (isSearchActive && searchScope == null) {
                     // Never mutate the adapter from inside this callback directly: it
                     // can land mid-layout-pass and corrupt RecyclerView child state

@@ -88,6 +88,7 @@ import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -394,8 +395,9 @@ class MainActivity : AppCompatActivity() {
     internal var currentAccountEmail: String? = null
     internal var selectedFolder: Int = R.id.nav_inbox
     internal var prevUpdateFolder: Int = -1
-    internal val folderCache = mutableMapOf<Int, List<DisplayEmail>>()
+    internal val folderCache = FolderCache()
     private var syncJob: Job? = null
+    private var cacheSaveJob: Job? = null
     @Volatile private var lastSseRefreshAt = 0L
     internal var searchHintJob: Job? = null
     internal var currentSettingsSection: SettingsSection = SettingsSection.ROOT
@@ -2945,6 +2947,8 @@ class MainActivity : AppCompatActivity() {
             } ?: emptyList()
             if (cached.isNotEmpty()) {
                 folderCache[restoredFolder] = cached
+                // Straight off disk — nothing to write back.
+                folderCache.markClean(restoredFolder)
                 updateEmailsList(cached)
                 updateTopBarState()
                 rebuildDrawerMenu()
@@ -3129,12 +3133,13 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
-        saveEmailCache()
+        // Leaving the screen: write now instead of waiting out the debounce.
+        saveEmailCache(immediate = true)
     }
 
     override fun onStop() {
         super.onStop()
-        saveEmailCache()
+        saveEmailCache(immediate = true)
     }
 
     internal fun getCurrentMailboxTitle(): String {
@@ -3170,6 +3175,8 @@ class MainActivity : AppCompatActivity() {
         // the full refetch runs just when the state actually moved.
         private const val SYNC_POLL_INTERVAL_MS = 10_000L
         private const val SSE_REFRESH_DEBOUNCE_MS = 3_000L
+        // A burst of swipes/stars lands within this window and produces one write.
+        private const val CACHE_SAVE_DEBOUNCE_MS = 500L
         private const val SSE_BACKOFF_INITIAL_MS = 5_000L
         private const val SSE_BACKOFF_MAX_MS = 60_000L
         private const val SSE_NO_ACCOUNT_RETRY_MS = 30_000L
@@ -3777,24 +3784,49 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    internal fun saveEmailCache() {
+    /**
+     * Persists the folders touched since the last write.
+     *
+     * Called from ~30 mutation sites, so it does two things to stay cheap: only
+     * dirty buckets are written (see [FolderCache]), and a burst of taps or
+     * swipes is coalesced into a single pass by [CACHE_SAVE_DEBOUNCE_MS].
+     * Pass [immediate] to skip the debounce when the activity is going away.
+     */
+    internal fun saveEmailCache(immediate: Boolean = false) {
         if (currentAccountEmail == null) return
         if (folderCache.isEmpty() && emails.isEmpty()) return
-        val snapshot = HashMap(folderCache)
-        snapshot[selectedFolder] = emails.toList()
+        // The visible folder always counts: `emails` is the live list and can be
+        // ahead of the folderCache entry for that folder.
+        folderCache.markDirty(selectedFolder)
         getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
                 .putInt(KEY_LAST_SELECTED_FOLDER, selectedFolder)
                 .apply()
-        val activity = this
-        lifecycleScope.launch {
-            snapshot.forEach { (folderId, list) ->
-                val bucket = cacheBucket(folderId) ?: return@forEach
-                runCatching {
-                    com.falseenvironment.jmapjolt.cache.EmailCacheStore.save(activity, bucket, list)
-                }
+        cacheSaveJob?.cancel()
+        cacheSaveJob = lifecycleScope.launch {
+            if (!immediate) delay(CACHE_SAVE_DEBOUNCE_MS)
+            val pending = folderCache.takeDirty()
+            if (pending.isEmpty()) return@launch
+            val snapshot = pending.mapNotNull { folderId ->
+                val list = if (folderId == selectedFolder) emails.toList() else folderCache[folderId]
+                if (list == null) null else folderId to list
             }
-            InboxWidgetProvider.refreshAll(applicationContext)
+            // The dirty set is already emptied, so the writes must finish even if
+            // the scope is cancelled mid-pass; otherwise those folders are lost.
+            withContext(NonCancellable) { writeBuckets(snapshot) }
         }
+    }
+
+    /** Writes each (folder, snapshot) pair; folders that fail stay dirty for the next pass. */
+    private suspend fun writeBuckets(snapshot: List<Pair<Int, List<DisplayEmail>>>) {
+        val failed = mutableListOf<Int>()
+        snapshot.forEach { (folderId, list) ->
+            val bucket = cacheBucket(folderId) ?: return@forEach
+            runCatching {
+                com.falseenvironment.jmapjolt.cache.EmailCacheStore.save(this, bucket, list)
+            }.onFailure { failed.add(folderId) }
+        }
+        if (failed.isNotEmpty()) folderCache.restoreDirty(failed)
+        InboxWidgetProvider.refreshAll(applicationContext)
     }
 }
 

@@ -866,6 +866,8 @@ internal fun MainActivity.loadOfflineCache(folderId: Int) {
         // Skip if the user already switched folders or the network beat us to it.
         if (cached.isEmpty() || selectedFolder != folderId || emails.isNotEmpty()) return@launch
         folderCache[folderId] = cached
+        // Straight off disk — nothing to write back.
+        folderCache.markClean(folderId)
         updateEmailsList(cached)
     }
 }

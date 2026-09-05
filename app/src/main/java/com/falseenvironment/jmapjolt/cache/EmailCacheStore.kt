@@ -9,6 +9,8 @@ import androidx.security.crypto.MasterKey
 import com.falseenvironment.jmapjolt.DisplayEmail
 import com.falseenvironment.jmapjolt.EmailAttachmentInfo
 import com.falseenvironment.jmapjolt.PreviewText
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 import org.json.JSONArray
 import org.json.JSONObject
@@ -28,9 +30,17 @@ object EmailCacheStore {
 
     @Volatile private var db: EmailCacheDatabase? = null
 
-    private fun database(context: Context): EmailCacheDatabase {
-        return db ?: synchronized(this) {
-            db ?: build(context.applicationContext).also { db = it }
+    /**
+     * The first call loads the SQLCipher native library and builds Room, the
+     * MasterKey and EncryptedSharedPreferences — all blocking work. load()/save()
+     * are called from lifecycleScope (Main), so the build runs on IO.
+     */
+    private suspend fun database(context: Context): EmailCacheDatabase {
+        db?.let { return it }
+        return withContext(Dispatchers.IO) {
+            synchronized(this@EmailCacheStore) {
+                db ?: build(context.applicationContext).also { db = it }
+            }
         }
     }
 
