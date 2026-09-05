@@ -881,29 +881,6 @@ class JMapClient(private val context: Context) {
         }
     }
 
-    private fun buildSessionCandidates(rawInput: String): List<String> {
-        val input = rawInput.trim().removeSuffix("/")
-        if (input.isBlank()) return emptyList()
-
-        // Credentials travel as Basic auth: never allow cleartext, upgrade http:// input.
-        val withScheme = when {
-            input.startsWith("https://", ignoreCase = true) -> input
-            input.startsWith("http://", ignoreCase = true) -> "https://" + input.substringAfter("://")
-            else -> "https://$input"
-        }
-
-        val base = withScheme.removeSuffix("/jmap").removeSuffix("/jmap/session").removeSuffix("/")
-        // Reject if the URL is structurally invalid after scheme normalisation.
-        val parsed = base.toHttpUrlOrNull() ?: return emptyList()
-        if (parsed.scheme != "https") return emptyList()
-        return listOf(
-            "$base/",
-            "$base/.well-known/jmap",
-            "$base/jmap",
-            "$base/jmap/session"
-        ).distinct()
-    }
-
     private fun uploadBlob(
         connectedAccount: ConnectedAccount,
         attachment: Attachment,
@@ -1310,6 +1287,39 @@ class JMapClient(private val context: Context) {
         // Uploads/downloads ride the app-wide stack (see [AppHttp]); the
         // per-call variants below only extend the call timeout.
         private val sharedHttp get() = AppHttp.client
+
+        private val SCHEME_PREFIX = Regex("^([a-zA-Z][a-zA-Z0-9+.\\-]*)://")
+
+        /**
+         * Session endpoints to try, in order, for what the user typed. Pure string work,
+         * hence internal: covered by JMapClientUrlTest.
+         */
+        internal fun buildSessionCandidates(rawInput: String): List<String> {
+            val input = rawInput.trim()
+            if (input.isBlank()) return emptyList()
+
+            // Credentials travel as Basic auth: never allow cleartext, so the scheme is
+            // dropped here and https re-applied below. Anything that is not http(s) is
+            // not a server address the app can use.
+            val scheme = SCHEME_PREFIX.find(input)
+            val schemeName = scheme?.groupValues?.get(1)?.lowercase()
+            if (schemeName != null && schemeName != "http" && schemeName != "https") return emptyList()
+            val authority = input.drop(scheme?.value?.length ?: 0).trimEnd('/')
+            // A bare scheme ("http://") leaves nothing to connect to.
+            if (authority.isBlank()) return emptyList()
+
+            val base = "https://$authority"
+                .removeSuffix("/jmap").removeSuffix("/jmap/session").removeSuffix("/")
+            // Reject if the URL is structurally invalid after scheme normalisation.
+            val parsed = base.toHttpUrlOrNull() ?: return emptyList()
+            if (parsed.scheme != "https") return emptyList()
+            return listOf(
+                "$base/",
+                "$base/.well-known/jmap",
+                "$base/jmap",
+                "$base/jmap/session"
+            ).distinct()
+        }
 
         /**
          * Server-provided URLs (upload/download/eventSource templates) receive Basic auth
