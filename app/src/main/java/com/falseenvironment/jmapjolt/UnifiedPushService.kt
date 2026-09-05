@@ -50,7 +50,7 @@ class UnifiedPushService : MessagingReceiver() {
     }
 
     override fun onNewEndpoint(context: android.content.Context, endpoint: String, instance: String) {
-        Log.d(TAG, "UnifiedPush new endpoint (instance=$instance): $endpoint")
+        Log.d(TAG, "UnifiedPush new endpoint (instance=$instance, host=${LogRedact.host(endpoint)})")
         context.getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             .edit()
             .putString(KEY_LAST_UP_ENDPOINT, endpoint)
@@ -65,7 +65,7 @@ class UnifiedPushService : MessagingReceiver() {
                 return@launch
             }
             if (!endpoint.startsWith("https://")) {
-                Log.w(TAG, "Rejecting non-HTTPS push endpoint: $endpoint")
+                Log.w(TAG, "Rejecting non-HTTPS push endpoint (host=${LogRedact.host(endpoint)})")
                 return@launch
             }
             val deviceClientId = getOrCreateDeviceClientId(context)

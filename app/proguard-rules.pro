@@ -39,3 +39,13 @@
 
 # --- App services/receivers/widgets referenced from the manifest are kept by
 #     AGP automatically; nothing extra needed here. ---
+
+# --- Logging ---
+# Strip debug/verbose/info logging from release builds so endpoints, URLs and
+# account addresses can never reach logcat on a shipped APK. Warnings and
+# errors are kept: they carry no sensitive payloads and aid crash triage.
+-assumenosideeffects class android.util.Log {
+    public static int d(...);
+    public static int v(...);
+    public static int i(...);
+}

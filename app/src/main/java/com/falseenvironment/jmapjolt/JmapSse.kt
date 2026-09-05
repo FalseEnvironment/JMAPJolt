@@ -50,7 +50,7 @@ object JmapSse {
                 }
                 resolved
             } catch (e: Throwable) {
-                Log.e(TAG, "Failed to fetch JMAP session for ${account.email}", e)
+                Log.e(TAG, "Failed to fetch JMAP session for ${LogRedact.email(account.email)}", e)
                 null
             } finally {
                 try { conn.disconnect() } catch (_: Throwable) {}

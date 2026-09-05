@@ -1796,7 +1796,7 @@ class MainActivity : AppCompatActivity() {
                     mailboxNameMatchesRole(mbox.name, role)
                 }?.id
                 ?: run {
-                    Log.w(TAG, "resolveMailboxIdByRole: no '$role' mailbox for ${account.email}; " +
+                    Log.w(TAG, "resolveMailboxIdByRole: no '$role' mailbox for ${LogRedact.email(account.email)}; " +
                             "available=${mailboxes.joinToString { "${it.name}/${it.role}" }}")
                     null
                 }
@@ -1819,7 +1819,7 @@ class MainActivity : AppCompatActivity() {
             // Invalidate cached mailbox list so the new folder shows up in pickers.
             mailboxCache = null
         } else {
-            Log.w(TAG, "Could not resolve or create Archive mailbox for ${account.email}")
+            Log.w(TAG, "Could not resolve or create Archive mailbox for ${LogRedact.email(account.email)}")
         }
         return created
     }

@@ -137,13 +137,13 @@ class JmapEventSourceService : Service() {
                 try {
                     val sseUrl = JmapSse.resolveEventSourceUrl(account)
                     if (sseUrl == null) {
-                        Log.w(TAG, "No eventSourceUrl for ${account.email} — retrying in ${backoffMs}ms")
+                        Log.w(TAG, "No eventSourceUrl for ${LogRedact.email(account.email)} — retrying in ${backoffMs}ms")
                         delay(backoffMs)
                         backoffMs = minOf(backoffMs * 2, BACKOFF_MAX_MS)
                         continue
                     }
                     backoffMs = BACKOFF_INITIAL_MS
-                    Log.d(TAG, "Connecting SSE for ${account.email}: $sseUrl")
+                    Log.d(TAG, "Connecting SSE for ${LogRedact.email(account.email)} (host=${LogRedact.host(sseUrl)})")
                     if (fallbackWorkerCancelled.not()) {
                         fallbackWorkerCancelled = true
                         EmailSyncWorker.cancel(this@JmapEventSourceService)
@@ -156,10 +156,10 @@ class JmapEventSourceService : Service() {
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Throwable) {
-                    Log.e(TAG, "SSE error for ${account.email}, reconnecting in ${backoffMs}ms", e)
+                    Log.e(TAG, "SSE error for ${LogRedact.email(account.email)}, reconnecting in ${backoffMs}ms", e)
                     consecutiveFailures++
                     if (consecutiveFailures >= SSE_FAILURES_BEFORE_FALLBACK && fallbackWorkerCancelled) {
-                        Log.w(TAG, "SSE unstable for ${account.email} — re-enabling periodic fallback")
+                        Log.w(TAG, "SSE unstable for ${LogRedact.email(account.email)} — re-enabling periodic fallback")
                         fallbackWorkerCancelled = false
                         EmailSyncWorker.schedule(this@JmapEventSourceService)
                     }
@@ -174,7 +174,7 @@ class JmapEventSourceService : Service() {
 
     private fun handleEvent(type: String, data: String, account: JMapClient.ConnectedAccount) {
         if (!JmapSse.isRelevantStateChange(data)) return
-        Log.d(TAG, "StateChange for ${account.email} — triggering sync")
+        Log.d(TAG, "StateChange for ${LogRedact.email(account.email)} — triggering sync")
         WorkManager.getInstance(this).enqueue(
             OneTimeWorkRequestBuilder<EmailSyncWorker>()
                 .setInputData(workDataOf(EmailSyncWorker.KEY_ACCOUNT_EMAIL to account.email))
