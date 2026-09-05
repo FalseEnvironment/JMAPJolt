@@ -118,10 +118,16 @@ class JMapClient(private val context: Context) {
         }
     }
 
+    /**
+     * One page of a mailbox: [limit] emails starting at [position] in the folder's
+     * receivedAt order. Infinite scroll asks for the next window instead of
+     * re-querying from zero with a bigger limit.
+     */
     suspend fun fetchEmails(
         connectedAccount: ConnectedAccount,
         mailboxId: String? = null,
-        limit: Long = DEFAULT_EMAIL_LIMIT
+        limit: Long = DEFAULT_EMAIL_LIMIT,
+        position: Long = 0
     ): List<EmailSummary> = withContext(Dispatchers.IO) {
         val client = newClient(connectedAccount)
         client.use { jmapClient ->
@@ -130,7 +136,7 @@ class JMapClient(private val context: Context) {
                 ?: throw IllegalStateException("No mail account found")
 
             if (!mailboxId.isNullOrBlank()) {
-                return@withContext fetchEmailsForMailbox(jmapClient, accountId, mailboxId, limit)
+                return@withContext fetchEmailsForMailbox(jmapClient, accountId, mailboxId, limit, position)
             }
 
             val inboxIds = queryMailboxIds(jmapClient, accountId, JSONObject().put("role", "inbox"))
@@ -139,7 +145,7 @@ class JMapClient(private val context: Context) {
             }
 
             for (candidate in inboxIds) {
-                val result = fetchEmailsForMailbox(jmapClient, accountId, candidate, limit)
+                val result = fetchEmailsForMailbox(jmapClient, accountId, candidate, limit, position)
                 if (result.isNotEmpty()) return@withContext result
             }
 
@@ -170,9 +176,15 @@ class JMapClient(private val context: Context) {
             }
         }
 
+    /**
+     * Full summaries for [ids]. [withBodies] pulls the HTML/text body values too —
+     * needed when opening an email, wasteful for list rows (the detail view refetches
+     * a body when it is blank), so list callers pass false.
+     */
     suspend fun fetchEmailsById(
         connectedAccount: ConnectedAccount,
-        ids: List<String>
+        ids: List<String>,
+        withBodies: Boolean = true
     ): List<EmailSummary> = withContext(Dispatchers.IO) {
         if (ids.isEmpty()) return@withContext emptyList()
         val client = newClient(connectedAccount)
@@ -180,12 +192,17 @@ class JMapClient(private val context: Context) {
             val session = jmapClient.getSession().get(12, TimeUnit.SECONDS)
             val accountId = session.getPrimaryAccount(MailAccountCapability::class.java)
                 ?: return@withContext emptyList()
+            val listProperties = arrayOf(
+                "id", "threadId", "subject", "from", "to", "cc", "bcc",
+                "preview", "keywords", "receivedAt", "attachments"
+            )
+            val bodyProperties = listProperties + arrayOf("htmlBody", "textBody", "bodyValues")
             val getCall = rs.ltt.jmap.common.method.call.email.GetEmailMethodCall.builder()
                 .accountId(accountId)
                 .ids(ids.toTypedArray())
-                .properties(arrayOf("id", "threadId", "subject", "from", "to", "cc", "bcc", "preview", "keywords", "receivedAt", "htmlBody", "textBody", "bodyValues", "attachments"))
-                .fetchHTMLBodyValues(true)
-                .fetchTextBodyValues(true)
+                .properties(if (withBodies) bodyProperties else listProperties)
+                .fetchHTMLBodyValues(withBodies)
+                .fetchTextBodyValues(withBodies)
                 .build()
             val getResponse = jmapClient.call(getCall).get()
                 .getMain(rs.ltt.jmap.common.method.response.email.GetEmailMethodResponse::class.java)
@@ -194,7 +211,9 @@ class JMapClient(private val context: Context) {
                 val fromName = email.from?.firstOrNull()?.name ?: ""
                 val isSeen = email.keywords?.containsKey("\$seen") == true
                 val isStarred = email.keywords?.containsKey("\$flagged") == true
-                val body = email.htmlBody?.firstOrNull()?.let { part ->
+                // Without body values the preview must NOT stand in for the body:
+                // a blank fullBody is what makes the detail view fetch the real one.
+                val body = if (!withBodies) "" else email.htmlBody?.firstOrNull()?.let { part ->
                     email.bodyValues?.get(part.partId)?.value
                 } ?: email.textBody?.firstOrNull()?.let { part ->
                     email.bodyValues?.get(part.partId)?.value
@@ -246,12 +265,14 @@ class JMapClient(private val context: Context) {
                 .filter { it !in haveIds }
                 .distinct()
         }
-        if (missingIds.isEmpty()) emptyList() else fetchEmailsById(connectedAccount, missingIds)
+        // These rows join the list, so skip the bodies; the detail view fetches one on open.
+        if (missingIds.isEmpty()) emptyList() else fetchEmailsById(connectedAccount, missingIds, withBodies = false)
     }
 
     suspend fun fetchStarredEmails(
         connectedAccount: ConnectedAccount,
-        limit: Long = DEFAULT_EMAIL_LIMIT
+        limit: Long = DEFAULT_EMAIL_LIMIT,
+        position: Long = 0
     ): List<EmailSummary> = withContext(Dispatchers.IO) {
         val client = newClient(connectedAccount)
         client.use { jmapClient ->
@@ -273,6 +294,7 @@ class JMapClient(private val context: Context) {
                 .accountId(accountId)
                 .filter(filter)
                 .sort(arrayOf(rs.ltt.jmap.common.entity.Comparator("receivedAt", false)))
+                .position(position)
                 .limit(limit)
                 .build()
 
@@ -325,7 +347,8 @@ class JMapClient(private val context: Context) {
         jmapClient: JmapClient,
         accountId: String,
         mailboxId: String?,
-        limit: Long = DEFAULT_EMAIL_LIMIT
+        limit: Long = DEFAULT_EMAIL_LIMIT,
+        position: Long = 0
     ): List<EmailSummary> {
         val filter = if (!mailboxId.isNullOrBlank()) {
             rs.ltt.jmap.common.entity.filter.EmailFilterCondition.builder().inMailbox(mailboxId).build()
@@ -335,6 +358,7 @@ class JMapClient(private val context: Context) {
             .accountId(accountId)
             .filter(filter)
             .sort(arrayOf(rs.ltt.jmap.common.entity.Comparator("receivedAt", false)))
+            .position(position)
             .limit(limit)
             .build()
 
@@ -584,7 +608,8 @@ class JMapClient(private val context: Context) {
     suspend fun fetchEmailsByKeyword(
         connectedAccount: ConnectedAccount,
         keyword: String,
-        limit: Long = DEFAULT_EMAIL_LIMIT
+        limit: Long = DEFAULT_EMAIL_LIMIT,
+        position: Long = 0
     ): List<EmailSummary> = withContext(Dispatchers.IO) {
         val client = newClient(connectedAccount)
         client.use { jmapClient ->
@@ -606,6 +631,7 @@ class JMapClient(private val context: Context) {
                 .accountId(accountId)
                 .filter(filter)
                 .sort(arrayOf(rs.ltt.jmap.common.entity.Comparator("receivedAt", false)))
+                .position(position)
                 .limit(limit)
                 .build()
 

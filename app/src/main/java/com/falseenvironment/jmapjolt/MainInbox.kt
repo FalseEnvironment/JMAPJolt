@@ -105,20 +105,99 @@ internal fun MainActivity.setupAdapters() {
 internal fun MainActivity.setupInfiniteScroll(layoutManager: LinearLayoutManager) {
     emailsRecyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
         override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
-            if (dy <= 0 || isLoadingMore) return
-            // Only paginate when the current page is full — a short page means
-            // we already have every email the folder holds.
-            if (emails.size < emailLimit) return
+            // The last page came back short: the folder holds nothing more.
+            if (dy <= 0 || isLoadingMore || reachedFolderEnd) return
 
             val lastVisible = layoutManager.findLastVisibleItemPosition()
             if (lastVisible >= emails.size - MainActivity.LOAD_MORE_THRESHOLD) {
                 isLoadingMore = true
-                emailLimit += JMapClient.DEFAULT_EMAIL_LIMIT
-                refreshInboxNow()
+                loadNextEmailPage()
             }
         }
     })
 }
+
+/**
+ * One page of [folderId] starting at [position]. Mirrors the per-folder dispatch
+ * the periodic sync uses, so both take the same route to the server.
+ */
+internal suspend fun MainActivity.fetchFolderPage(
+    account: JMapClient.ConnectedAccount,
+    folderId: Int,
+    limit: Long,
+    position: Long
+): List<JMapClient.EmailSummary> {
+    val labelKeyword = labelNavIds[folderId]
+    val subfolderMailboxId = subfolderNavIds[folderId]
+    val role = getFolderRole(folderId)
+    return when {
+        labelKeyword != null -> jmapClient.fetchEmailsByKeyword(account, labelKeyword, limit, position)
+        subfolderMailboxId != null -> jmapClient.fetchEmails(account, subfolderMailboxId, limit, position)
+        folderId == R.id.nav_favourite -> jmapClient.fetchStarredEmails(account, limit, position)
+        folderId == R.id.nav_inbox -> jmapClient.fetchEmails(account, limit = limit, position = position)
+        role != null -> resolveMailboxIdByRole(account, role)
+            ?.let { jmapClient.fetchEmails(account, it, limit, position) }
+            ?: emptyList()
+        else -> jmapClient.fetchEmails(account, null, limit, position)
+    }
+}
+
+/**
+ * Appends the next page instead of re-querying the folder from zero with a larger
+ * limit: page five used to re-download the four pages already on screen.
+ */
+internal fun MainActivity.loadNextEmailPage() {
+    val account = connectedAccount ?: run { isLoadingMore = false; return }
+    val folderId = selectedFolder
+    // The unified inbox interleaves several accounts into one sorted list, so a
+    // single server-side position means nothing there: keep the window refetch.
+    if (folderId == R.id.nav_unified_inbox) {
+        emailLimit += JMapClient.DEFAULT_EMAIL_LIMIT
+        refreshInboxNow()
+        return
+    }
+    val position = folderQueryCount.toLong()
+    lifecycleScope.launch {
+        val page = try {
+            fetchFolderPage(account, folderId, JMapClient.DEFAULT_EMAIL_LIMIT, position)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            Log.w(MainActivity.TAG, "Page fetch failed at position $position", e)
+            isLoadingMore = false
+            return@launch
+        }
+        // The user switched folders while the page was in flight.
+        if (selectedFolder != folderId) {
+            isLoadingMore = false
+            return@launch
+        }
+        if (page.size < JMapClient.DEFAULT_EMAIL_LIMIT) reachedFolderEnd = true
+        folderQueryCount = (position + page.size).toInt()
+        if (page.isEmpty()) {
+            isLoadingMore = false
+            return@launch
+        }
+        val appended = page.map { it.toDisplayEmail(account.email) }
+        val merged = PendingMutations.apply(
+            ((folderCache[folderId] ?: emails.toList()) + appended).distinctBy { it.id },
+            folderId
+        )
+        folderCache[folderId] = merged
+        // The periodic sync refetches `emailLimit` rows from zero: grow the window
+        // so a later refresh keeps the pages the user scrolled to.
+        emailLimit = maxOf(emailLimit, merged.size.toLong())
+        updateEmailsList(merged)
+        persistOfflineCache(folderId, merged)
+    }
+}
+
+/** List-row projection of a server summary (no body: the detail view fetches it on open). */
+internal fun JMapClient.EmailSummary.toDisplayEmail(accountEmail: String) = DisplayEmail(
+    id, subject, from, fromEmail, preview, fullBody, seen, isStarred, receivedAt, toEmail,
+    ccEmail = ccEmail, bccEmail = bccEmail, attachments = attachments,
+    accountEmail = accountEmail, labels = keywords.toList(), threadId = threadId
+)
 
 internal fun MainActivity.attachLabelDrag() {
     if (labelDragHelper != null) return
@@ -826,6 +905,8 @@ internal fun MainActivity.applyFolderFilterAndRefresh() {
     // New folder starts at the first page again.
     emailLimit = JMapClient.DEFAULT_EMAIL_LIMIT
     isLoadingMore = false
+    reachedFolderEnd = false
+    folderQueryCount = 0
     val folderTitle = getCurrentMailboxTitle()
     supportActionBar?.title = folderTitle
     updateCustomTopBar(folderTitle, inMailbox = true)

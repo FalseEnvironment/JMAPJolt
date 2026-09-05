@@ -388,6 +388,12 @@ class MainActivity : AppCompatActivity() {
     internal var emailLimit = JMapClient.DEFAULT_EMAIL_LIMIT
     // True while a "load more" fetch is in flight, to avoid stacking requests.
     internal var isLoadingMore = false
+    // Set when a page came back shorter than requested: the folder has no more rows.
+    internal var reachedFolderEnd = false
+    // Rows fetched from the folder's own query so far. Not the same as emails.size:
+    // inbox threading adds members that live in other mailboxes, and counting those
+    // would skip rows when asking for the next page's position.
+    internal var folderQueryCount = 0
     internal lateinit var emailAdapter: EmailAdapter
     internal lateinit var jmapClient: JMapClient
     internal var connectedAccount: JMapClient.ConnectedAccount? = null
@@ -2019,6 +2025,9 @@ class MainActivity : AppCompatActivity() {
                                 } catch (_: Exception) { emptyList() }
                                 (newEmailsList + extra).sortedByDescending { it.receivedAt }
                             } else newEmailsList
+                            // A window shorter than requested is the whole folder.
+                            reachedFolderEnd = fresh.size < emailLimit
+                            folderQueryCount = fresh.size
                             val mergedList = PendingMutations.apply(
                                 applyOptimisticFavorite(threadedList, isFav), currentFolderId
                             )
