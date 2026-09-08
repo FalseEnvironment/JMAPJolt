@@ -18,8 +18,11 @@ internal data class ThemeTokens(
     val surface: Int,
     // Inset strips (compose formatting bar) — recedes below [background].
     val surfaceVariant: Int,
-    // Settings grouped-list cards; null keeps the Legacy `bg_settings_card` drawable.
-    val surfaceCard: Int?,
+    // Settings grouped-list cards. Legacy used to leave this null and fall back to
+    // `bg_settings_card`, whose `?attr/colorSurfaceVariant` follows the system
+    // dark-mode setting rather than the theme picked in Settings — on a light-mode
+    // phone that painted a light card under Legacy's light text.
+    val surfaceCard: Int,
     val surfaceDialog: Int,
     val surfaceSnackbar: Int,
     val textPrimary: Int,
@@ -48,7 +51,7 @@ private fun tokens(
     background: String,
     surface: String,
     surfaceVariant: String,
-    surfaceCard: String?,
+    surfaceCard: String,
     surfaceDialog: String,
     surfaceSnackbar: String,
     textPrimary: String,
@@ -65,7 +68,7 @@ private fun tokens(
     background = background.toColorInt(),
     surface = surface.toColorInt(),
     surfaceVariant = surfaceVariant.toColorInt(),
-    surfaceCard = surfaceCard?.toColorInt(),
+    surfaceCard = surfaceCard.toColorInt(),
     surfaceDialog = surfaceDialog.toColorInt(),
     surfaceSnackbar = surfaceSnackbar.toColorInt(),
     textPrimary = textPrimary.toColorInt(),
@@ -84,7 +87,7 @@ private fun tokens(
 internal val THEME_TOKENS: Map<String, ThemeTokens> = mapOf(
     "gray" to tokens(
         background = "#212126", surface = "#2A2A30", surfaceVariant = "#1C1C22",
-        surfaceCard = null, surfaceDialog = "#242429", surfaceSnackbar = "#333338",
+        surfaceCard = "#49454F", surfaceDialog = "#242429", surfaceSnackbar = "#333338",
         textPrimary = "#ECECF1", textSecondary = "#90909A", divider = "#38383F",
         inputBox = "#2E2E34", inputStroke = "#454552", inputLabel = "#B0B0BA",
         inputText = "#FFFFFF",

@@ -9,4 +9,8 @@
     <color name="contacts_delete_red">#E5484D</color>
 
     <!-- Ripple / state layer -->
+    <!-- Settings grouped-list card, first frame only: applyTheme repaints it from
+         ThemeTokens.surfaceCard. Fixed (not DayNight) so a light-mode system does
+         not flash a light card under a dark app theme. -->
+    <color name="settingsCardFallback">#49454F</color>
 </resources>

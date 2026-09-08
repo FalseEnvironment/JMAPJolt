@@ -49,7 +49,13 @@ android {
         abi {
             isEnable = true
             reset()
-            include("arm64-v8a", "armeabi-v7a")
+            // -PemulatorAbi adds x86_64 for the screenshot emulator only; shipped
+            // builds never pass it, so the released outputs stay ARM-only.
+            if (project.hasProperty("emulatorAbi")) {
+                include("arm64-v8a", "armeabi-v7a", "x86_64")
+            } else {
+                include("arm64-v8a", "armeabi-v7a")
+            }
             isUniversalApk = false
         }
     }

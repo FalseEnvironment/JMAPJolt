@@ -108,29 +108,22 @@ internal fun MainActivity.applyTheme() {
     // Settings grouped-list cards: tint per theme instead of a single fixed gray,
     // so Iris/OLED/Snow read as their own surface instead of borrowing the app's
     // static Material3 colorSurfaceVariant.
-    // Legacy (surfaceCard == null) keeps the original bg_settings_card drawable.
+    // Legacy included: it used to fall through to `bg_settings_card`, which resolves
+    // `?attr/colorSurfaceVariant` against the system dark-mode setting, so on a
+    // light-mode phone the card came out light under Legacy's light text.
     val cardBg = t.surfaceCard
-    if (cardBg != null) {
-        val d = resources.displayMetrics.density
-        val cardDrawable = { GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = 20 * d
-            setColor(cardBg)
-        } }
-        listOf(
-            settingsAccountContainer,
-            settingsThemeContainer, settingsGeneralContainer, settingsLabelsContainer,
-            settingsUnifiedPushContainer, settingsCalendarContainer,
-            settingsContactsContainer, settingsInfoRow
-        ).forEach { it.background = cardDrawable() }
-    } else {
-        listOf(
-            settingsAccountContainer,
-            settingsThemeContainer, settingsGeneralContainer, settingsLabelsContainer,
-            settingsUnifiedPushContainer, settingsCalendarContainer,
-            settingsContactsContainer, settingsInfoRow
-        ).forEach { it.setBackgroundResource(R.drawable.bg_settings_card) }
-    }
+    val d = resources.displayMetrics.density
+    val cardDrawable = { GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        cornerRadius = 20 * d
+        setColor(cardBg)
+    } }
+    listOf(
+        settingsAccountContainer,
+        settingsThemeContainer, settingsGeneralContainer, settingsLabelsContainer,
+        settingsUnifiedPushContainer, settingsCalendarContainer,
+        settingsContactsContainer, settingsInfoRow
+    ).forEach { it.background = cardDrawable() }
 
     // Tint settings chevrons and info row icons with accent color
     val accentTint = ColorStateList.valueOf(currentAccentColor.toColorInt())
