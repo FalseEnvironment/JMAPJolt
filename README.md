@@ -41,6 +41,38 @@ JMAPJolt was born from a simple thought: there are far too few mobile apps with 
 | **Notification** | Push notifications with JMAP JSON meta or UnifiedPush |
 | **Widgets** | Android home-widget for Inbox / Unified Inbox and Calendar |
 
+## Screenshots
+
+<details>
+<summary><b>Inbox</b></summary>
+<br />
+<img src="screenshot/jmapjolt-inbox.png" width="260" alt="Inbox with message list and swipe actions" />
+</details>
+
+<details>
+<summary><b>Sidebar</b></summary>
+<br />
+<img src="screenshot/jmapjolt-sidebar.png" width="260" alt="Navigation drawer with folders and color-coded labels" />
+</details>
+
+<details>
+<summary><b>Calendar</b></summary>
+<br />
+<img src="screenshot/jmapjolt-calendar.png" width="260" alt="Calendar week view with events" />
+</details>
+
+<details>
+<summary><b>Contacts</b></summary>
+<br />
+<img src="screenshot/jmapjolt-contacts.png" width="260" alt="Contacts list filtered by JMAP and DAVx5" />
+</details>
+
+<details>
+<summary><b>Settings</b></summary>
+<br />
+<img src="screenshot/jmapjolt-settings.png" width="260" alt="Settings with theme picker and display options" />
+</details>
+
 ## Requirements
 
 Android 7.0 (API 24) or newer, and a mail server that supprot JMAP, i suggest
