@@ -17,14 +17,6 @@
         android:paddingTop="8dp"
         android:paddingBottom="8dp">
 
-        <ImageView
-            android:id="@+id/widgetHeaderStrip"
-            android:layout_width="4dp"
-            android:layout_height="18dp"
-            android:layout_marginEnd="8dp"
-            android:contentDescription="@null"
-            android:background="#3D8BFD" />
-
         <TextView
             android:id="@+id/widgetTitle"
             android:layout_width="0dp"

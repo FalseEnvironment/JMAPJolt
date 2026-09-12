@@ -37,6 +37,7 @@ private class CalendarWidgetFactory(
     private var textColor = 0
     private var secondaryColor = 0
     private var accentColor = 0
+    private var accentTextColor = 0
 
     override fun onCreate() {}
 
@@ -47,6 +48,7 @@ private class CalendarWidgetFactory(
         textColor = palette[2]
         secondaryColor = palette[3]
         accentColor = WidgetSupport.accentColor(context)
+        accentTextColor = WidgetSupport.accentText(context)
 
         // Window: start of today through the next AGENDA_DAYS days.
         val from = startOfToday()
@@ -86,7 +88,7 @@ private class CalendarWidgetFactory(
     private fun headerView(header: Item.Header): RemoteViews {
         val views = RemoteViews(context.packageName, R.layout.widget_calendar_header)
         views.setTextViewText(R.id.headerText, header.label)
-        views.setTextColor(R.id.headerText, accentColor)
+        views.setTextColor(R.id.headerText, accentTextColor)
         return views
     }
 

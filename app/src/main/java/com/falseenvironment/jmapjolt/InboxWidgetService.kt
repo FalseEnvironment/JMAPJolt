@@ -44,6 +44,8 @@ private class InboxWidgetFactory(
     private var textColor = 0
     private var secondaryColor = 0
     private var accentColor = 0
+    private var accentTextColor = 0
+    private var showStrips = false
 
     override fun onCreate() {}
 
@@ -52,8 +54,10 @@ private class InboxWidgetFactory(
         textColor = palette[2]
         secondaryColor = palette[3]
         accentColor = WidgetSupport.accentColor(context)
+        accentTextColor = WidgetSupport.accentText(context)
 
         val selection = WidgetSupport.effectiveSelection(context, appWidgetId)
+        showStrips = showsAccountStrips(selection, WidgetSupport.savedAccountEmails(context).size)
         val accentForSingle = selection?.takeIf { it != WidgetSupport.UNIFIED }
             ?.let { WidgetSupport.accountColor(context, it) }
 
@@ -79,7 +83,7 @@ private class InboxWidgetFactory(
                 collected += Row(
                     emailId = e.id,
                     account = account,
-                    sender = e.from.ifBlank { e.fromEmail },
+                    sender = SenderName.clean(e.from).ifBlank { e.fromEmail },
                     subject = e.subject.ifBlank { "(no subject)" },
                     preview = e.preview,
                     date = e.receivedAt,
@@ -103,16 +107,19 @@ private class InboxWidgetFactory(
         val views = RemoteViews(context.packageName, R.layout.widget_inbox_item)
 
         views.setInt(R.id.itemColorStrip, "setBackgroundColor", row.stripColor)
-        views.setTextViewText(R.id.itemSender, bold(row.sender, !row.seen))
+        // Same unread treatment as the app list: bold subject and an accent dot by the time.
+        views.setTextViewText(R.id.itemSender, row.sender)
         views.setTextViewText(R.id.itemSubject, bold(row.subject, !row.seen))
+        views.setViewVisibility(R.id.itemUnreadDot, if (row.seen) View.GONE else View.VISIBLE)
+        views.setInt(R.id.itemUnreadDot, "setColorFilter", accentTextColor)
         views.setTextViewText(R.id.itemPreview, row.preview)
         views.setTextViewText(R.id.itemDate, formatDate(row.date))
 
-        views.setTextColor(R.id.itemSender, textColor)
+        views.setTextColor(R.id.itemSender, if (row.seen) secondaryColor else textColor)
         views.setTextColor(R.id.itemSubject, textColor)
         views.setTextColor(R.id.itemPreview, secondaryColor)
         views.setTextColor(R.id.itemDate, secondaryColor)
-        views.setViewVisibility(R.id.itemColorStrip, View.VISIBLE)
+        views.setViewVisibility(R.id.itemColorStrip, if (showStrips) View.VISIBLE else View.GONE)
 
         // Tint the press ripple/flash with the app accent (white drawable layers
         // recolored via background tint). setColorStateList is API 31+; older
@@ -134,7 +141,7 @@ private class InboxWidgetFactory(
 
     private fun moreView(): RemoteViews {
         val views = RemoteViews(context.packageName, R.layout.widget_inbox_more)
-        views.setTextColor(R.id.moreText, accentColor)
+        views.setTextColor(R.id.moreText, accentTextColor)
         // No extras → template opens the app inbox.
         views.setOnClickFillInIntent(R.id.moreRoot, Intent())
         return views

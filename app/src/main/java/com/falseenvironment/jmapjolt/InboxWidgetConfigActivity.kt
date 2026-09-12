@@ -81,10 +81,12 @@ class InboxWidgetConfigActivity : Activity() {
             return
         }
 
-        // Unified inbox option (accent dot) — only meaningful with multiple accounts.
-        root.addView(optionRow(
-            getString(R.string.widget_unified_inbox), accent, text, dp(12)
-        ) { commit(WidgetSupport.UNIFIED) })
+        // Unified inbox option (accent dot) — only offered with multiple accounts.
+        if (accounts.size > 1) {
+            root.addView(optionRow(
+                getString(R.string.widget_unified_inbox), accent, text, dp(12)
+            ) { commit(WidgetSupport.UNIFIED) })
+        }
 
         for (email in accounts) {
             root.addView(optionRow(

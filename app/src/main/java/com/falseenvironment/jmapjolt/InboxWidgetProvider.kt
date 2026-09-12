@@ -74,7 +74,6 @@ class InboxWidgetProvider : AppWidgetProvider() {
             val header = palette[1]
             val text = palette[2]
             val secondary = palette[3]
-            val accent = WidgetSupport.accentColor(context)
 
             views.setInt(R.id.widgetRoot, "setBackgroundColor", bg)
             views.setInt(R.id.widgetHeader, "setBackgroundColor", header)
@@ -88,12 +87,9 @@ class InboxWidgetProvider : AppWidgetProvider() {
                 else -> selection
             }
             views.setTextViewText(R.id.widgetTitle, title)
-            // Header strip: accent for unified, account color for a single account.
-            val stripColor = if (isUnified || selection == null) accent
-                else WidgetSupport.accountColor(context, selection)
-            views.setInt(R.id.widgetHeaderStrip, "setBackgroundColor", stripColor)
-            views.setInt(R.id.widgetCompose, "setColorFilter", accent)
-            views.setInt(R.id.widgetRefresh, "setColorFilter", accent)
+            // Neutral header like the app's top bars: icons in the text colour.
+            views.setInt(R.id.widgetCompose, "setColorFilter", text)
+            views.setInt(R.id.widgetRefresh, "setColorFilter", text)
         }
 
         fun renderWidget(context: Context, mgr: AppWidgetManager, appWidgetId: Int) {

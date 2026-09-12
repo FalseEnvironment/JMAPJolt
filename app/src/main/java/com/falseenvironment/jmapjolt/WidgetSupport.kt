@@ -21,16 +21,21 @@ object WidgetSupport {
 
     private const val WIDGET_PREFS = "widget_prefs"
 
-    /** Palette: [bg, header, text, secondaryText] mirroring ThemeHelper.applyTheme. */
+    /**
+     * Palette: [bg, header, text, secondaryText] from the app's [THEME_TOKENS]. The header
+     * shares the background, like the app's neutral top bars.
+     */
     fun palette(theme: String): IntArray {
-        val hex = when (theme) {
-            "light" -> arrayOf("#F6F6F8", "#FFFFFF", "#1B1B1F", "#5F5F66")
-            "oled" -> arrayOf("#000000", "#0B0B0D", "#ECECF1", "#90909A")
-            "violet" -> arrayOf("#160E24", "#1E1430", "#ECECF1", "#9B7DC8")
-            else -> arrayOf("#212126", "#2A2A30", "#ECECF1", "#90909A")
-        }
-        return IntArray(4) { hex[it].toColorInt() }
+        val t = themeTokens(theme)
+        return intArrayOf(t.background, t.background, t.textPrimary, t.textSecondary)
     }
+
+    private fun themeTokens(theme: String): ThemeTokens =
+        THEME_TOKENS[theme] ?: THEME_TOKENS.getValue("gray")
+
+    /** Accent for text, icons and dots on the widget background (lifted on dark themes). */
+    fun accentText(context: Context): Int =
+        themeTokens(currentTheme(context)).accentOnGround(accentColor(context))
 
     fun currentTheme(context: Context): String =
         context.getSharedPreferences(MainActivity.PREFS_NAME, Context.MODE_PRIVATE)
@@ -106,18 +111,27 @@ object WidgetSupport {
      * null and the widget would show "no messages". Fall back to a sensible default:
      * the only account if there's one, the unified inbox if there are several.
      */
-    fun effectiveSelection(context: Context, appWidgetId: Int): String? {
-        selection(context, appWidgetId)?.let { return it }
-        val accounts = savedAccountEmails(context)
-        return when {
-            accounts.isEmpty() -> null
-            accounts.size == 1 -> accounts[0]
-            else -> UNIFIED
-        }
-    }
+    fun effectiveSelection(context: Context, appWidgetId: Int): String? =
+        resolveWidgetSelection(selection(context, appWidgetId), savedAccountEmails(context))
 
     fun clearSelection(context: Context, appWidgetId: Int) {
         context.getSharedPreferences(WIDGET_PREFS, Context.MODE_PRIVATE)
             .edit().remove("widget_account_$appWidgetId").apply()
     }
 }
+
+/**
+ * What an inbox widget renders, from its saved [saved] selection and the signed-in
+ * [accounts]. The unified inbox exists only with two or more accounts: a unified widget
+ * left with one account shows that account.
+ */
+internal fun resolveWidgetSelection(saved: String?, accounts: List<String>): String? = when {
+    accounts.isEmpty() -> null
+    saved == WidgetSupport.UNIFIED || saved == null ->
+        if (accounts.size == 1) accounts[0] else WidgetSupport.UNIFIED
+    else -> saved
+}
+
+/** Per-row account colour strips tell accounts apart, so only a multi-account unified inbox has them. */
+internal fun showsAccountStrips(selection: String?, accountCount: Int): Boolean =
+    selection == WidgetSupport.UNIFIED && accountCount > 1

@@ -84,15 +84,13 @@ class CalendarWidgetProvider : AppWidgetProvider() {
             val header = palette[1]
             val text = palette[2]
             val secondary = palette[3]
-            val accent = WidgetSupport.accentColor(context)
 
             views.setInt(R.id.widgetRoot, "setBackgroundColor", bg)
             views.setInt(R.id.widgetHeader, "setBackgroundColor", header)
             views.setTextColor(R.id.widgetTitle, text)
             views.setTextColor(R.id.widgetEmpty, secondary)
-            views.setInt(R.id.widgetHeaderStrip, "setBackgroundColor", accent)
-            views.setInt(R.id.widgetAdd, "setColorFilter", accent)
-            views.setInt(R.id.widgetRefresh, "setColorFilter", accent)
+            views.setInt(R.id.widgetAdd, "setColorFilter", text)
+            views.setInt(R.id.widgetRefresh, "setColorFilter", text)
         }
 
         fun renderWidget(context: Context, mgr: AppWidgetManager, appWidgetId: Int) {
