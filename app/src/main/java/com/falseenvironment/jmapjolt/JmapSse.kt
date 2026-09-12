@@ -4,6 +4,8 @@ import android.util.Base64
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
@@ -20,26 +22,27 @@ object JmapSse {
     const val PING_SECONDS = 90
 
     private const val SESSION_TIMEOUT_SECONDS = 10L
+    private const val MAX_SESSION_REDIRECTS = 3
 
     suspend fun resolveEventSourceUrl(account: JMapClient.ConnectedAccount): String? =
         withContext(Dispatchers.IO) {
             // The session fetch carries Basic auth, so it runs on the no-redirect
-            // client: a 30x must not replay the credentials somewhere else.
+            // client: a 30x must not replay the credentials somewhere else. The
+            // redirect is followed by hand below, only towards the same origin.
             val http = AppHttp.noRedirects.newBuilder()
                 .readTimeout(SESSION_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                 .build()
-            val request = Request.Builder()
-                .url(account.sessionUrl)
-                .header("Authorization", basicAuth(account))
-                .get()
-                .build()
-            try {
-                val body = http.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) return@withContext null
-                    response.body?.string() ?: return@withContext null
+            // The stored sessionUrl is whatever candidate the JMAP library accepted,
+            // and that can be the bare origin it resolved through /.well-known: a raw
+            // GET on it answers with the site root, not the session object. Probe the
+            // usual session paths instead of giving up on the first non-session body.
+            for (candidate in sessionProbeUrls(account.sessionUrl)) {
+                val session = fetchSessionJson(http, account, candidate) ?: continue
+                val template = session.optString("eventSourceUrl").takeIf { it.isNotBlank() }
+                if (template == null) {
+                    Log.w(TAG, "Session at ${LogRedact.host(candidate)} carries no eventSourceUrl")
+                    continue
                 }
-                val template = JSONObject(body).optString("eventSourceUrl").takeIf { it.isNotBlank() }
-                    ?: return@withContext null
                 val resolved = template
                     .replace("{types}", "Email")
                     .replace("{+types}", "Email")
@@ -49,12 +52,87 @@ object JmapSse {
                     Log.w(TAG, "Refusing eventSourceUrl outside session origin")
                     return@withContext null
                 }
-                resolved
+                return@withContext resolved
+            }
+            null
+        }
+
+    /** The stored session URL first, then the standard JMAP session paths on the same origin. */
+    internal fun sessionProbeUrls(sessionUrl: String): List<String> {
+        val base = sessionUrl.toHttpUrlOrNull() ?: return listOf(sessionUrl)
+        val paths = listOf("/.well-known/jmap", "/jmap/session", "/jmap")
+        return (listOf(sessionUrl) + paths.map { path ->
+            base.newBuilder().encodedPath(path).query(null).fragment(null).build().toString()
+        }).distinct()
+    }
+
+    /**
+     * GETs one session candidate and returns its JSON body, following same-origin
+     * redirects by hand. Returns null — with the reason logged — when the candidate
+     * is not a JMAP session.
+     */
+    private fun fetchSessionJson(
+        http: OkHttpClient,
+        account: JMapClient.ConnectedAccount,
+        url: String
+    ): JSONObject? {
+        var current = url
+        var hops = 0
+        while (hops <= MAX_SESSION_REDIRECTS) {
+            val request = Request.Builder()
+                .url(current)
+                .header("Authorization", basicAuth(account))
+                .header("Accept", "application/json")
+                .get()
+                .build()
+            try {
+                http.newCall(request).execute().use { response ->
+                    if (response.isRedirect) {
+                        val location = response.header("Location")
+                        if (location == null) {
+                            Log.w(TAG, "Session ${LogRedact.host(current)} redirected without Location")
+                            return null
+                        }
+                        val next = current.toHttpUrlOrNull()?.resolve(location)?.toString()
+                        if (next == null || !JMapClient.isTrustedServerUrl(next, account.sessionUrl)) {
+                            Log.w(TAG, "Refusing session redirect outside session origin")
+                            return null
+                        }
+                        current = next
+                        hops++
+                        return@use
+                    }
+                    if (!response.isSuccessful) {
+                        Log.w(TAG, "Session ${LogRedact.host(current)} answered HTTP ${response.code}")
+                        return null
+                    }
+                    val text = response.body?.string()
+                    if (text == null) {
+                        Log.w(TAG, "Session ${LogRedact.host(current)} answered with an empty body")
+                        return null
+                    }
+                    val json = try {
+                        JSONObject(text)
+                    } catch (_: Exception) {
+                        Log.w(TAG, "Session ${LogRedact.host(current)} answered with non-JSON body")
+                        return null
+                    }
+                    // The site root answers 200 with JSON on some hosts: only a body that
+                    // carries the session fields is a session.
+                    if (!json.has("eventSourceUrl") && !json.has("apiUrl")) {
+                        Log.w(TAG, "Body at ${LogRedact.host(current)} is not a JMAP session")
+                        return null
+                    }
+                    return json
+                }
             } catch (e: Throwable) {
                 Log.e(TAG, "Failed to fetch JMAP session for ${LogRedact.email(account.email)}", e)
-                null
+                return null
             }
         }
+        Log.w(TAG, "Session ${LogRedact.host(url)} exceeded $MAX_SESSION_REDIRECTS redirects")
+        return null
+    }
 
     /**
      * Blocks on the SSE stream, invoking [onEvent] for each complete event.

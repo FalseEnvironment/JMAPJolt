@@ -38,13 +38,12 @@ class JmapEventSourceService : Service() {
     // down instead of being restarted by onTaskRemoved, which would only time out again.
     @Volatile
     private var stoppedByTimeout = false
-    // Cancel the periodic WorkManager fallback the first time SSE proves it can
-    // reach the server, so the two sync paths don't run doubled up forever —
-    // EmailSyncWorker.schedule() can be triggered independently of UnifiedPush
-    // (see tryStartForeground/handleForegroundTimeout) and previously had no
-    // corresponding cancel once SSE recovered.
+    // Mirrors whether the periodic WorkManager fallback is running. It starts true:
+    // Main.kt, UnifiedPushService and tryStartForeground all schedule it independently
+    // of this service. SSE cancels it the first time it proves it can reach the server,
+    // and it is scheduled again as soon as SSE stops working.
     @Volatile
-    private var fallbackWorkerCancelled = false
+    private var fallbackScheduled = true
 
     // startForeground() must run as early as possible: onCreate fires before
     // onStartCommand, and a busy main thread at app launch can otherwise push the
@@ -137,15 +136,20 @@ class JmapEventSourceService : Service() {
                 try {
                     val sseUrl = JmapSse.resolveEventSourceUrl(account)
                     if (sseUrl == null) {
+                        // A session that never yields an eventSourceUrl is just as fatal to push
+                        // as a dropped stream, so it counts towards the periodic fallback too:
+                        // otherwise this loop spins forever while new mail waits for nothing.
+                        consecutiveFailures++
                         Log.w(TAG, "No eventSourceUrl for ${LogRedact.email(account.email)} — retrying in ${backoffMs}ms")
+                        scheduleFallbackIfSseUnstable(consecutiveFailures, account)
                         delay(backoffMs)
                         backoffMs = minOf(backoffMs * 2, BACKOFF_MAX_MS)
                         continue
                     }
                     backoffMs = BACKOFF_INITIAL_MS
                     Log.d(TAG, "Connecting SSE for ${LogRedact.email(account.email)} (host=${LogRedact.host(sseUrl)})")
-                    if (fallbackWorkerCancelled.not()) {
-                        fallbackWorkerCancelled = true
+                    if (fallbackScheduled) {
+                        fallbackScheduled = false
                         EmailSyncWorker.cancel(this@JmapEventSourceService)
                     }
                     JmapSse.connectAndListen(account, sseUrl) { type, data ->
@@ -158,11 +162,7 @@ class JmapEventSourceService : Service() {
                 } catch (e: Throwable) {
                     Log.e(TAG, "SSE error for ${LogRedact.email(account.email)}, reconnecting in ${backoffMs}ms", e)
                     consecutiveFailures++
-                    if (consecutiveFailures >= SSE_FAILURES_BEFORE_FALLBACK && fallbackWorkerCancelled) {
-                        Log.w(TAG, "SSE unstable for ${LogRedact.email(account.email)} — re-enabling periodic fallback")
-                        fallbackWorkerCancelled = false
-                        EmailSyncWorker.schedule(this@JmapEventSourceService)
-                    }
+                    scheduleFallbackIfSseUnstable(consecutiveFailures, account)
                     delay(backoffMs)
                     backoffMs = minOf(backoffMs * 2, BACKOFF_MAX_MS)
                 }
@@ -170,6 +170,16 @@ class JmapEventSourceService : Service() {
         } finally {
             activeLoops.remove(account.email)
         }
+    }
+
+    private fun scheduleFallbackIfSseUnstable(
+        consecutiveFailures: Int,
+        account: JMapClient.ConnectedAccount
+    ) {
+        if (consecutiveFailures < SSE_FAILURES_BEFORE_FALLBACK || fallbackScheduled) return
+        Log.w(TAG, "SSE unstable for ${LogRedact.email(account.email)} — re-enabling periodic fallback")
+        fallbackScheduled = true
+        EmailSyncWorker.schedule(this)
     }
 
     private fun handleEvent(type: String, data: String, account: JMapClient.ConnectedAccount) {
