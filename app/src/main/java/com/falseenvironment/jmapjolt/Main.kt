@@ -1077,7 +1077,7 @@ class MainActivity : AppCompatActivity() {
         detailSubject.text = email.subject.ifBlank { "(no subject)" }
         detailSubject.setTextColor(textColor)
         detailFrom.setTextColor(textColor)
-        detailFrom.text = email.from.ifBlank { email.fromEmail }
+        detailFrom.text = SenderName.clean(email.from).ifBlank { email.fromEmail }
         detailDate.text = if (email.receivedAt > 0) formatRelativeDate(email.receivedAt) else ""
         detailDate.setTextColor(secondaryTextColor)
         val toLabel = when {

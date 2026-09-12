@@ -119,32 +119,43 @@ class CalendarPanel(private val activity: MainActivity) : FrameLayout(activity) 
         val bar = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setBackgroundColor(palette.accent)
+            // Same neutral top bar as the inbox: theme ground, primary text and icons.
+            setBackgroundColor(palette.background)
             setPadding(dp(8), dp(10), dp(8), dp(10))
         }
-        val menu = iconButton(R.drawable.ic_menu_24dp, palette.onAccent) { activity.openMainDrawer() }
+        val menu = iconButton(R.drawable.ic_menu_24dp, palette.text) { activity.openMainDrawer() }
         titleView = TextView(activity).apply {
-            setTextColor(palette.onAccent)
+            setTextColor(palette.text)
             textSize = 18f
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             setPadding(dp(8), 0, dp(8), 0)
         }
+        // "Today" as a tonal pill on the card surface, like the inbox search field and the
+        // search chips, instead of loose accent text.
         val today = TextView(activity).apply {
             text = "Today"
-            setTextColor(palette.onAccent)
-            setPadding(dp(8), dp(4), dp(8), dp(4))
+            textSize = 14f
+            setTextColor(palette.text)
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setPadding(dp(14), dp(7), dp(14), dp(7))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 999 * density
+                setColor(palette.card)
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { marginEnd = dp(4) }
             setOnClickListener {
                 anchor = System.currentTimeMillis()
                 selectedDay = CalendarTimelineView.midnight(anchor)
                 render()
             }
         }
-        val overflow = TextView(activity).apply {
-            text = "⋮"
-            textSize = 22f
-            setTextColor(palette.onAccent)
-            gravity = Gravity.CENTER
-            setPadding(dp(10), dp(2), dp(10), dp(2))
+        // Same vector icon as the inbox selection bar's overflow, not a text glyph.
+        val overflow = iconButton(R.drawable.ic_lucide_more_vertical, palette.text) {}.apply {
+            contentDescription = context.getString(R.string.cd_more_options)
             setOnClickListener { showOverflowMenu(it) }
         }
         bar.addView(menu); bar.addView(titleView); bar.addView(today); bar.addView(overflow)
@@ -152,14 +163,12 @@ class CalendarPanel(private val activity: MainActivity) : FrameLayout(activity) 
     }
 
     private fun showOverflowMenu(anchorView: View) {
-        val darker = activity.darkenColor(palette.accent)
-
         val container = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 cornerRadius = 8 * density
-                setColor(darker)
+                setColor(palette.card)
             }
             val vp = (4 * density).toInt()
             setPadding(0, vp, 0, vp)
@@ -177,19 +186,19 @@ class CalendarPanel(private val activity: MainActivity) : FrameLayout(activity) 
                 setPadding(hp, 0, hp, 0)
                 addView(ImageView(activity).apply {
                     setImageResource(iconRes)
-                    imageTintList = ColorStateList.valueOf(palette.onAccent)
+                    imageTintList = ColorStateList.valueOf(palette.accentText)
                     val sz = dp(18)
                     layoutParams = LinearLayout.LayoutParams(sz, sz).also { it.marginEnd = dp(12) }
                 })
                 addView(TextView(activity).apply {
-                    text = label; textSize = 14f; setTextColor(palette.onAccent)
+                    text = label; textSize = 14f; setTextColor(palette.text)
                 })
                 setOnClickListener { popupRef?.dismiss(); action() }
             }
 
         fun divider() = View(activity).apply {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1)
-            setBackgroundColor(0x22FFFFFF)
+            setBackgroundColor(palette.divider)
         }
 
         container.addView(row("Go to…", R.drawable.ic_lucide_chevron_right) { showGoToDatePicker() })
@@ -231,14 +240,16 @@ class CalendarPanel(private val activity: MainActivity) : FrameLayout(activity) 
     private fun buildSwitcher(): View {
         val row = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
-            setBackgroundColor(palette.surface)
+            setBackgroundColor(palette.background)
+            setPadding(dp(8), dp(2), dp(8), dp(8))
         }
         for (m in Mode.values()) {
             val tv = TextView(activity).apply {
                 text = m.name.lowercase().replaceFirstChar { it.uppercase() }
                 gravity = Gravity.CENTER
-                setPadding(0, dp(12), 0, dp(12))
+                setPadding(0, dp(8), 0, dp(8))
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                    .apply { marginStart = dp(3); marginEnd = dp(3) }
                 setOnClickListener { if (m != mode) { pushHistory(); mode = m; render() } }
             }
             switcherButtons[m] = tv
@@ -370,7 +381,13 @@ class CalendarPanel(private val activity: MainActivity) : FrameLayout(activity) 
     private fun render() {
         for ((m, tv) in switcherButtons) {
             val active = m == mode
-            tv.setTextColor(if (active) palette.accent else palette.secondaryText)
+            tv.setTextColor(if (active) palette.accentText else palette.secondaryText)
+            // Selected view: tinted pill, like the drawer and the bottom navigation bar.
+            tv.background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 999 * density
+                setColor(if (active) palette.accentSoft else android.graphics.Color.TRANSPARENT)
+            }
             tv.setTypeface(null, if (active) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
         }
         titleView.text = periodLabel()
@@ -472,7 +489,7 @@ class CalendarPanel(private val activity: MainActivity) : FrameLayout(activity) 
                 lastDay = day
                 list.addView(TextView(activity).apply {
                     text = dayFmt.format(Date(day))
-                    setTextColor(palette.accent)
+                    setTextColor(palette.accentText)
                     setTypeface(null, android.graphics.Typeface.BOLD)
                     setPadding(dp(4), dp(16), dp(4), dp(6))
                 })

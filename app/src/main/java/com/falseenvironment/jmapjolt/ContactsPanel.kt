@@ -224,14 +224,14 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
     }
 
     /**
-     * Same top bar as the inbox: an accent strip holding a squared (12dp) container on a darkened
-     * accent, with the menu icon, the field and the overflow all drawn in [palette.onAccent].
+     * Same top bar as the inbox: the theme ground holding a pill-shaped search field on the
+     * card surface, with the menu icon, the field and the overflow in the primary text colour.
      * Mirrors `searchBarContainer` in activity_main.xml and the styling applied in ThemeHelper.
      */
     private fun buildSearchBar(): View {
         val strip = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(palette.accent)
+            setBackgroundColor(palette.background)
             setPadding(dp(12), dp(8), dp(12), dp(8))
         }
         val bar = LinearLayout(activity).apply {
@@ -239,14 +239,14 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
             gravity = Gravity.CENTER_VERTICAL
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                cornerRadius = 12 * density
-                setColor(activity.darkenColor(palette.accent, 0.78f))
+                cornerRadius = 999 * density
+                setColor(palette.card)
             }
             setPadding(dp(4), 0, dp(8), 0)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(52))
         }
-        bar.addView(iconButton(R.drawable.ic_menu_24dp, palette.onAccent) {
+        bar.addView(iconButton(R.drawable.ic_menu_24dp, palette.text) {
             activity.openMainDrawer()
         })
 
@@ -255,12 +255,11 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
             gravity = Gravity.CENTER_VERTICAL
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         }
-        val hintColor = CalendarTimelineView.adjustAlpha(
-            palette.onAccent, if (palette.isDark) 0.65f else 0.55f)
+        val hintColor = palette.secondaryText
         searchInput = EditText(activity).apply {
             hint = context.getString(R.string.contacts_search_placeholder)
             setHintTextColor(hintColor)
-            setTextColor(palette.onAccent)
+            setTextColor(palette.text)
             textSize = 16f
             background = null
             inputType = InputType.TYPE_CLASS_TEXT
@@ -285,7 +284,7 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
         bar.addView(TextView(activity).apply {
             text = "⋮"
             textSize = 22f
-            setTextColor(palette.onAccent)
+            setTextColor(palette.text)
             gravity = Gravity.CENTER
             setPadding(dp(10), dp(2), dp(10), dp(2))
             setOnClickListener { showOverflowMenu(it) }
@@ -299,7 +298,7 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
 
     /**
      * Replaces the search row while contacts are selected: count on the left, then select-all,
-     * share and delete, all drawn on the same darkened accent as the search field.
+     * share and delete, on an accent-tinted pill like the inbox selection bar.
      */
     private fun buildSelectionBar(): View {
         val bar = LinearLayout(activity).apply {
@@ -307,20 +306,20 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
             gravity = Gravity.CENTER_VERTICAL
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                cornerRadius = 12 * density
-                setColor(activity.darkenColor(palette.accent, 0.78f))
+                cornerRadius = 999 * density
+                setColor(palette.accentSoft)
             }
             setPadding(dp(4), 0, dp(4), 0)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(52))
             visibility = View.GONE
         }
-        bar.addView(iconButton(R.drawable.ic_arrow_back_24dp, palette.onAccent) {
+        bar.addView(iconButton(R.drawable.ic_arrow_back_24dp, palette.text) {
             exitSelection()
         }.apply { contentDescription = context.getString(R.string.contacts_exit_selection) })
 
         selectionCountView = TextView(activity).apply {
-            setTextColor(palette.onAccent)
+            setTextColor(palette.text)
             textSize = 16f
             setTypeface(typeface, Typeface.BOLD)
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
@@ -328,13 +327,13 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
         }
         bar.addView(selectionCountView)
 
-        bar.addView(iconButton(R.drawable.ic_lucide_check, palette.onAccent) {
+        bar.addView(iconButton(R.drawable.ic_lucide_check, palette.text) {
             selectAllVisible()
         }.apply { contentDescription = context.getString(R.string.contacts_select_all) })
-        shareButton = iconButton(R.drawable.ic_lucide_share_2, palette.onAccent) {
+        shareButton = iconButton(R.drawable.ic_lucide_share_2, palette.text) {
             shareSelected()
         }.apply { contentDescription = context.getString(R.string.contacts_share_selected) }
-        deleteButton = iconButton(R.drawable.ic_lucide_trash, palette.onAccent) {
+        deleteButton = iconButton(R.drawable.ic_lucide_trash, palette.text) {
             confirmDeleteSelected()
         }.apply { contentDescription = context.getString(R.string.contacts_delete_selected) }
         bar.addView(shareButton)
@@ -565,8 +564,8 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
         for (i in 0 until bar.childCount) {
             val chip = bar.getChildAt(i) as? TextView ?: continue
             val selected = chip.tag == filter
-            chip.setTextColor(if (selected) palette.onAccent else palette.secondaryText)
-            chip.background = pill(if (selected) palette.accent else palette.surface)
+            chip.setTextColor(if (selected) palette.accentText else palette.secondaryText)
+            chip.background = pill(if (selected) palette.accentSoft else palette.card)
         }
     }
 
@@ -576,7 +575,7 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 cornerRadius = 8 * density
-                setColor(palette.surface)
+                setColor(palette.card)
             }
             val vp = (4 * density).toInt()
             setPadding(0, vp, 0, vp)
@@ -593,7 +592,7 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
                 setPadding(hp, 0, hp, 0)
                 addView(ImageView(activity).apply {
                     setImageResource(iconRes)
-                    imageTintList = ColorStateList.valueOf(palette.accent)
+                    imageTintList = ColorStateList.valueOf(palette.accentText)
                     val sz = dp(18)
                     layoutParams = LinearLayout.LayoutParams(sz, sz).also { it.marginEnd = dp(12) }
                 })
@@ -607,7 +606,7 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
             R.drawable.ic_rotate_cw) { refresh() })
         container.addView(View(activity).apply {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1)
-            setBackgroundColor(CalendarTimelineView.adjustAlpha(palette.secondaryText, 0.25f))
+            setBackgroundColor(palette.divider)
         })
         // DAVx5's LoginActivity sets up CardDAV and CalDAV collections alike.
         container.addView(row(context.getString(R.string.contacts_add_carddav),
@@ -727,7 +726,7 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
         }
         // Left gutter carrying the A / B / C index letter on the first row of each section.
         row.addView(TextView(activity).apply {
-            setTextColor(palette.accent)
+            setTextColor(palette.accentText)
             textSize = 14f
             gravity = Gravity.CENTER
             setTypeface(typeface, Typeface.BOLD)
@@ -787,7 +786,7 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
             textSize = 11f
             setTextColor(palette.secondaryText)
             setPadding(dp(8), dp(3), dp(8), dp(3))
-            background = pill(palette.surface)
+            background = pill(palette.card)
         })
         return row
     }
@@ -812,7 +811,7 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
                 else View.OnClickListener { toggleSection(sectionLetter) })
             val selected = contact.id in selectedIds
             // Selected rows mirror the inbox: the accent circle stays and only carries a check,
-            // over a slightly darkened row background (see EmailAdapter's isSelected branch).
+            // over an accent-tinted row background.
             avatar.text = if (selected) "" else contact.initials
             val photo = ContactAvatars.decode(contact.photoBase64)
             avatarPhoto.setImageBitmap(photo)
@@ -820,8 +819,7 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
                 if (photo == null || selected) View.GONE else View.VISIBLE
             avatarCheck.visibility = if (selected) View.VISIBLE else View.GONE
             row.setBackgroundColor(
-                if (selected) activity.darkenColor(activity.getDialogBackgroundColor(), 0.85f)
-                else android.graphics.Color.TRANSPARENT)
+                if (selected) palette.accentSoft else android.graphics.Color.TRANSPARENT)
             avatarBubble.setOnClickListener { toggleSelection(contact) }
             row.setOnLongClickListener { toggleSelection(contact); true }
             name.text = contact.displayName

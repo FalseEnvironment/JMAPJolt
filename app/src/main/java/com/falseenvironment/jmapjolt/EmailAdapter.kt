@@ -544,7 +544,8 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
         val senderName = if (activity.selectedFolder == R.id.nav_drafts) {
             "To: " + item.toEmail.ifBlank { "(no recipient)" }
         } else {
-            item.from.ifBlank { item.fromEmail }
+            // Cleaned here too: rows cached before SenderName existed still carry the raw name.
+            SenderName.clean(item.from).ifBlank { item.fromEmail }
         }
 
         // Account color strip: only meaningful with more than one account, shown in the

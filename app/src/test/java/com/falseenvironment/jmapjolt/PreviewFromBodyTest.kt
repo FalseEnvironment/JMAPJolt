@@ -23,8 +23,8 @@ class PreviewFromBodyTest {
     @Test
     fun `blank plain text falls back to html prose`() {
         assertEquals(
-            "Hello Luca, your invoice is ready.",
-            PreviewText.fromBody("  \n ", "<html><body><p>Hello Luca,</p><p>your invoice is ready.</p></body></html>")
+            "Hello there, your invoice is ready.",
+            PreviewText.fromBody("  \n ", "<html><body><p>Hello there,</p><p>your invoice is ready.</p></body></html>")
         )
     }
 
@@ -38,7 +38,7 @@ class PreviewFromBodyTest {
     @Test
     fun `quoted reply history is excluded from html previews`() {
         val html = "<div>Sounds good, see you Monday.</div>" +
-            "<blockquote>On Fri, Anna wrote: shall we meet?</blockquote>" +
+            "<blockquote>On Fri, Alice wrote: shall we meet?</blockquote>" +
             "<div class=\"gmail_quote\">older text</div>"
         assertEquals("Sounds good, see you Monday.", PreviewText.fromBody(null, html))
     }

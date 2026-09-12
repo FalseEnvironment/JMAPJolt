@@ -208,7 +208,7 @@ class JMapClient(private val context: Context) {
                 .getMain(rs.ltt.jmap.common.method.response.email.GetEmailMethodResponse::class.java)
             getResponse.list.map { email ->
                 val fromEmail = email.from?.firstOrNull()?.email ?: ""
-                val fromName = email.from?.firstOrNull()?.name ?: ""
+                val fromName = SenderName.clean(email.from?.firstOrNull()?.name)
                 val isSeen = email.keywords?.containsKey("\$seen") == true
                 val isStarred = email.keywords?.containsKey("\$flagged") == true
                 // Without body values the preview must NOT stand in for the body:
@@ -324,7 +324,7 @@ class JMapClient(private val context: Context) {
 
             return@withContext getResponse.list.map { email ->
                 val fromEmail = email.from?.firstOrNull()?.email ?: ""
-                val fromName = email.from?.firstOrNull()?.name ?: ""
+                val fromName = SenderName.clean(email.from?.firstOrNull()?.name)
                 val isSeen = email.keywords?.containsKey("\$seen") == true
                 val isStarred = email.keywords?.containsKey("\$flagged") == true
 
@@ -388,7 +388,7 @@ class JMapClient(private val context: Context) {
 
         return getResponse.list.map { email ->
             val fromEmail = email.from?.firstOrNull()?.email ?: ""
-            val fromName = email.from?.firstOrNull()?.name ?: ""
+            val fromName = SenderName.clean(email.from?.firstOrNull()?.name)
             val toEmail = email.to?.firstOrNull()?.email ?: ""
             val isSeen = email.keywords?.containsKey("\$seen") == true
             val isStarred = email.keywords?.containsKey("\$flagged") == true
@@ -660,7 +660,7 @@ class JMapClient(private val context: Context) {
 
             return@withContext getResponse.list.map { email ->
                 val fromEmail = email.from?.firstOrNull()?.email ?: ""
-                val fromName = email.from?.firstOrNull()?.name ?: ""
+                val fromName = SenderName.clean(email.from?.firstOrNull()?.name)
                 val atts = email.attachments?.mapNotNull { part ->
                     val blobId = part.blobId ?: return@mapNotNull null
                     EmailAttachmentInfo(
