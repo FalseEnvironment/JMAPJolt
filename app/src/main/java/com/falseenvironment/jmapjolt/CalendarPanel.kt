@@ -34,8 +34,8 @@ class CalendarPanel(private val activity: MainActivity) : FrameLayout(activity) 
     private val scope get() = activity.lifecycleScope
 
     private var mode = Mode.MONTH
-    private var anchor = System.currentTimeMillis()
-    private var selectedDay = CalendarTimelineView.midnight(System.currentTimeMillis())
+    private var anchor = DemoInbox.now(activity)
+    private var selectedDay = CalendarTimelineView.midnight(anchor)
     private var unsupportedToastShown = false
 
     private val backStack = ArrayDeque<Triple<Mode, Long, Long>>()
@@ -148,7 +148,7 @@ class CalendarPanel(private val activity: MainActivity) : FrameLayout(activity) 
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply { marginEnd = dp(4) }
             setOnClickListener {
-                anchor = System.currentTimeMillis()
+                anchor = DemoInbox.now(activity)
                 selectedDay = CalendarTimelineView.midnight(anchor)
                 render()
             }
@@ -625,6 +625,7 @@ class CalendarPanel(private val activity: MainActivity) : FrameLayout(activity) 
     // ---- sync + permissions ---------------------------------------------------------------
 
     private fun triggerSync() {
+        if (DemoInbox.isEnabled(activity)) return
         if (CalendarPrefs.provider(activity) != CalendarPrefs.Provider.JMAP) return
         val account = CalendarAccount.current(activity) ?: return
         scope.launch {

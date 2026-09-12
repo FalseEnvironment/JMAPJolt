@@ -16,6 +16,7 @@ object CalendarRepository {
         CalendarPrefs.provider(context) == CalendarPrefs.Provider.DAVX5
 
     fun occurrences(context: Context, from: Long, to: Long): List<EventOccurrence> {
+        if (DemoInbox.isEnabled(context)) return DemoInbox.occurrences(from, to)
         val provider = if (useProvider(context)) CalendarProvider.occurrences(context, from, to)
             else emptyList()
         val local = CalendarStore.occurrences(context, from, to)

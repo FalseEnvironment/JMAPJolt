@@ -1895,6 +1895,7 @@ class MainActivity : AppCompatActivity() {
 
     internal fun startPeriodicSync() {
         syncJob?.cancel()
+        if (DemoInbox.isEnabled(this)) return
         requestBatteryOptimizationExemption()
         val account = connectedAccount ?: return
         val currentFolderId = selectedFolder

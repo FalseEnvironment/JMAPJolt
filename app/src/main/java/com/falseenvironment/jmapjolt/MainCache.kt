@@ -16,6 +16,7 @@ import kotlinx.coroutines.withContext
  */
 
 internal fun MainActivity.fetchAllFoldersBackground() {
+    if (DemoInbox.isEnabled(this)) return
     val account = connectedAccount ?: return
     lifecycleScope.launch(Dispatchers.IO) {
         try {
@@ -65,6 +66,8 @@ internal fun MainActivity.fetchAllFoldersBackground() {
  */
 internal fun MainActivity.saveEmailCache(immediate: Boolean = false) {
     if (currentAccountEmail == null) return
+    // Demo rows must never reach the offline cache of the real account.
+    if (DemoInbox.isEnabled(this)) return
     if (folderCache.isEmpty() && emails.isEmpty()) return
     // The visible folder always counts: `emails` is the live list and can be
     // ahead of the folderCache entry for that folder.

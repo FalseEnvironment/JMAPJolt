@@ -246,11 +246,13 @@ internal fun MainActivity.renderAccountHeader() {
     drawerAccountName.setCompoundDrawablesRelative(null, null, null, null)
     drawerAccountName.text = if (current.isBlank()) "" else getAccountDisplayName(current)
     drawerAccountName.setTextColor(textInt)
-    drawerAccountEmail.text = current
+    drawerAccountEmail.text = DemoInbox.shownEmail(this, current)
     drawerAccountEmail.setTextColor(secondaryTextInt)
     drawerAccountEmail.visibility = if (current.isBlank()) View.GONE else View.VISIBLE
     if (current.isNotBlank()) {
-        drawerAccountAvatar.setImageBitmap(buildAccountAvatar(current, (44 * dp).toInt()))
+        drawerAccountAvatar.setImageBitmap(
+            buildAccountAvatar(current, (44 * dp).toInt())
+        )
         drawerAccountAvatar.visibility = View.VISIBLE
     } else {
         drawerAccountAvatar.visibility = View.GONE
@@ -302,7 +304,7 @@ internal fun MainActivity.renderAccountHeader() {
                 ellipsize = android.text.TextUtils.TruncateAt.END
             })
             addView(TextView(this@renderAccountHeader).apply {
-                text = account.email
+                text = DemoInbox.shownEmail(this@renderAccountHeader, account.email)
                 textSize = 12f
                 setTextColor(secondaryTextInt)
                 maxLines = 1

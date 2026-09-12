@@ -147,6 +147,7 @@ internal suspend fun MainActivity.fetchFolderPage(
  * limit: page five used to re-download the four pages already on screen.
  */
 internal fun MainActivity.loadNextEmailPage() {
+    if (DemoInbox.isEnabled(this)) { isLoadingMore = false; return }
     val account = connectedAccount ?: run { isLoadingMore = false; return }
     val folderId = selectedFolder
     // The unified inbox interleaves several accounts into one sorted list, so a
@@ -810,6 +811,8 @@ internal fun MainActivity.updateEmailsList(rawList: List<DisplayEmail>) {
     }
     // A fetch landed: allow the next scroll-triggered page load.
     isLoadingMore = false
+    // While the demo inbox is on, real mail arriving from a push or a late fetch is ignored.
+    if (DemoInbox.isEnabled(this) && rawList.any { !DemoInbox.isDemoId(it.id) }) return
     // Stable adapter ids derive from email ids: a duplicate id in the list
     // (e.g. multi-account label sync merging overlapping results) crashes
     // RecyclerView with "Called attach on a child which is not detached".
@@ -910,6 +913,16 @@ internal fun MainActivity.applyFolderFilterAndRefresh() {
     val folderTitle = getCurrentMailboxTitle()
     supportActionBar?.title = folderTitle
     updateCustomTopBar(folderTitle, inMailbox = true)
+
+    if (DemoInbox.isEnabled(this)) {
+        startPeriodicSync() // cancels the running sync and stays idle in demo mode
+        updateEmailsList(DemoInbox.emails(
+            selectedFolder,
+            currentAccountEmail.orEmpty(),
+            labelsForAccount(currentAccountEmail.orEmpty()),
+        ))
+        return
+    }
 
     val cached = folderCache[selectedFolder]
     if (cached != null) {

@@ -127,6 +127,11 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
             buildUi()
         }
         applyShowPreference()
+        if (DemoInbox.isEnabled(activity)) {
+            contacts = DemoInbox.contacts()
+            renderList()
+            return
+        }
         if (ContactsPrefs.provider(activity) == ContactsPrefs.Provider.DAVX5 &&
             !ContactsProvider.hasReadPermission(activity)) {
             activity.requestContactsPermissions { refresh() }
@@ -141,6 +146,11 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
     }
 
     fun refresh() {
+        if (DemoInbox.isEnabled(activity)) {
+            contacts = DemoInbox.contacts()
+            renderList()
+            return
+        }
         scope.launch {
             val loaded = runCatching { repository.loadAll() }.getOrNull() ?: return@launch
             ContactsCache.contacts = loaded

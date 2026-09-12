@@ -16,11 +16,11 @@ class CalendarMonthView(context: Context) : View(context) {
 
     var palette: CalendarTheme.Palette = CalendarTheme.palette(context)
     /** Any instant within the displayed month. */
-    var monthAnchor: Long = System.currentTimeMillis()
+    var monthAnchor: Long = DemoInbox.now(context)
         set(value) { field = value; rebuild(); invalidate() }
     var occurrences: List<EventOccurrence> = emptyList()
         set(value) { field = value; countByDay(); invalidate() }
-    var selectedDay: Long = CalendarTimelineView.midnight(System.currentTimeMillis())
+    var selectedDay: Long = CalendarTimelineView.midnight(DemoInbox.now(context))
         set(value) { field = value; invalidate() }
 
     var onDaySelected: ((Long) -> Unit)? = null
@@ -91,7 +91,7 @@ class CalendarMonthView(context: Context) : View(context) {
 
         linePaint.color = CalendarTimelineView.adjustAlpha(palette.secondaryText, 0.18f)
         val thisMonth = CalendarPrefs.calendar().apply { timeInMillis = monthAnchor }.get(Calendar.MONTH)
-        val today = CalendarTimelineView.midnight(System.currentTimeMillis())
+        val today = CalendarTimelineView.midnight(DemoInbox.now(context))
 
         for (idx in 0 until 42) {
             val row = idx / cols

@@ -374,7 +374,7 @@ internal fun MainActivity.refreshSettingsAccountRow() {
         // The dot only carries meaning when the unified inbox can mix accounts.
         applyAccountColorDot(nameView, email, savedAccounts.size >= 2)
     }
-    findViewById<TextView>(R.id.settingsAccountEmail)?.text = email
+    findViewById<TextView>(R.id.settingsAccountEmail)?.text = DemoInbox.shownEmail(this, email)
 }
 
 /**
@@ -591,6 +591,39 @@ internal fun MainActivity.showAboutDialog() {
     debugSwitch.setOnCheckedChangeListener { _, enabled ->
         prefs.edit().putBoolean("debug_mode", enabled).apply()
         status.visibility = if (enabled) android.view.View.VISIBLE else android.view.View.GONE
+    }
+
+    // Debug builds only: fictional mailbox for README screenshots (see DemoInbox).
+    if (BuildConfig.DEBUG) {
+        val demoSwitch = androidx.appcompat.widget.SwitchCompat(activity).apply {
+            isChecked = DemoInbox.isEnabled(activity)
+            textOff = ""
+            textOn = ""
+            thumbTintList = thumbStates
+            trackTintList = trackStates
+        }
+        view.addView(LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).also { it.bottomMargin = (12 * dp).toInt() }
+            addView(TextView(activity).apply {
+                text = "Demo inbox (screenshots)"
+                setTextColor(textColor)
+                textSize = 15f
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            })
+            addView(demoSwitch)
+        })
+        demoSwitch.setOnCheckedChangeListener { _, enabled ->
+            DemoInbox.setEnabled(activity, enabled)
+            renderAccountHeader()
+            refreshSettingsAccountRow()
+            // Leaving demo mode: drop the demo rows so the real folder reloads cleanly.
+            if (!enabled) emails.clear()
+            applyFolderFilterAndRefresh()
+        }
     }
 
     view.addView(Button(this).apply {
