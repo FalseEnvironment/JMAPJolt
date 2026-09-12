@@ -236,7 +236,8 @@ internal fun MainActivity.applyAccentColor() {
     val accentTint = ColorStateList.valueOf(accentInt)
     val t = tokens
     val barContent = topBarContentColor()
-    fabCompose.backgroundTintList = accentTint
+    // Tonal FAB (MD3 "secondary container" style): accent-tinted surface, accent icon.
+    fabCompose.backgroundTintList = ColorStateList.valueOf(t.accentContainer(accentInt))
     // The top bar sits on the theme ground: the accent marks actions and selection,
     // it no longer paints the whole header and status bar.
     toolbar.setBackgroundColor(t.background)
@@ -305,7 +306,7 @@ internal fun MainActivity.applyAccentColor() {
     styleAccentButton(loginButton, forceColor = "#3D8BFD".toColorInt())
     onboardingNextFab.backgroundTintList = ColorStateList.valueOf(accentInt)
     onboardingNextFab.imageTintList = ColorStateList.valueOf(onAccent)
-    fabCompose.imageTintList = ColorStateList.valueOf(onAccent)
+    fabCompose.imageTintList = ColorStateList.valueOf(t.accentOnGround(accentInt))
     composeSendButton.imageTintList = ColorStateList.valueOf(accentInt)
     composeAttachButton.imageTintList = ColorStateList.valueOf(accentInt)
     val quoteTint = ColorStateList.valueOf(tokens.textSecondary)

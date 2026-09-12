@@ -146,6 +146,13 @@ internal fun ThemeTokens.accentSoft(accent: Int): Int =
     blendColors(background, accent, if (isDark) 0.22f else 0.14f)
 
 /**
+ * Tonal container for a floating action button: clearly tinted by the accent but far
+ * quieter than the raw accent, so the button stands out without shouting.
+ */
+internal fun ThemeTokens.accentContainer(accent: Int): Int =
+    blendColors(surfaceCard, accent, if (isDark) 0.34f else 0.24f)
+
+/**
  * Accent used as text or icon colour on the theme ground. Dark themes lift it towards
  * white so a deep accent (navy, dark purple) keeps contrast on a near-black background.
  */
