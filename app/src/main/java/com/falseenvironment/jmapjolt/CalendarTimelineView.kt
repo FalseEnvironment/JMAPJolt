@@ -17,7 +17,7 @@ class CalendarTimelineView(context: Context) : View(context) {
 
     var palette: CalendarTheme.Palette = CalendarTheme.palette(context)
     /** Day-start (local midnight) instants, one per column. */
-    var days: List<Long> = listOf(midnight(System.currentTimeMillis()))
+    var days: List<Long> = listOf(midnight(DemoInbox.now(context)))
         set(value) { field = value; allDayBand = buildBand(); requestLayout(); invalidate() }
     var occurrences: List<EventOccurrence> = emptyList()
         set(value) { field = value; allDayBand = buildBand(); requestLayout(); invalidate() }
@@ -122,7 +122,7 @@ class CalendarTimelineView(context: Context) : View(context) {
                 val c = CalendarPrefs.calendar().apply { timeInMillis = days[i] }
                 val label = "%s %d".format(
                     shortDow(c.get(Calendar.DAY_OF_WEEK)), c.get(Calendar.DAY_OF_MONTH))
-                val isToday = isSameDay(days[i], System.currentTimeMillis())
+                val isToday = isSameDay(days[i], DemoInbox.now(context))
                 dayHeaderPaint.color = if (isToday) palette.accent else palette.text
                 canvas.drawText(label, gutter + i * colWidth + 8f * density, 18f * density, dayHeaderPaint)
             }
@@ -178,18 +178,22 @@ class CalendarTimelineView(context: Context) : View(context) {
             val rect = RectF(left, blockTop, right, blockBottom)
             blockPaint.color = adjustAlpha(palette.accent, if (palette.isDark) 0.5f else 0.85f)
             canvas.drawRoundRect(rect, 6f * density, 6f * density, blockPaint)
-            titlePaint.color = palette.onAccent
-            canvas.save()
-            canvas.clipRect(rect)
-            canvas.drawText(
-                occ.event.title.ifBlank { "(no title)" },
-                left + 6f * density, blockTop + 16f * density, titlePaint)
-            canvas.restore()
+            // Blocks shorter than half an hour are too thin for a line of text: show the
+            // coloured block only, the title opens with a tap.
+            if (occ.durationMinutes >= MIN_TITLED_EVENT_MINUTES) {
+                titlePaint.color = palette.onAccent
+                canvas.save()
+                canvas.clipRect(rect)
+                canvas.drawText(
+                    occ.event.title.ifBlank { "(no title)" },
+                    left + 6f * density, blockTop + 16f * density, titlePaint)
+                canvas.restore()
+            }
             hits += Hit(rect, occ)
         }
 
         // Current-time indicator (Etar-style): accent line + dot across today's column.
-        val now = System.currentTimeMillis()
+        val now = DemoInbox.now(context)
         val nowCol = days.indexOfFirst { isSameDay(it, now) }
         if (nowCol >= 0) {
             val nowMin = ((now - days[nowCol]) / 60_000L).toInt().coerceIn(0, 1440)
@@ -257,6 +261,9 @@ class CalendarTimelineView(context: Context) : View(context) {
     }
 
     companion object {
+        /** Events shorter than this draw no title inside their block. */
+        private const val MIN_TITLED_EVENT_MINUTES = 30
+
         fun midnight(epoch: Long): Long = CalendarPrefs.calendar().apply {
             timeInMillis = epoch
             set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
