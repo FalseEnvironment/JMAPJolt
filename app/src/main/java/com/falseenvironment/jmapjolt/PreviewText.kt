@@ -1,5 +1,7 @@
 package com.falseenvironment.jmapjolt
 
+import org.jsoup.Jsoup
+
 // Cleanup for the one-line body preview shown in the list, the widget and notifications.
 //
 // Servers derive `preview` from the first body part. For a marketing HTML email that
@@ -68,6 +70,53 @@ internal object PreviewText {
             "\\b(font-family|max-width|min-width|line-height|mso-|-webkit-|!important)\\b",
         RegexOption.IGNORE_CASE
     )
+
+    // Longest preview kept from a body: the row shows two lines, the rest is wasted memory
+    // in the list cache.
+    const val MAX_BODY_PREVIEW_CHARS = 200
+
+    // Reply history and signatures in HTML bodies: everything a client nests under these.
+    private const val HTML_QUOTE_SELECTOR =
+        "head, style, script, blockquote, .gmail_quote, .quoted-html-island, " +
+            "[data-quoted-html], [data-forwarded-html], #divRplyFwdMsg, .moz-cite-prefix"
+    private const val HTML_BLOCK_SELECTOR = "p, div, li, tr, h1, h2, h3, h4, h5, h6, table"
+    private val SIGNATURE_DELIMITER = Regex("^--\\s*$")
+
+    /**
+     * Preview rebuilt from a downloaded body, preferring the plain-text part and falling
+     * back to the HTML one. Quoted history is cut before cleaning, so a reply previews
+     * its new text rather than the message it answers. Empty when neither part has prose.
+     */
+    fun fromBody(textBody: String?, htmlBody: String?): String {
+        val fromText = textBody?.takeIf { it.isNotBlank() }?.let { clean(ownLines(it)) }.orEmpty()
+        val preview = fromText.ifBlank {
+            htmlBody?.takeIf { it.isNotBlank() }?.let { clean(ownLines(htmlToText(it))) }.orEmpty()
+        }
+        return truncateAtWord(preview, MAX_BODY_PREVIEW_CHARS)
+    }
+
+    /** Lines written by the sender: stops at the reply lead-in or the signature delimiter. */
+    private fun ownLines(text: String): String = text.lineSequence()
+        .takeWhile { line ->
+            val trimmed = line.trim()
+            !REPLY_INTRO.matches(trimmed) && !SIGNATURE_DELIMITER.matches(trimmed)
+        }
+        .filterNot { it.trimStart().startsWith(">") }
+        .joinToString("\n")
+
+    private fun htmlToText(html: String): String {
+        val body = Jsoup.parse(html).body()
+        body.select(HTML_QUOTE_SELECTOR).remove()
+        body.select("br").before("\n")
+        body.select(HTML_BLOCK_SELECTOR).after("\n")
+        return body.wholeText()
+    }
+
+    private fun truncateAtWord(text: String, max: Int): String {
+        if (text.length <= max) return text
+        val cut = text.lastIndexOf(' ', max).takeIf { it > max / 2 } ?: max
+        return text.substring(0, cut).trimEnd()
+    }
 
     fun clean(raw: String?): String {
         if (raw.isNullOrBlank()) return ""

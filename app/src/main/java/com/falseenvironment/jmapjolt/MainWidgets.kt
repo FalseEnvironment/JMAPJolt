@@ -152,12 +152,17 @@ internal fun MainActivity.prefetchEmailBody(email: DisplayEmail) {
         try {
             val fresh = jmapClient.fetchEmailsById(account, listOf(email.id)).firstOrNull()
             if (fresh != null && fresh.fullBody.isNotBlank()) {
-                val updated = email.copy(fullBody = fresh.fullBody, attachments = fresh.attachments)
+                val updated = email.copy(
+                    fullBody = fresh.fullBody,
+                    preview = fresh.preview.ifBlank { email.preview },
+                    attachments = fresh.attachments
+                )
                 val idx = emails.indexOfFirst { it.id == email.id }
                 if (idx >= 0) {
                     emails[idx] = updated
                     val bi = baseEmails.indexOfFirst { it.id == email.id }
                     if (bi >= 0) baseEmails[bi] = updated
+                    emailAdapter.notifyItemChanged(idx)
                 }
             }
         } catch (_: Exception) {

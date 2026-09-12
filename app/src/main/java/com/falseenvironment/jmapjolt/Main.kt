@@ -1131,6 +1131,7 @@ class MainActivity : AppCompatActivity() {
                     if (fresh != null) {
                         val updated = email.copy(
                             fullBody = if (fresh.fullBody.isNotBlank()) fresh.fullBody else email.fullBody,
+                            preview = fresh.preview.ifBlank { email.preview },
                             attachments = fresh.attachments
                         )
                         displayEmail = updated
@@ -1139,6 +1140,7 @@ class MainActivity : AppCompatActivity() {
                             emails[idx] = updated
                             val bi = baseEmails.indexOfFirst { it.id == email.id }
                             if (bi >= 0) baseEmails[bi] = updated
+                            emailAdapter.notifyItemChanged(idx)
                             saveEmailCache()
                         }
                         // Refresh attachment footer

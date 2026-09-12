@@ -218,6 +218,16 @@ class JMapClient(private val context: Context) {
                 } ?: email.textBody?.firstOrNull()?.let { part ->
                     email.bodyValues?.get(part.partId)?.value
                 } ?: email.preview ?: ""
+                // With the body at hand, preview it like Flectar does: from the plain-text
+                // part (HTML as fallback), minus quoted history. The server preview stays
+                // the fallback, and the only source for list fetches without bodies.
+                val bodyPreview = if (!withBodies) "" else PreviewText.fromBody(
+                    textBody = email.textBody.orEmpty()
+                        .filter { it.type.equals("text/plain", ignoreCase = true) }
+                        .mapNotNull { email.bodyValues?.get(it.partId)?.value }
+                        .joinToString("\n"),
+                    htmlBody = email.htmlBody?.firstOrNull()?.let { email.bodyValues?.get(it.partId)?.value }
+                )
                 val atts = email.attachments?.mapNotNull { part ->
                     val blobId = part.blobId ?: return@mapNotNull null
                     EmailAttachmentInfo(blobId = blobId, name = part.name ?: "attachment",
@@ -225,7 +235,8 @@ class JMapClient(private val context: Context) {
                 } ?: emptyList()
                 EmailSummary(id = email.id, subject = email.subject ?: "(No Subject)",
                     from = if (fromName.isNotBlank()) fromName else fromEmail,
-                    fromEmail = fromEmail, preview = PreviewText.clean(email.preview),
+                    fromEmail = fromEmail,
+                    preview = bodyPreview.ifBlank { PreviewText.clean(email.preview) },
                     seen = isSeen, isStarred = isStarred, fullBody = body,
                     receivedAt = email.receivedAt?.toEpochMilli() ?: 0L,
                     toEmail = email.to.orEmpty().joinToString(", ") { it.email ?: "" },
