@@ -472,7 +472,6 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
     override fun onBindViewHolder(holder: EmailHolder, position: Int) {
         val item = activity.emails[position]
         val dp = holder.itemView.resources.displayMetrics.density
-        val isLight = activity.currentTheme == "light"
 
         if (item.isThreadMoreRow) {
             bindMoreRow(holder, item, dp)
@@ -509,9 +508,10 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
         holder.contentLayout.setPadding(
             (if (isChild) 34 else 12).let { (it * dp).toInt() },
             (12 * dp).toInt(), (12 * dp).toInt(), (12 * dp).toInt())
-        val primaryColor = if (isLight) Color.BLACK else Color.WHITE
-        val secondaryColor = if (isLight) "#5A5A5A".toColorInt() else "#9E9E9E".toColorInt()
-        val mutedColor = if (isLight) "#8A8A8A".toColorInt() else "#616161".toColorInt()
+        val themeTokens = activity.tokens
+        val primaryColor = themeTokens.textPrimary
+        val secondaryColor = themeTokens.textSecondary
+        val mutedColor = themeTokens.textMuted
 
         // Staggered entrance: only animate for first 12 items on fresh loads
         if (position < 12 && holder.itemView.alpha == 0f) {
@@ -548,23 +548,25 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
             holder.colorStrip.visibility = android.view.View.GONE
         }
         holder.senderText.text = senderName
-        holder.senderText.setTextColor(secondaryColor)
         holder.title.text = item.subject
         holder.subtitle.text = item.preview
 
         // Sent and Drafts are always shown as read — their seen state is irrelevant.
         val alwaysRead = activity.selectedFolder == R.id.nav_sent ||
                 activity.selectedFolder == R.id.nav_drafts
+        // Unread: only the subject turns bold. Sender and preview keep their normal
+        // weight so the row does not read as one heavy block.
+        holder.senderText.setTypeface(null, Typeface.NORMAL)
+        holder.subtitle.setTextColor(secondaryColor)
         if (!item.seen && !alwaysRead) {
-            holder.senderText.setTypeface(null, Typeface.BOLD)
+            holder.senderText.setTextColor(primaryColor)
             holder.title.setTypeface(null, Typeface.BOLD)
             holder.title.setTextColor(primaryColor)
-            holder.subtitle.setTextColor(if (isLight) "#424242".toColorInt() else "#E0E0E0".toColorInt())
-            holder.dateText.setTextColor(activity.currentAccentColor.toColorInt())
+            holder.dateText.setTextColor(themeTokens.accentOnGround(activity.currentAccentColor.toColorInt()))
         } else {
-            holder.senderText.setTypeface(null, Typeface.NORMAL)
+            holder.senderText.setTextColor(secondaryColor)
             holder.title.setTypeface(null, Typeface.NORMAL)
-            holder.title.setTextColor(secondaryColor)
+            holder.title.setTextColor(primaryColor)
             holder.subtitle.setTextColor(mutedColor)
             holder.dateText.setTextColor(mutedColor)
         }
@@ -623,7 +625,7 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
         holder.avatarContainer.visibility = android.view.View.VISIBLE
         holder.starButton.imageTintList = ColorStateList.valueOf(
             if (item.isFavorite) activity.currentAccentColor.toColorInt()
-            else if (isLight) "#CCCCCC".toColorInt() else "#444444".toColorInt()
+            else mutedColor
         )
         holder.starButton.setOnClickListener {
             holder.starButton.animateTap()
@@ -635,7 +637,7 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
             // Update tint immediately — no animation, no rebind
             holder.starButton.imageTintList = ColorStateList.valueOf(
                 if (newFav) activity.currentAccentColor.toColorInt()
-                else if (isLight) "#CCCCCC".toColorInt() else "#444444".toColorInt()
+                else mutedColor
             )
             val pos = holder.adapterPosition
             if (!newFav && activity.selectedFolder == R.id.nav_favourite &&

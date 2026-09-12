@@ -724,14 +724,13 @@ internal fun MainActivity.buildHtmlContent(rawBodyIn: String, subject: String = 
     return if (isFullDoc) {
         val body = collapseDeepQuotes(sanitizeEmailHtml(rawBody))
         var html = body
-        if (!html.contains("viewport", ignoreCase = true))
-            html = html.replaceFirst("<head", "<head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=3.0\">", ignoreCase = true)
+        if (!html.contains("viewport", ignoreCase = true)) {
+            val viewport = "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=3.0\">"
+            html = insertAfterOpeningTag(html, "head", viewport) ?: html
+        }
         // Insert the subject right after the opening <body> tag (fallback: prepend).
         if (subjectHeading.isNotEmpty()) {
-            val bodyIdx = html.indexOf("<body", ignoreCase = true)
-            val gt = if (bodyIdx >= 0) html.indexOf('>', bodyIdx) else -1
-            html = if (gt >= 0) html.substring(0, gt + 1) + subjectHeading + html.substring(gt + 1)
-                   else subjectHeading + html
+            html = insertAfterOpeningTag(html, "body", subjectHeading) ?: (subjectHeading + html)
         }
         if (isDark) html
             .replaceFirst("<html", "<html style=\"background-color:$bgColor\"", ignoreCase = true)
@@ -927,11 +926,12 @@ internal fun MainActivity.closeEmailDetail() {
     mailSwipeRefresh.visibility = View.VISIBLE
     fabCompose.animateFabIn()
     isShowingEmailDetail = false
+    refreshBottomNav()
     setDrawerIndicator(true)
     supportActionBar?.setDisplayHomeAsUpEnabled(false)
     drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED)
     drawerToggle.syncState()
-    applyNavIconTint(getOnAccentColor())
+    applyNavIconTint(topBarContentColor())
     updateCustomTopBar(getCurrentMailboxTitle(), inMailbox = true)
     if (isSearchActive) searchChipsScroll.visibility = View.VISIBLE
 }

@@ -101,6 +101,7 @@
     <string name="drawer_open">Open navigation menu</string>
     <string name="drawer_close">Close navigation menu</string>
     <string name="settings_title">Settings</string>
+    <string name="nav_mail">Mail</string>
     <string name="calendar_title">Calendar</string>
     <string name="settings_swipe_actions">Swipe behavior</string>
     <string name="settings_swipe_right">Swipe right action</string>

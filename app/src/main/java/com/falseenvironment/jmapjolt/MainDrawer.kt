@@ -205,19 +205,13 @@ internal fun MainActivity.showAddAccountDialog() {
 
 internal fun MainActivity.bindDrawerNavigation() {
     navigationView.setNavigationItemSelectedListener { item ->
-        if (item.itemId == R.id.nav_calendar) {
-            showCalendarScreen()
-        } else if (item.itemId == R.id.nav_contacts) {
-            showContactsScreen()
-        } else if (item.itemId == R.id.nav_settings) {
-            showSettingsScreen()
-        } else {
-            selectedFolder = item.itemId
-            if (composeContainer.visibility == View.VISIBLE) hideCompose()
-            showMailboxScreen()
-            applyFolderFilterAndRefresh()
-            navigationView.post { rebuildDrawerMenu() }
-        }
+        // Calendar, Contacts and Settings live in the bottom navigation bar; the drawer
+        // only lists mail destinations.
+        selectedFolder = item.itemId
+        if (composeContainer.visibility == View.VISIBLE) hideCompose()
+        showMailboxScreen()
+        applyFolderFilterAndRefresh()
+        navigationView.post { rebuildDrawerMenu() }
         drawerLayout.closeDrawer(GravityCompat.START)
         true
     }
@@ -397,10 +391,7 @@ internal fun MainActivity.rebuildDrawerMenu() {
     navigationView.itemIconTintList = null
     // Theme-aware icon color: dark on light theme, light on dark themes. A hardcoded light
     // tint here previously turned drawer icons white after a rebuild on the light theme.
-    val defaultIconTint = when (currentTheme) {
-        "light" -> "#1B1B1F".toColorInt()
-        else    -> "#E0E0E0".toColorInt()
-    }
+    val defaultIconTint = tokens.textSecondary
 
     var menuIndex = 0
     if (savedAccounts.size > 1) {
@@ -494,52 +485,16 @@ internal fun MainActivity.rebuildDrawerMenu() {
         }
     }
 
-    val calendarEnabled = CalendarPrefs.isEnabled(this)
-    val calendarItem = if (calendarEnabled) {
-        menu.add(0, R.id.nav_calendar, orderIdx, getString(R.string.calendar_title)).apply {
-            setIcon(R.drawable.ic_lucide_calendar)
-            icon?.mutate()?.setTint(defaultIconTint)
-            isCheckable = true
-        }
-    } else null
-
-    val contactsItem = if (ContactsPrefs.isEnabled(this)) {
-        menu.add(0, R.id.nav_contacts, orderIdx + 1, getString(R.string.contacts_title)).apply {
-            setIcon(R.drawable.ic_lucide_user)
-            icon?.mutate()?.setTint(defaultIconTint)
-            isCheckable = true
-        }
-    } else null
-
-    val settingsItem =
-            menu.add(
-                    0,
-                    R.id.nav_settings,
-                    orderIdx + 2,
-                    getString(R.string.settings_title)
-            )
-    settingsItem.setIcon(R.drawable.ic_lucide_settings)
-    settingsItem.icon?.mutate()?.setTint(defaultIconTint)
-    settingsItem.isCheckable = true
-
-    // In the settings screen the accent highlight belongs on Settings, not the
-    // previously selected folder (which stays remembered in selectedFolder).
-    if (settingsContainer.visibility == View.VISIBLE) {
-        settingsItem.isChecked = true
-    } else if (calendarItem != null && calendarPanelView?.visibility == View.VISIBLE) {
-        calendarItem.isChecked = true
-    } else if (contactsItem != null && contactsPanelView?.visibility == View.VISIBLE) {
-        contactsItem.isChecked = true
-    } else {
-        menu.findItem(selectedFolder)?.isChecked = true
-    }
+    // Outside the mailbox (calendar, contacts, settings) no folder is highlighted: the
+    // bottom navigation bar shows where the user is.
+    val inMailbox = settingsContainer.visibility != View.VISIBLE &&
+        calendarPanelView?.visibility != View.VISIBLE &&
+        contactsPanelView?.visibility != View.VISIBLE
+    if (inMailbox) menu.findItem(selectedFolder)?.isChecked = true
     attachLabelDrag()
 
     val dp = resources.displayMetrics.density
-    val accentInt = currentAccentColor.toColorInt()
-    val r = android.graphics.Color.red(accentInt)
-    val g = android.graphics.Color.green(accentInt)
-    val b = android.graphics.Color.blue(accentInt)
+    val softAccent = tokens.accentSoft(currentAccentColor.toColorInt())
     val cornerR = 999 * dp
     // M3-style floating pill: rounded on all corners, inset from both edges so it
     // reads as a distinct selected chip rather than a full-bleed tab/arrow bar.
@@ -547,15 +502,18 @@ internal fun MainActivity.rebuildDrawerMenu() {
     fun accentShape(alpha: Int): android.graphics.drawable.Drawable {
         val shape = android.graphics.drawable.GradientDrawable().apply {
             this.shape = android.graphics.drawable.GradientDrawable.RECTANGLE
-            setColor(android.graphics.Color.argb(alpha, r, g, b))
+            setColor(softAccent)
+            this.alpha = alpha
             cornerRadius = cornerR
         }
         return android.graphics.drawable.InsetDrawable(shape, sideInset, 0, sideInset, 0)
     }
     val stateList = android.graphics.drawable.StateListDrawable().apply {
+        // Tinted pill, not a solid accent block: the label turns accent on top of it
+        // (see applyTheme's itemTextColor), which keeps it readable on every accent.
         addState(intArrayOf(android.R.attr.state_checked), accentShape(255))
         addState(intArrayOf(android.R.attr.state_activated), accentShape(255))
-        addState(intArrayOf(android.R.attr.state_pressed), accentShape(110))
+        addState(intArrayOf(android.R.attr.state_pressed), accentShape(140))
         addState(intArrayOf(), android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
     }
     navigationView.post { navigationView.itemBackground = stateList }

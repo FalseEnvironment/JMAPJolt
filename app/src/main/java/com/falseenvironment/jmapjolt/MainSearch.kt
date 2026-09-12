@@ -250,9 +250,10 @@ internal fun MainActivity.refreshSearchChips() {
     val dp = resources.displayMetrics.density
     searchChipsRow.removeAllViews()
     val accent = currentAccentColor.toColorInt()
-    val isLight = currentTheme == "light"
-    val tonalBg = if (isLight) "#E8E8EC".toColorInt() else "#2A2A2A".toColorInt()
-    val tonalText = if (isLight) "#1A1A1A".toColorInt() else "#EBEBF0".toColorInt()
+    val tonalBg = tokens.surfaceCard
+    val tonalText = tokens.textPrimary
+    val selectedBg = tokens.accentSoft(accent)
+    val selectedText = tokens.accentOnGround(accent)
     allSearchScopes().forEach { (label, scope) ->
         val selected = scope == searchScope
         searchChipsRow.addView(TextView(this).apply {
@@ -260,11 +261,11 @@ internal fun MainActivity.refreshSearchChips() {
             textSize = 13f
             typeface = if (selected) android.graphics.Typeface.DEFAULT_BOLD
                        else android.graphics.Typeface.DEFAULT
-            setTextColor(if (selected) getOnAccentColor() else tonalText)
+            setTextColor(if (selected) selectedText else tonalText)
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 cornerRadius = 10 * dp
-                setColor(if (selected) accent else tonalBg)
+                setColor(if (selected) selectedBg else tonalBg)
             }
             setPadding((14 * dp).toInt(), (8 * dp).toInt(), (14 * dp).toInt(), (8 * dp).toInt())
             layoutParams = LinearLayout.LayoutParams(

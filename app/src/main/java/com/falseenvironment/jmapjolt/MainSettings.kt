@@ -114,6 +114,7 @@ internal fun MainActivity.showSettingsScreen() {
     refreshSettingsAccountRow()
     loadUnifiedPushPreferences()
     rebuildDrawerMenu()
+    refreshBottomNav()
 }
 
 internal fun MainActivity.bindSettingsMenuNavigation() {
@@ -219,6 +220,7 @@ internal fun MainActivity.bindSettingsMenuNavigation() {
             if (enabled) View.VISIBLE else View.GONE
         if (!enabled && calendarPanelView?.visibility == View.VISIBLE) showMailboxScreen()
         navigationView.post { rebuildDrawerMenu() }
+        refreshBottomNav()
     }
     findViewById<LinearLayout>(R.id.settingsCalOptions).visibility =
         if (CalendarPrefs.isEnabled(this)) View.VISIBLE else View.GONE
@@ -237,6 +239,7 @@ internal fun MainActivity.bindSettingsMenuNavigation() {
         settingsContactsOptions.visibility = if (enabled) View.VISIBLE else View.GONE
         if (!enabled && contactsPanelView?.visibility == View.VISIBLE) showMailboxScreen()
         navigationView.post { rebuildDrawerMenu() }
+        refreshBottomNav()
     }
     settingsContactsShowDropdown.setOnClickListener {
         val values = ContactsPrefs.Show.entries
@@ -638,7 +641,7 @@ internal fun MainActivity.showSettingsMenuRoot() {
     supportActionBar?.setDisplayHomeAsUpEnabled(true)
     drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED)
     drawerToggle.syncState()
-    applyNavIconTint(getOnAccentColor())
+    applyNavIconTint(topBarContentColor())
     invalidateOptionsMenu()
     updateTopBarState()
 }

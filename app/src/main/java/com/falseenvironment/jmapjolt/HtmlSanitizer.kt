@@ -50,3 +50,18 @@ internal fun collapseDeepQuotes(html: String, threshold: Int = 4): String {
     for ((idx, text) in inserts.sortedByDescending { it.first }) sb.insert(idx, text)
     return sb.toString()
 }
+
+/**
+ * Returns [html] with [insertion] placed right after the first opening `<tagName …>`
+ * tag, or null when the document has no such tag.
+ *
+ * Inserting by `replaceFirst("<head", "<head>…")` left the original `>` of the tag
+ * behind the inserted markup; the parser then treated that `>` as body text and the
+ * message opened with a stray `>`.
+ */
+internal fun insertAfterOpeningTag(html: String, tagName: String, insertion: String): String? {
+    val openTag = Regex("<${Regex.escape(tagName)}(?=[\\s/>])[^>]*>", RegexOption.IGNORE_CASE)
+    val match = openTag.find(html) ?: return null
+    val end = match.range.last + 1
+    return html.substring(0, end) + insertion + html.substring(end)
+}

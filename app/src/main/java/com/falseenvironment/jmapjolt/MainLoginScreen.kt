@@ -12,13 +12,7 @@ import org.unifiedpush.android.connector.UnifiedPush
 internal fun MainActivity.showLoginScreen() {
     onboardingContainer.visibility = View.GONE
     loginContainer.visibility = View.VISIBLE
-    val loginBg = when (currentTheme) {
-        "light"  -> android.graphics.Color.parseColor("#F6F6F8")
-        "oled"   -> android.graphics.Color.BLACK
-        "violet" -> android.graphics.Color.parseColor("#160E24")
-        else     -> android.graphics.Color.parseColor("#212126")
-    }
-    loginContainer.setBackgroundColor(loginBg)
+    loginContainer.setBackgroundColor(tokens.background)
     loginBackBtn.visibility = View.VISIBLE
     loginBackBtn.bringToFront()
     loginBackBtn.setOnClickListener { showOnboarding() }
@@ -38,6 +32,7 @@ internal fun MainActivity.showLoginScreen() {
     passwordInput.text?.clear()
     serverUrlInput.text?.clear()
     updateFormState()
+    refreshBottomNav()
     animateLoginEntrance()
 }
 

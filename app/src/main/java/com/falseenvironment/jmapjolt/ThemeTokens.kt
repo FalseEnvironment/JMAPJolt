@@ -27,6 +27,8 @@ internal data class ThemeTokens(
     val surfaceSnackbar: Int,
     val textPrimary: Int,
     val textSecondary: Int,
+    // Third text level: timestamps and previews of read mail, idle icons.
+    val textMuted: Int,
     // Hairline separators between rows.
     val divider: Int,
     // Outlined text field box fill / idle stroke / idle floating label / input text.
@@ -56,6 +58,7 @@ private fun tokens(
     surfaceSnackbar: String,
     textPrimary: String,
     textSecondary: String,
+    textMuted: String,
     divider: String,
     inputBox: String,
     inputStroke: String,
@@ -73,6 +76,7 @@ private fun tokens(
     surfaceSnackbar = surfaceSnackbar.toColorInt(),
     textPrimary = textPrimary.toColorInt(),
     textSecondary = textSecondary.toColorInt(),
+    textMuted = textMuted.toColorInt(),
     divider = divider.toColorInt(),
     inputBox = inputBox.toColorInt(),
     inputStroke = inputStroke.toColorInt(),
@@ -84,40 +88,69 @@ private fun tokens(
 )
 
 // Palette per theme key, keyed by the value stored in `app_theme`.
+// Grounds are neutral (grey, white, black) so the accent reads as a highlight instead
+// of a wash; only Iris keeps a violet cast. Each theme separates its layers —
+// background < surface < card — by a visible step rather than a near-identical shade.
 internal val THEME_TOKENS: Map<String, ThemeTokens> = mapOf(
     "gray" to tokens(
-        background = "#212126", surface = "#2A2A30", surfaceVariant = "#1C1C22",
-        surfaceCard = "#49454F", surfaceDialog = "#242429", surfaceSnackbar = "#333338",
-        textPrimary = "#ECECF1", textSecondary = "#90909A", divider = "#38383F",
-        inputBox = "#2E2E34", inputStroke = "#454552", inputLabel = "#B0B0BA",
+        background = "#141416", surface = "#1C1C1F", surfaceVariant = "#101012",
+        surfaceCard = "#232327", surfaceDialog = "#1F1F23", surfaceSnackbar = "#2C2C31",
+        textPrimary = "#EDEDF0", textSecondary = "#A0A0A8", textMuted = "#6E6E77",
+        divider = "#2A2A2F",
+        inputBox = "#1C1C1F", inputStroke = "#3A3A41", inputLabel = "#A8A8B0",
         inputText = "#FFFFFF",
-        skeletonBase = "#2A2A2A", skeletonShine = "#3A3A3A", isDark = true,
+        skeletonBase = "#232327", skeletonShine = "#2F2F34", isDark = true,
     ),
     "light" to tokens(
-        background = "#F6F6F8", surface = "#FFFFFF", surfaceVariant = "#E8E8EC",
-        surfaceCard = "#EAEAEF", surfaceDialog = "#F0EEEE", surfaceSnackbar = "#FFFFFF",
-        textPrimary = "#1B1B1F", textSecondary = "#5F5F66", divider = "#DCDCE3",
-        inputBox = "#FFFFFF", inputStroke = "#D0D0D4", inputLabel = "#8A8A90",
-        inputText = "#212121",
-        skeletonBase = "#E0E0E0", skeletonShine = "#F0F0F0", isDark = false,
+        background = "#FFFFFF", surface = "#F7F7F8", surfaceVariant = "#EEEEF1",
+        surfaceCard = "#F1F1F4", surfaceDialog = "#FFFFFF", surfaceSnackbar = "#FFFFFF",
+        textPrimary = "#18181B", textSecondary = "#5E5E66", textMuted = "#8E8E96",
+        divider = "#E5E5EA",
+        inputBox = "#FFFFFF", inputStroke = "#D2D2D8", inputLabel = "#8A8A90",
+        inputText = "#18181B",
+        skeletonBase = "#ECECEF", skeletonShine = "#F6F6F8", isDark = false,
     ),
     "oled" to tokens(
-        background = "#000000", surface = "#0B0B0D", surfaceVariant = "#080808",
-        surfaceCard = "#141416", surfaceDialog = "#0A0A0A", surfaceSnackbar = "#1C1C1E",
-        textPrimary = "#ECECF1", textSecondary = "#90909A", divider = "#232327",
-        inputBox = "#141414", inputStroke = "#454552", inputLabel = "#B0B0BA",
+        background = "#000000", surface = "#0C0C0E", surfaceVariant = "#000000",
+        surfaceCard = "#151518", surfaceDialog = "#111113", surfaceSnackbar = "#1C1C1F",
+        textPrimary = "#EDEDF0", textSecondary = "#9A9AA2", textMuted = "#66666E",
+        divider = "#1E1E22",
+        inputBox = "#111113", inputStroke = "#3A3A41", inputLabel = "#A8A8B0",
         inputText = "#FFFFFF",
-        skeletonBase = "#111111", skeletonShine = "#1E1E1E", isDark = true,
+        skeletonBase = "#111113", skeletonShine = "#1E1E21", isDark = true,
     ),
     "violet" to tokens(
-        background = "#160E24", surface = "#1E1430", surfaceVariant = "#0E0A1A",
-        surfaceCard = "#271C3E", surfaceDialog = "#140B22", surfaceSnackbar = "#2C1F46",
-        textPrimary = "#ECECF1", textSecondary = "#9B7DC8", divider = "#33254F",
-        inputBox = "#241634", inputStroke = "#454552", inputLabel = "#B0B0BA",
+        background = "#120C1C", surface = "#1A1328", surfaceVariant = "#0C0814",
+        surfaceCard = "#231A35", surfaceDialog = "#1A1328", surfaceSnackbar = "#2A2040",
+        textPrimary = "#EEEAF4", textSecondary = "#A89CBE", textMuted = "#74698A",
+        divider = "#2B2140",
+        inputBox = "#1A1328", inputStroke = "#3F3456", inputLabel = "#B0A6C2",
         inputText = "#FFFFFF",
-        skeletonBase = "#2A2A2A", skeletonShine = "#3A3A3A", isDark = true,
+        skeletonBase = "#231A35", skeletonShine = "#2F2446", isDark = true,
     ),
 )
+
+/** [base] moved towards [other] by [ratio] (0 = base, 1 = other), per RGB channel. */
+internal fun blendColors(base: Int, other: Int, ratio: Float): Int {
+    val r = ratio.coerceIn(0f, 1f)
+    fun ch(shift: Int): Int {
+        val a = (base shr shift) and 0xFF
+        val b = (other shr shift) and 0xFF
+        return (a + (b - a) * r).toInt().coerceIn(0, 255)
+    }
+    return (0xFF shl 24) or (ch(16) shl 16) or (ch(8) shl 8) or ch(0)
+}
+
+/** Accent tint for selected rows, active nav items and chips: accent laid over the background. */
+internal fun ThemeTokens.accentSoft(accent: Int): Int =
+    blendColors(background, accent, if (isDark) 0.22f else 0.14f)
+
+/**
+ * Accent used as text or icon colour on the theme ground. Dark themes lift it towards
+ * white so a deep accent (navy, dark purple) keeps contrast on a near-black background.
+ */
+internal fun ThemeTokens.accentOnGround(accent: Int): Int =
+    if (isDark) blendColors(accent, textPrimary, 0.25f) else accent
 
 // Tokens of the theme currently selected in Settings.
 internal val MainActivity.tokens: ThemeTokens

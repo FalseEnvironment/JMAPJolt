@@ -30,18 +30,14 @@ internal fun MainActivity.showOnboarding(page: Int = 0) {
     status.visibility = View.GONE
     drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED)
     if (page != onboardingPager.currentItem) onboardingPager.setCurrentItem(page, false)
+    refreshBottomNav()
 }
 
 internal fun MainActivity.setupOnboardingPager() {
     onboardingPermRefresh = null  // reset on each setup
     val dp = resources.displayMetrics.density
     val accentInt = currentAccentColor.toColorInt()
-    val bgColor = when (currentTheme) {
-        "light"  -> Color.parseColor("#F6F6F8")
-        "oled"   -> Color.BLACK
-        "violet" -> Color.parseColor("#160E24")
-        else     -> Color.parseColor("#212126")
-    }
+    val bgColor = tokens.background
     val textColor = when (currentTheme) {
         "light" -> Color.parseColor("#1A1A1A")
         else    -> Color.parseColor("#EBEBF0")

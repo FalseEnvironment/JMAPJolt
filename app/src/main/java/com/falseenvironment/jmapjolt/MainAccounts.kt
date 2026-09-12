@@ -233,23 +233,14 @@ internal fun MainActivity.renderAccountHeader() {
     val current = currentAccountEmail ?: savedAccounts.firstOrNull()?.email.orEmpty()
     val dp = resources.displayMetrics.density
 
-    val textInt = if (currentTheme == "light") "#212121".toColorInt() else Color.WHITE
-    val secondaryTextInt =
-            if (currentTheme == "light") "#5A5A5A".toColorInt() else "#BDBDBD".toColorInt()
+    val textInt = tokens.textPrimary
+    val secondaryTextInt = tokens.textSecondary
     val accentInt = currentAccentColor.toColorInt()
     val logoutRed = "#E53935".toColorInt()
 
-    // Keep the header background in sync with the active theme (was hardcoded dark).
-    val headerBg = when (currentTheme) {
-        "light"  -> "#F6F6F8".toColorInt()
-        "oled"   -> "#000000".toColorInt()
-        "violet" -> "#160E24".toColorInt()
-        else     -> "#212126".toColorInt()
-    }
-    (drawerAccountRow.parent as? View)?.setBackgroundColor(headerBg)
-    findViewById<View>(R.id.drawerHeaderDivider)?.setBackgroundColor(
-        android.graphics.Color.argb(40, android.graphics.Color.red(textInt), android.graphics.Color.green(textInt), android.graphics.Color.blue(textInt))
-    )
+    // Same ground as the drawer below it, in every theme, with no separator line: the
+    // account block reads as the top of the sidebar rather than a separate panel.
+    (drawerAccountRow.parent as? View)?.setBackgroundColor(tokens.background)
 
     // Header: avatar + display name (bold, primary) + email (secondary).
     drawerAccountName.setCompoundDrawablesRelative(null, null, null, null)
@@ -268,15 +259,8 @@ internal fun MainActivity.renderAccountHeader() {
 
     drawerAccountsList.removeAllViews()
 
-    // Per-account row background: a darkened shade of the active theme so the rows
-    // (with pencil/exit icons) match the theme instead of a generic dark grey
-    // that clashes under e.g. the iris/violet theme.
-    val rowBg = when (currentTheme) {
-        "light"  -> "#F0F0F0".toColorInt()
-        "oled"   -> "#181818".toColorInt()
-        "violet" -> "#0F0918".toColorInt()
-        else     -> "#2A2A2A".toColorInt()
-    }
+    // Per-account row background: the theme's card surface, one step above the drawer.
+    val rowBg = tokens.surfaceCard
 
     // All accounts, including the currently logged-in one (it shows a red sign-out icon).
     savedAccounts.forEach { account ->

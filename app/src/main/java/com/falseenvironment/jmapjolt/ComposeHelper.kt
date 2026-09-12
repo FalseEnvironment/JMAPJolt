@@ -337,12 +337,7 @@ internal fun MainActivity.showComposeView() {
         it.setTextColor(textColor)
         it.setHintTextColor(hintColor)
     }
-    formatToolbarRow.setBackgroundColor(when (currentTheme) {
-        "light"  -> "#E8E8E8".toColorInt()
-        "oled"   -> Color.BLACK
-        "violet" -> "#0E0A1A".toColorInt()
-        else     -> "#212121".toColorInt()
-    })
+    formatToolbarRow.setBackgroundColor(tokens.surfaceVariant)
     buildFormatToolbar()
     updateFormatButtonStates()
 
@@ -400,7 +395,7 @@ internal fun MainActivity.showComposeView() {
     setDrawerIndicator(false)
     drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED)
     drawerToggle.syncState()
-    applyNavIconTint(getOnAccentColor())
+    applyNavIconTint(topBarContentColor())
 
     folderLabel.visibility = View.GONE
     topBarSendButton.visibility = View.VISIBLE
@@ -408,6 +403,7 @@ internal fun MainActivity.showComposeView() {
     composeContainer.isFocusable = true
     composeContainer.bringToFront()
     composeContainer.visibility = View.VISIBLE
+    refreshBottomNav()
     composeToInput.requestFocus()
 }
 
@@ -415,6 +411,7 @@ internal fun MainActivity.hideCompose() {
     editingDraftId = null
     clearPendingQuote()
     composeContainer.visibility = View.GONE
+    refreshBottomNav()
     activeFormats.clear()
     updateFormatButtonStates()
     pendingAttachments.clear()

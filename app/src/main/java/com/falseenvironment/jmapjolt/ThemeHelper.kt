@@ -72,7 +72,7 @@ internal fun MainActivity.applyTheme() {
     val navTextColors =
             ColorStateList(
                     arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
-                    intArrayOf(textInt, secondaryTextInt)
+                    intArrayOf(t.accentOnGround(currentAccentColor.toColorInt()), textInt)
             )
     navigationView.itemTextColor = navTextColors
     navigationView.itemIconTintList = navTextColors
@@ -154,14 +154,7 @@ internal fun MainActivity.applyTheme() {
         detailToText.setTextColor(secondaryTextInt)
     }
 
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-        window.statusBarColor = toolbarInt
-        if (currentTheme == "light" && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
-        } else {
-            window.decorView.systemUiVisibility = 0
-        }
-    }
+    applySystemBars()
 
     // Tagged views (hairlines, secondary labels) — repainted last so this pass wins
     // over updateContainerTextColors, which paints every TextView with the primary colour.
@@ -241,12 +234,16 @@ internal fun MainActivity.applyAccentColor() {
     val accentInt = currentAccentColor.toColorInt()
     val onAccent = getOnAccentColor()
     val accentTint = ColorStateList.valueOf(accentInt)
+    val t = tokens
+    val barContent = topBarContentColor()
     fabCompose.backgroundTintList = accentTint
-    toolbar.setBackgroundColor(accentInt)
-    toolbar.setTitleTextColor(onAccent)
-    drawerToggle.drawerArrowDrawable.color = onAccent
-    applyNavIconTint(onAccent)
-    topBarAccentArea.setBackgroundColor(accentInt)
+    // The top bar sits on the theme ground: the accent marks actions and selection,
+    // it no longer paints the whole header and status bar.
+    toolbar.setBackgroundColor(t.background)
+    toolbar.setTitleTextColor(barContent)
+    drawerToggle.drawerArrowDrawable.color = barContent
+    applyNavIconTint(barContent)
+    topBarAccentArea.setBackgroundColor(t.background)
     // Update settings chevrons and icons immediately
     settingsGeneralChevron.imageTintList = accentTint
     settingsLabelsChevron.imageTintList = accentTint
@@ -259,22 +256,22 @@ internal fun MainActivity.applyAccentColor() {
     settingsExportVcfRow.compoundDrawableTintList = accentTint
     settingsInfoIcon.imageTintList = accentTint
     settingsInfoArrow.imageTintList = accentTint
-    val hintAlpha = if (currentTheme == "light") 0.55f else 0.65f
-    searchBarTitle.setTextColor(android.graphics.Color.argb(
-        (255 * hintAlpha).toInt(),
-        android.graphics.Color.red(onAccent),
-        android.graphics.Color.green(onAccent),
-        android.graphics.Color.blue(onAccent)
-    ))
+    searchBarTitle.setTextColor(t.textSecondary)
+    searchInput.setTextColor(t.textPrimary)
+    searchInput.setHintTextColor(t.textMuted)
+    searchClearBtn.imageTintList = ColorStateList.valueOf(t.textSecondary)
     val d = resources.displayMetrics.density
-    searchBarContainer.background = android.graphics.drawable.GradientDrawable().apply {
-        shape = android.graphics.drawable.GradientDrawable.RECTANGLE
-        cornerRadius = 12 * d
-        setColor(darkenColor(accentInt, 0.78f))
+    searchBarContainer.background = GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        cornerRadius = 999 * d
+        setColor(t.surfaceCard)
     }
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-        window.statusBarColor = accentInt
+    selectionBarContainer.background = GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        cornerRadius = 999 * d
+        setColor(t.accentSoft(accentInt))
     }
+    applySystemBars()
     // Switch tint: lighter accent when ON, darkened accent when OFF
     val darkAccent = darkenColor(accentInt, 0.5f)
     val lightAccent = lightenColor(accentInt, 1.3f)
@@ -315,17 +312,18 @@ internal fun MainActivity.applyAccentColor() {
     quoteIndicatorRemove.imageTintList = quoteTint
     updateAccentColorPreview()
     // Selection bar icons and count text
-    val selIconTint = ColorStateList.valueOf(onAccent)
+    val selIconTint = ColorStateList.valueOf(barContent)
     listOf(selectionCloseBtn, selectionArchiveBtn, selectionDeleteBtn, selectionReadBtn, selectionMoreBtn).forEach {
         it.imageTintList = selIconTint
     }
-    selectionCountText.setTextColor(onAccent)
-    // Top-bar send button (shown during compose) — always white on the accent bar
-    topBarSendButton.imageTintList = ColorStateList.valueOf(Color.WHITE)
-    // Settings dropdown backgrounds
-    // MD3-style tonal pill for the dropdown triggers.
-    val dropdownBg = darkenColor(accentInt, 0.78f)
-    val dropdownStroke = darkenColor(accentInt, 1.15f)
+    selectionCountText.setTextColor(barContent)
+    // Top-bar send button (shown during compose): the one primary action in the bar.
+    topBarSendButton.imageTintList = ColorStateList.valueOf(t.accentOnGround(accentInt))
+    // Settings dropdown triggers: outlined and neutral, the chevron carries the accent.
+    val dropdownBg = Color.TRANSPARENT
+    val dropdownStroke = t.inputStroke
+    val dropdownText = t.textPrimary
+    val dropdownChevron = t.accentOnGround(accentInt)
     for (dropdown in listOf(swipeLeftDropdown, swipeRightDropdown, themeDropdown,
                             settingsCalProviderDropdown, settingsCalTimeFormatDropdown,
                             settingsCalTimeZoneDropdown, settingsContactsShowDropdown,
@@ -338,8 +336,8 @@ internal fun MainActivity.applyAccentColor() {
         }
         for (i in 0 until dropdown.childCount) {
             val child = dropdown.getChildAt(i)
-            if (child is ImageView) child.imageTintList = ColorStateList.valueOf(Color.WHITE)
-            if (child is TextView) child.setTextColor(Color.WHITE)
+            if (child is ImageView) child.imageTintList = ColorStateList.valueOf(dropdownChevron)
+            if (child is TextView) child.setTextColor(dropdownText)
         }
     }
     settingsEditLabelsButton.background = GradientDrawable().apply {
@@ -348,7 +346,7 @@ internal fun MainActivity.applyAccentColor() {
         setColor(dropdownBg)
         setStroke(d.toInt(), dropdownStroke)
     }
-    settingsEditLabelsButton.setTextColor(Color.WHITE)
+    settingsEditLabelsButton.setTextColor(dropdownText)
     settingsEditLabelsButton.gravity = android.view.Gravity.CENTER
     settingsEditLabelsButton.setPadding((14 * d).toInt(), (8 * d).toInt(), (14 * d).toInt(), (8 * d).toInt())
     settingsEditFoldersButton.background = GradientDrawable().apply {
@@ -357,7 +355,7 @@ internal fun MainActivity.applyAccentColor() {
         setColor(dropdownBg)
         setStroke(d.toInt(), dropdownStroke)
     }
-    settingsEditFoldersButton.setTextColor(Color.WHITE)
+    settingsEditFoldersButton.setTextColor(dropdownText)
     settingsEditFoldersButton.gravity = android.view.Gravity.CENTER
     settingsEditFoldersButton.setPadding((14 * d).toInt(), (8 * d).toInt(), (14 * d).toInt(), (8 * d).toInt())
     settingsCalAddProviderButton.background = GradientDrawable().apply {
@@ -366,7 +364,7 @@ internal fun MainActivity.applyAccentColor() {
         setColor(dropdownBg)
         setStroke(d.toInt(), dropdownStroke)
     }
-    settingsCalAddProviderButton.setTextColor(Color.WHITE)
+    settingsCalAddProviderButton.setTextColor(dropdownText)
     settingsCalAddProviderButton.gravity = android.view.Gravity.CENTER
     settingsCalAddProviderButton.setPadding((14 * d).toInt(), (8 * d).toInt(), (14 * d).toInt(), (8 * d).toInt())
     updateSettingsDropdownDisplays()
@@ -376,6 +374,7 @@ internal fun MainActivity.applyAccentColor() {
     // Rebuild the drawer menu so the selected-item accent bar (itemBackground)
     // updates now, instead of staying on the old colour until the next folder/category change.
     navigationView.post { rebuildDrawerMenuPublic() }
+    refreshBottomNav()
 }
 
 internal fun MainActivity.saveAccentColorPreference() {
@@ -485,7 +484,29 @@ internal fun MainActivity.setDrawerIndicator(enabled: Boolean) {
     searchBarMenuIcon.setImageResource(
         if (enabled) R.drawable.ic_menu_24dp else R.drawable.ic_arrow_back_24dp
     )
-    searchBarMenuIcon.imageTintList = ColorStateList.valueOf(getOnAccentColor())
+    searchBarMenuIcon.imageTintList = ColorStateList.valueOf(topBarContentColor())
+}
+
+/** Icon and title colour for the top bar, which sits on the theme background. */
+internal fun MainActivity.topBarContentColor(): Int = tokens.textPrimary
+
+/**
+ * Status bar on the theme background, navigation bar on the bottom-nav surface, with
+ * dark system icons on the light theme so they stay visible.
+ */
+internal fun MainActivity.applySystemBars() {
+    val t = tokens
+    window.statusBarColor = t.background
+    window.navigationBarColor = t.surface
+    var flags = 0
+    if (!t.isDark) {
+        flags = flags or View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            flags = flags or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+        }
+    }
+    @Suppress("DEPRECATION")
+    window.decorView.systemUiVisibility = flags
 }
 
 internal fun MainActivity.updateCustomTopBar(title: String, inMailbox: Boolean = false) {

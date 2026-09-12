@@ -926,6 +926,7 @@ class MainActivity : AppCompatActivity() {
         panel.onShown()
         navigationView.post { rebuildDrawerMenu() }
         drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED)
+        refreshBottomNav()
     }
 
     internal fun hideCalendarScreen() {
@@ -959,6 +960,7 @@ class MainActivity : AppCompatActivity() {
         panel.onShown()
         navigationView.post { rebuildDrawerMenu() }
         drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED)
+        refreshBottomNav()
     }
 
     internal fun hideContactsScreen() {
@@ -994,9 +996,10 @@ class MainActivity : AppCompatActivity() {
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED)
         drawerToggle.syncState()
-        applyNavIconTint(getOnAccentColor())
+        applyNavIconTint(topBarContentColor())
         updateTopBarState()
         rebuildDrawerMenu()
+        refreshBottomNav()
         if (!skipRefresh) applyFolderFilterAndRefresh()
 
     }
@@ -1046,6 +1049,7 @@ class MainActivity : AppCompatActivity() {
             emailDetailContainer.animateScreenIn()
         }
         isShowingEmailDetail = true
+        refreshBottomNav()
         currentDetailEmail = email
         // The theme may have changed while the detail was hidden; the container is the
         // surface uncovered by the next/previous swipe, so keep it on the current theme.
@@ -1065,32 +1069,27 @@ class MainActivity : AppCompatActivity() {
         drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED)
         drawerToggle.syncState()
         toolbar.setNavigationIcon(R.drawable.ic_arrow_back_24dp)
-        applyNavIconTint(getOnAccentColor())
-        val (toolbarColor, textColor, secondaryTextColor) =
-                when (currentTheme) {
-                    "light" -> Triple("#F5F5F5", "#212121", "#757575")
-                    "oled" -> Triple("#000000", "#FFFFFF", "#BDBDBD")
-                    "violet" -> Triple("#140B22", "#FFFFFF", "#BDBDBD")
-                    else -> Triple("#2A2A2A", "#FFFFFF", "#BDBDBD")
-                }
+        applyNavIconTint(topBarContentColor())
+        val textColor = tokens.textPrimary
+        val secondaryTextColor = tokens.textSecondary
 
-        detailHeaderRow.setBackgroundColor(toolbarColor.toColorInt())
+        detailHeaderRow.setBackgroundColor(getThemeToolbarColor())
         detailSubject.text = email.subject.ifBlank { "(no subject)" }
-        detailSubject.setTextColor(textColor.toColorInt())
-        detailFrom.setTextColor(textColor.toColorInt())
+        detailSubject.setTextColor(textColor)
+        detailFrom.setTextColor(textColor)
         detailFrom.text = email.from.ifBlank { email.fromEmail }
         detailDate.text = if (email.receivedAt > 0) formatRelativeDate(email.receivedAt) else ""
-        detailDate.setTextColor(secondaryTextColor.toColorInt())
+        detailDate.setTextColor(secondaryTextColor)
         val toLabel = when {
             email.toEmail.isBlank() -> "to me"
             email.toEmail.equals(email.accountEmail, ignoreCase = true) -> "to me"
             else -> "to ${email.toEmail}"
         }
         detailToText.text = "$toLabel  ▾"
-        detailToText.setTextColor(secondaryTextColor.toColorInt())
+        detailToText.setTextColor(secondaryTextColor)
 
         // Tint the pinned action icons to contrast the header; star reflects favourite state.
-        val actionTint = ColorStateList.valueOf(textColor.toColorInt())
+        val actionTint = ColorStateList.valueOf(textColor)
         listOf(detailReplyButton, detailForwardButton, detailArchiveButton,
                detailTrashButton, detailMoveButton, detailMoreButton).forEach { it.imageTintList = actionTint }
         updateDetailStarIcon(email.isFavorite)
@@ -1680,7 +1679,7 @@ class MainActivity : AppCompatActivity() {
                     menu.add(0, 6, 0, "More")
                             .setIcon(R.drawable.ic_lucide_more_vertical)
                             .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-                    val barTint = getOnAccentColor()
+                    val barTint = topBarContentColor()
                     for (i in 0 until menu.size()) {
                         menu.getItem(i).icon?.mutate()?.setTint(barTint)
                     }
