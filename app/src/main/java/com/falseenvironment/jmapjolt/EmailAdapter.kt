@@ -86,6 +86,7 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
         val title: TextView = root.findViewById(1)   // subject
         val subtitle: TextView = root.findViewById(2) // preview
         val dateText: TextView = root.findViewById(6)
+        val unreadDot: android.view.View = root.findViewById(34)
     }
 
     @android.annotation.SuppressLint("ResourceType")
@@ -319,6 +320,17 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
                 .apply { topMargin = (4 * dp).toInt() }
             addView(threadPill)
             addView(labelRowView)
+            // Unread marker: small accent dot right before the time.
+            addView(android.view.View(activity).apply {
+                id = 34
+                val sz = (UNREAD_DOT_SIZE_DP * dp).toInt()
+                layoutParams = LinearLayout.LayoutParams(sz, sz)
+                    .apply { marginEnd = (5 * dp).toInt() }
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.OVAL
+                }
+                visibility = android.view.View.GONE
+            })
             addView(dText)
         }
         val starSpacer = android.widget.Space(activity).apply {
@@ -558,11 +570,16 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
         // weight so the row does not read as one heavy block.
         holder.senderText.setTypeface(null, Typeface.NORMAL)
         holder.subtitle.setTextColor(secondaryColor)
-        if (!item.seen && !alwaysRead) {
+        val isUnread = !item.seen && !alwaysRead
+        holder.unreadDot.visibility = if (isUnread) android.view.View.VISIBLE else android.view.View.GONE
+        if (isUnread) {
+            // The dot carries the accent; the time stays neutral beside it.
+            (holder.unreadDot.background as android.graphics.drawable.GradientDrawable)
+                .setColor(themeTokens.accentOnGround(activity.currentAccentColor.toColorInt()))
             holder.senderText.setTextColor(primaryColor)
             holder.title.setTypeface(null, Typeface.BOLD)
             holder.title.setTextColor(primaryColor)
-            holder.dateText.setTextColor(themeTokens.accentOnGround(activity.currentAccentColor.toColorInt()))
+            holder.dateText.setTextColor(secondaryColor)
         } else {
             holder.senderText.setTextColor(secondaryColor)
             holder.title.setTypeface(null, Typeface.NORMAL)
@@ -693,6 +710,7 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
         holder.itemView.alpha = 1f
         holder.itemView.translationY = 0f
         holder.senderText.text = ""
+        holder.unreadDot.visibility = android.view.View.GONE
         holder.subtitle.text = ""
         holder.dateText.text = ""
         holder.title.text = activity.getString(R.string.thread_more_messages, item.threadHiddenCount)
@@ -714,6 +732,7 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
 // Hoisted from onBindViewHolder: compiling a regex / date formatter per bound row
 // is measurable jank while scrolling.
 private val EMAIL_IN_TEXT_REGEX = "[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}".toRegex()
+private const val UNREAD_DOT_SIZE_DP = 7
 private val MONTH_DAY_FORMAT = SimpleDateFormat("MMM dd", Locale.ENGLISH)
 
 internal fun formatRelativeDate(timestamp: Long): String {
