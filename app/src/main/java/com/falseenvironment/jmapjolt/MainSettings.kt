@@ -113,7 +113,7 @@ internal fun MainActivity.showSettingsScreen() {
     showSettingsMenuRoot()
     refreshSettingsAccountRow()
     loadUnifiedPushPreferences()
-    rebuildDrawerMenu()
+    navigationView.post { rebuildDrawerMenu() }
     refreshBottomNav()
 }
 
@@ -744,7 +744,10 @@ internal fun MainActivity.setupSwipeSpinners() {
 }
 
 /** Preset choices for the "mark as read after" delay; the last slot is always "Custom…". */
-private val MARK_READ_DELAY_PRESETS = listOf(0, 1, 3, 5, 10, 15, 30, 60)
+private val MARK_READ_DELAY_PRESETS = listOf(0, 3, 5, 10, 30, 60)
+
+/** Characters accepted by the custom delay field. */
+private const val MARK_READ_DELAY_INPUT_MAX_CHARS = 5
 
 internal fun MainActivity.markReadDelayLabel(seconds: Int): String =
     if (seconds == 0) getString(R.string.mark_read_delay_instant)
@@ -768,7 +771,7 @@ internal fun MainActivity.setupMarkReadDelaySpinner() {
     }
 }
 
-/** Free-form entry for a delay outside the presets, clamped to 1–60s. */
+/** Free-form entry for a delay outside the presets, clamped to 1–300s. */
 internal fun MainActivity.showMarkReadDelayCustomDialog() {
     val dp = resources.displayMetrics.density
     val textColor = if (currentTheme == "light") "#212121".toColorInt() else Color.WHITE
@@ -786,6 +789,8 @@ internal fun MainActivity.showMarkReadDelayCustomDialog() {
         backgroundTintList = android.content.res.ColorStateList.valueOf(secondaryColor)
         textSize = 15f
         maxLines = 1
+        // "300" fits in three digits; five leaves room while stopping runaway input.
+        filters = arrayOf(android.text.InputFilter.LengthFilter(MARK_READ_DELAY_INPUT_MAX_CHARS))
     }
     val root = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL

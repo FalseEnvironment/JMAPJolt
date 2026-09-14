@@ -157,13 +157,7 @@ internal fun MainActivity.prefetchEmailBody(email: DisplayEmail) {
                     preview = fresh.preview.ifBlank { email.preview },
                     attachments = fresh.attachments
                 )
-                val idx = emails.indexOfFirst { it.id == email.id }
-                if (idx >= 0) {
-                    emails[idx] = updated
-                    val bi = baseEmails.indexOfFirst { it.id == email.id }
-                    if (bi >= 0) baseEmails[bi] = updated
-                    emailAdapter.notifyItemChanged(idx)
-                }
+                applyFetchedBody(updated)
             }
         } catch (_: Exception) {
             // Silent failure — will retry on open

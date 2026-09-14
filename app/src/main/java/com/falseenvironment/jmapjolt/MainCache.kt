@@ -39,11 +39,12 @@ internal fun MainActivity.fetchAllFoldersBackground() {
                 val newEmailsList = fresh.map {
                     DisplayEmail(it.id, it.subject, it.from, it.fromEmail, it.preview, it.fullBody, it.seen, it.isStarred, it.receivedAt, toEmail = it.toEmail, ccEmail = it.ccEmail, bccEmail = it.bccEmail, attachments = it.attachments, labels = it.keywords.toList())
                 }
-                folderCache[navId] = newEmailsList
+                val merged = withLocalBodies(navId, newEmailsList)
+                folderCache[navId] = merged
 
                 if (navId == selectedFolder) {
                     withContext(Dispatchers.Main) {
-                        updateEmailsList(newEmailsList)
+                        updateEmailsList(merged)
                     }
                 }
             }
@@ -54,6 +55,43 @@ internal fun MainActivity.fetchAllFoldersBackground() {
             Log.e(MainActivity.TAG, "Background fetch all folders failed", e)
         }
     }
+}
+
+/**
+ * [fresh] with the bodies and body previews already downloaded for [folderId]. When the
+ * folder is not in memory yet (sync landing before the offline cache load, background
+ * warm-up of other folders) its Room bucket is the source.
+ */
+internal suspend fun MainActivity.withLocalBodies(folderId: Int, fresh: List<DisplayEmail>): List<DisplayEmail> {
+    val known = folderCache[folderId] ?: cacheBucket(folderId)?.let { bucket ->
+        runCatching {
+            com.falseenvironment.jmapjolt.cache.EmailCacheStore.load(this, bucket)
+        }.getOrNull()
+    }
+    return if (known.isNullOrEmpty()) fresh else fresh.keepLocalBodies(known)
+}
+
+/**
+ * Stores a body fetched for one email, and the preview rebuilt from it, in every list
+ * that shows the email, then schedules the offline cache write so both survive a restart.
+ */
+internal fun MainActivity.applyFetchedBody(fresh: DisplayEmail) {
+    fun DisplayEmail.withBody() = copy(
+        fullBody = fresh.fullBody.ifBlank { fullBody },
+        preview = fresh.preview.ifBlank { preview },
+        attachments = fresh.attachments
+    )
+    val idx = emails.indexOfFirst { it.id == fresh.id }
+    if (idx >= 0) {
+        emails[idx] = emails[idx].withBody()
+        emailAdapter.notifyItemChanged(idx)
+    }
+    val bi = baseEmails.indexOfFirst { it.id == fresh.id }
+    if (bi >= 0) baseEmails[bi] = baseEmails[bi].withBody()
+    folderCache.filterValues { list -> list.any { it.id == fresh.id } }.keys.forEach { folderId ->
+        folderCache[folderId] = folderCache[folderId].orEmpty().map { if (it.id == fresh.id) it.withBody() else it }
+    }
+    saveEmailCache()
 }
 
 /**

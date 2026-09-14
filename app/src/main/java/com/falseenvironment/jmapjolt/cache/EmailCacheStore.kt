@@ -9,6 +9,7 @@ import androidx.security.crypto.MasterKey
 import com.falseenvironment.jmapjolt.DisplayEmail
 import com.falseenvironment.jmapjolt.EmailAttachmentInfo
 import com.falseenvironment.jmapjolt.PreviewText
+import com.falseenvironment.jmapjolt.keepLocalBodies
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
@@ -90,10 +91,13 @@ object EmailCacheStore {
     /** Replace a folder snapshot with the freshly fetched list (atomic). */
     suspend fun save(context: Context, bucket: String, emails: List<DisplayEmail>) =
         withContext(Dispatchers.IO) {
-            val rows = emails.map { it.toRow(bucket) }
             val database = database(context)
             database.withTransaction {
                 val dao = database.cachedEmailDao()
+                // Callers can hold a list fetched without bodies (sync, background warm-up)
+                // for a folder whose rows were never loaded into memory: keep what is on disk.
+                val stored = dao.loadWithBody(bucket).map { it.toDisplayEmail() }
+                val rows = emails.keepLocalBodies(stored).map { it.toRow(bucket) }
                 dao.clearBucket(bucket)
                 dao.upsert(rows)
             }

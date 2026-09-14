@@ -403,6 +403,9 @@ class MainActivity : AppCompatActivity() {
     internal var prevUpdateFolder: Int = -1
     internal val folderCache = FolderCache()
     private var syncJob: Job? = null
+
+    /** True while the periodic sync loop for the selected folder is running. */
+    internal val isPeriodicSyncActive: Boolean get() = syncJob?.isActive == true
     internal var cacheSaveJob: Job? = null
     @Volatile private var lastSseRefreshAt = 0L
     internal var searchHintJob: Job? = null
@@ -922,7 +925,7 @@ class MainActivity : AppCompatActivity() {
         }
         panel.visibility = View.VISIBLE
         panel.bringToFront()
-        panel.refresh()
+        panel.refreshIfStale()
         panel.onShown()
         navigationView.post { rebuildDrawerMenu() }
         drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED)
@@ -998,7 +1001,8 @@ class MainActivity : AppCompatActivity() {
         drawerToggle.syncState()
         applyNavIconTint(topBarContentColor())
         updateTopBarState()
-        rebuildDrawerMenu()
+        // The drawer is closed here: rebuild its menu after this frame, not inside it.
+        navigationView.post { rebuildDrawerMenu() }
         refreshBottomNav()
         if (!skipRefresh) applyFolderFilterAndRefresh()
 
@@ -1135,14 +1139,7 @@ class MainActivity : AppCompatActivity() {
                             attachments = fresh.attachments
                         )
                         displayEmail = updated
-                        val idx = emails.indexOfFirst { it.id == email.id }
-                        if (idx >= 0) {
-                            emails[idx] = updated
-                            val bi = baseEmails.indexOfFirst { it.id == email.id }
-                            if (bi >= 0) baseEmails[bi] = updated
-                            emailAdapter.notifyItemChanged(idx)
-                            saveEmailCache()
-                        }
+                        applyFetchedBody(updated)
                         // Refresh attachment footer
                         if (detailBody.childCount > 2) detailBody.removeViewAt(2)
                         if (updated.attachments.isNotEmpty()) {
@@ -1982,6 +1979,7 @@ class MainActivity : AppCompatActivity() {
                                         emptyList()
                                     }
                                 }.sortedByDescending { it.receivedAt }
+                                    .let { withLocalBodies(currentFolderId, it) }
                                     .let { PendingMutations.apply(it, currentFolderId) }
                                 folderCache[currentFolderId] = merged
                                 updateEmailsList(merged)
@@ -2065,7 +2063,8 @@ class MainActivity : AppCompatActivity() {
                             reachedFolderEnd = fresh.size < emailLimit
                             folderQueryCount = fresh.size
                             val mergedList = PendingMutations.apply(
-                                applyOptimisticFavorite(threadedList, isFav), currentFolderId
+                                applyOptimisticFavorite(withLocalBodies(currentFolderId, threadedList), isFav),
+                                currentFolderId
                             )
                             folderCache[currentFolderId] = mergedList
                             updateEmailsList(mergedList)
@@ -2482,7 +2481,7 @@ class MainActivity : AppCompatActivity() {
         internal const val KEY_SWIPE_RIGHT_ACTION = "swipe_right_action"
         internal const val KEY_SWIPE_LEFT_ACTION = "swipe_left_action"
         internal const val KEY_MARK_READ_DELAY_SECONDS = "mark_read_delay_seconds"
-        internal const val MARK_READ_DELAY_MAX_SECONDS = 60
+        internal const val MARK_READ_DELAY_MAX_SECONDS = 300
         internal const val KEY_ACCOUNTS_JSON = "accounts_json"
         internal const val KEY_LAST_SYNC_APP_VERSION = "last_sync_app_version"
         internal const val KEY_ACCENT_COLOR = "accent_color"

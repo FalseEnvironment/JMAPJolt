@@ -60,6 +60,9 @@ class CalendarPanel(private val activity: MainActivity) : FrameLayout(activity) 
     }
 
     /** Called when the panel becomes visible. */
+    private var lastSyncStartedAt = 0L
+    private var renderedDayKey = 0
+
     fun onShown() {
         // The panel is created once and re-shown, so a theme or accent change made in settings
         // never reaches it unless the palette is re-read and the views rebuilt here.
@@ -74,6 +77,18 @@ class CalendarPanel(private val activity: MainActivity) : FrameLayout(activity) 
             activity.requestCalendarPermissions { render() }
         }
         triggerSync()
+    }
+
+    /**
+     * Tab re-entry: the view tree is still current, so only a new day (the "today"
+     * marker moved) needs a rebuild. Settings and imports call [refresh] themselves.
+     */
+    fun refreshIfStale() {
+        if (renderedDayKey != dayKey()) render()
+    }
+
+    private fun dayKey(): Int = Calendar.getInstance().let {
+        it.get(Calendar.YEAR) * 1000 + it.get(Calendar.DAY_OF_YEAR)
     }
 
     /** Android back: pop view history; returns false when there is nothing left to pop. */
@@ -393,6 +408,7 @@ class CalendarPanel(private val activity: MainActivity) : FrameLayout(activity) 
         titleView.text = periodLabel()
         content.removeAllViews()
         content.addView(buildCurrentContent())
+        renderedDayKey = dayKey()
     }
 
     private fun buildCurrentContent(): View = when (mode) {
@@ -628,10 +644,18 @@ class CalendarPanel(private val activity: MainActivity) : FrameLayout(activity) 
         if (DemoInbox.isEnabled(activity)) return
         if (CalendarPrefs.provider(activity) != CalendarPrefs.Provider.JMAP) return
         val account = CalendarAccount.current(activity) ?: return
+        // Hopping between tabs must not start a server round-trip on every visit.
+        val now = System.currentTimeMillis()
+        if (now - lastSyncStartedAt < TAB_SYNC_MIN_INTERVAL_MS) return
+        lastSyncStartedAt = now
         scope.launch {
-            CalendarSync.sync(activity.applicationContext, account)
-            CalendarReminderScheduler.reschedule(activity.applicationContext)
-            render()
+            val context = activity.applicationContext
+            val before = withContext(Dispatchers.IO) { CalendarStore.all(context) }
+            CalendarSync.sync(context, account)
+            CalendarReminderScheduler.reschedule(context)
+            val after = withContext(Dispatchers.IO) { CalendarStore.all(context) }
+            // A rebuild of the month or week grid is visible; skip it when nothing changed.
+            if (after != before) render()
         }
     }
 

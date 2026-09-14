@@ -95,6 +95,8 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
         addView(buildRoot())
         addView(buildFab())
         applyShowPreference()
+        // Fresh views (first build or theme change) always need the list bound once.
+        renderList()
         updateSelectionBar()
     }
 
@@ -104,10 +106,12 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
      */
     fun applyShowPreference() {
         val forced = ContactsPrefs.forcedSource(activity)
+        val filterChanged = forced != filter
         filterBar.visibility = if (forced == null) View.VISIBLE else View.GONE
         filter = forced
         styleChips(filterBar)
-        renderList()
+        // Every tab visit lands here: rebinding an unchanged list only makes the rows flash.
+        if (filterChanged) renderList()
     }
 
     /** Android back closes multi-select before the tab itself reacts. */
@@ -138,12 +142,18 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
             return
         }
         // Paint whatever the last load produced, then reconcile with the backends in background.
-        ContactsCache.contacts?.let {
+        ContactsCache.contacts?.takeIf { it != contacts }?.let {
             contacts = it
             renderList()
         }
+        // Hopping between tabs must not reload the address book on every visit.
+        val now = System.currentTimeMillis()
+        if (now - lastRefreshAt < TAB_SYNC_MIN_INTERVAL_MS) return
+        lastRefreshAt = now
         refresh()
     }
+
+    private var lastRefreshAt = 0L
 
     fun refresh() {
         if (DemoInbox.isEnabled(activity)) {
@@ -154,6 +164,8 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
         scope.launch {
             val loaded = runCatching { repository.loadAll() }.getOrNull() ?: return@launch
             ContactsCache.contacts = loaded
+            // Rebinding an unchanged list makes every row flash.
+            if (loaded == contacts) return@launch
             contacts = loaded
             renderList()
         }
@@ -638,8 +650,9 @@ class ContactsPanel(private val activity: MainActivity) : FrameLayout(activity) 
     private fun buildFab(): View =
         com.google.android.material.floatingactionbutton.FloatingActionButton(activity).apply {
             setImageResource(R.drawable.ic_lucide_plus)
-            imageTintList = ColorStateList.valueOf(palette.onAccent)
-            backgroundTintList = ColorStateList.valueOf(palette.accent)
+            // Tonal FAB, same style as the inbox compose button.
+            imageTintList = ColorStateList.valueOf(palette.accentText)
+            backgroundTintList = ColorStateList.valueOf(activity.tokens.accentContainer(palette.accent))
             contentDescription = context.getString(R.string.contacts_new)
             layoutParams = LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
