@@ -38,8 +38,8 @@ class CalendarTimelineView(context: Context) : View(context) {
      * Hour-gutter label honouring the 24H/12H setting. In 12-hour mode the gutter is
      * too narrow for ":00 AM", so it renders the compact "9 AM" / "12 PM" form.
      */
-    private fun hourGutterLabel(hour: Int): String {
-        if (CalendarPrefs.use24Hour(context)) return "%02d:00".format(hour)
+    private fun hourGutterLabel(hour: Int, use24h: Boolean): String {
+        if (use24h) return "%02d:00".format(hour)
         val suffix = if (hour < 12) "AM" else "PM"
         val h12 = when (hour % 12) { 0 -> 12; else -> hour % 12 }
         return "$h12 $suffix"
@@ -50,6 +50,12 @@ class CalendarTimelineView(context: Context) : View(context) {
     private val blockPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 12f * density }
     private val dayHeaderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 12f * density; isFakeBoldText = true }
+    // Reused across frames: allocating Paints inside onDraw churns the heap while scrolling.
+    private val nowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeWidth = 2f * density }
+    private val plusPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        strokeWidth = 2.5f * density
+        strokeCap = Paint.Cap.ROUND
+    }
 
     private val dayLabelHeight get() = if (days.size > 1) 28f * density else 0f
     private val allDayRowHeight = 22f * density
@@ -150,6 +156,7 @@ class CalendarTimelineView(context: Context) : View(context) {
         }
 
         // Hour grid
+        val use24h = CalendarPrefs.use24Hour(context)
         for (hour in 0..24) {
             val y = top + hour * hourHeight
             canvas.drawLine(gutter, y, width.toFloat(), y, linePaint)
@@ -159,7 +166,7 @@ class CalendarTimelineView(context: Context) : View(context) {
                 // Vertically centred on the grid line (the line starts at the gutter, so
                 // the label sits clear of it in the left margin).
                 val labelY = y - (hourTextPaint.ascent() + hourTextPaint.descent()) / 2f
-                val label = if (hour == 24) hourGutterLabel(0) else hourGutterLabel(hour)
+                val label = if (hour == 24) hourGutterLabel(0, use24h) else hourGutterLabel(hour, use24h)
                 canvas.drawText(label, 4f * density, labelY, hourTextPaint)
             }
         }
@@ -210,10 +217,7 @@ class CalendarTimelineView(context: Context) : View(context) {
             val y = top + nowMin / 60f * hourHeight
             val left = gutter + nowCol * colWidth
             val right = gutter + (nowCol + 1) * colWidth
-            val nowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = palette.accent
-                strokeWidth = 2f * density
-            }
+            nowPaint.color = palette.accent
             canvas.drawCircle(left + 3f * density, y, 4f * density, nowPaint)
             canvas.drawLine(left + 3f * density, y, right, y, nowPaint)
         }
@@ -228,13 +232,9 @@ class CalendarTimelineView(context: Context) : View(context) {
                 val r = 16f * density
                 blockPaint.color = palette.accent
                 canvas.drawCircle(cx, cy, r, blockPaint)
-                val plus = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = palette.onAccent
-                    strokeWidth = 2.5f * density
-                    strokeCap = Paint.Cap.ROUND
-                }
-                canvas.drawLine(cx - r / 2.5f, cy, cx + r / 2.5f, cy, plus)
-                canvas.drawLine(cx, cy - r / 2.5f, cx, cy + r / 2.5f, plus)
+                plusPaint.color = palette.onAccent
+                canvas.drawLine(cx - r / 2.5f, cy, cx + r / 2.5f, cy, plusPaint)
+                canvas.drawLine(cx, cy - r / 2.5f, cx, cy + r / 2.5f, plusPaint)
             }
         }
     }
@@ -281,10 +281,8 @@ class CalendarTimelineView(context: Context) : View(context) {
         }.timeInMillis
 
         fun isSameDay(a: Long, b: Long): Boolean {
-            val ca = CalendarPrefs.calendar().apply { timeInMillis = a }
-            val cb = CalendarPrefs.calendar().apply { timeInMillis = b }
-            return ca.get(Calendar.YEAR) == cb.get(Calendar.YEAR) &&
-                ca.get(Calendar.DAY_OF_YEAR) == cb.get(Calendar.DAY_OF_YEAR)
+            val zone = CalendarPrefs.zone()
+            return localDayIndex(a, zone) == localDayIndex(b, zone)
         }
 
         fun shortDow(dow: Int): String = when (dow) {
@@ -332,3 +330,12 @@ internal fun nextMidnight(dayStart: Long, zone: java.util.TimeZone): Long {
     cal.add(java.util.Calendar.DAY_OF_MONTH, 1)
     return cal.timeInMillis
 }
+
+/**
+ * Local calendar day index (days since the epoch) for [instant] in [zone].
+ *
+ * Allocation-free replacement for comparing `YEAR`/`DAY_OF_YEAR` of two Calendars,
+ * which allocated two Calendar objects on every call — noticeable in `onDraw`.
+ */
+internal fun localDayIndex(instant: Long, zone: java.util.TimeZone): Long =
+    Math.floorDiv(instant + zone.getOffset(instant), 86_400_000L)

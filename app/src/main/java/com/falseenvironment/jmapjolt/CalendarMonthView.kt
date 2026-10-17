@@ -35,6 +35,11 @@ class CalendarMonthView(context: Context) : View(context) {
     private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val cellPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    // Reused across frames instead of reallocating inside onDraw.
+    private val plusPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        strokeWidth = 2.5f * density
+        strokeCap = Paint.Cap.ROUND
+    }
 
     private val cellStarts = LongArray(42)
     private val counts = HashMap<Long, Int>()
@@ -135,13 +140,9 @@ class CalendarMonthView(context: Context) : View(context) {
                 val r = 14f * density
                 dotPaint.color = palette.accent
                 canvas.drawCircle(cx, cy, r, dotPaint)
-                val plus = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = palette.onAccent
-                    strokeWidth = 2.5f * density
-                    strokeCap = Paint.Cap.ROUND
-                }
-                canvas.drawLine(cx - r / 2.5f, cy, cx + r / 2.5f, cy, plus)
-                canvas.drawLine(cx, cy - r / 2.5f, cx, cy + r / 2.5f, plus)
+                plusPaint.color = palette.onAccent
+                canvas.drawLine(cx - r / 2.5f, cy, cx + r / 2.5f, cy, plusPaint)
+                canvas.drawLine(cx, cy - r / 2.5f, cx, cy + r / 2.5f, plusPaint)
             }
         }
     }

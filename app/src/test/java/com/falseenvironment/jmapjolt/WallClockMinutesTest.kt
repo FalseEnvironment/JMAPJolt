@@ -62,4 +62,28 @@ class WallClockMinutesTest {
         val day = midnight(2026, Calendar.MARCH, 29)
         assertEquals(23L * 3_600_000L, nextMidnight(day, zone) - day)
     }
+
+    @Test
+    fun `the day index rolls over at local midnight`() {
+        assertEquals(
+            localDayIndex(local(2026, Calendar.JUNE, 1, 23, 59), zone) + 1,
+            localDayIndex(local(2026, Calendar.JUNE, 2, 0, 1), zone)
+        )
+    }
+
+    @Test
+    fun `instants either side of the fall back stay on the same local day`() {
+        val before = localDayIndex(local(2026, Calendar.OCTOBER, 25, 1, 30), zone)
+        val after = localDayIndex(local(2026, Calendar.OCTOBER, 25, 4, 30), zone)
+        assertEquals(before, after)
+    }
+
+    @Test
+    fun `instants on the same local day share an index across a DST change`() {
+        val dayStart = midnight(2026, Calendar.MARCH, 29)
+        assertEquals(
+            localDayIndex(dayStart, zone),
+            localDayIndex(local(2026, Calendar.MARCH, 29, 20), zone)
+        )
+    }
 }
