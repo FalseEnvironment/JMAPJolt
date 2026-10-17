@@ -2,13 +2,12 @@ import java.util.Properties
 
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp")
 }
 
 android {
     namespace = "com.falseenvironment.jmapjolt"
-    compileSdk = 35
+    compileSdk = 36
 
     buildFeatures {
         buildConfig = true
@@ -32,9 +31,9 @@ android {
     defaultConfig {
         applicationId = "com.falseenvironment.jmapjolt"
         minSdk = 24
-        targetSdk = 35
-        versionCode = 14
-        versionName = "0.23"
+        targetSdk = 36
+        versionCode = 15
+        versionName = "0.24"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -78,10 +77,6 @@ android {
         isCoreLibraryDesugaringEnabled = true
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
     packaging {
         resources {
             excludes += setOf(
@@ -110,32 +105,49 @@ android {
     }
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
+}
+
 dependencies {
-    implementation("androidx.appcompat:appcompat:1.7.0")
-    implementation("com.google.android.material:material:1.12.0")
+    implementation("androidx.appcompat:appcompat:1.8.0")
+    implementation("com.google.android.material:material:1.14.0")
     implementation("androidx.viewpager2:viewpager2:1.1.0")
-    implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+    implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.2.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.11.0")
     implementation("androidx.security:security-crypto:1.1.0")
 
     // Offline email cache: Room over an encrypted (SQLCipher) database.
-    implementation("androidx.room:room-runtime:2.7.1")
-    implementation("androidx.room:room-ktx:2.7.1")
-    ksp("androidx.room:room-compiler:2.7.1")
-    implementation("net.zetetic:sqlcipher-android:4.6.1")
-    implementation("androidx.sqlite:sqlite:2.4.0")
+    implementation("androidx.room:room-runtime:2.8.5")
+    implementation("androidx.room:room-ktx:2.8.5")
+    ksp("androidx.room:room-compiler:2.8.5")
+    implementation("net.zetetic:sqlcipher-android:4.19.1")
+    implementation("androidx.sqlite:sqlite:2.7.1")
 
-    implementation("rs.ltt.jmap:jmap-client:0.5.2")
-    implementation("com.github.UnifiedPush:android-connector:2.0.1")
-    implementation("androidx.work:work-runtime-ktx:2.9.0")
-    implementation("io.coil-kt:coil:2.6.0")
+    implementation("rs.ltt.jmap:jmap-client:0.9.0")
+    // jmap-client 0.9.x declares Guava as 'provided' (no longer transitive) but uses it
+    // throughout at runtime; the -android flavor avoids JRE-only classes under R8.
+    implementation("com.google.guava:guava:33.7.2-android")
+    implementation("com.github.UnifiedPush:android-connector:3.0.10")
+    implementation("androidx.work:work-runtime-ktx:2.12.0")
+    implementation("io.coil-kt:coil:2.7.0")
 
     // HTML parser behind the email body sanitizer (MIT).
-    implementation("org.jsoup:jsoup:1.18.3")
+    implementation("org.jsoup:jsoup:1.23.2")
 
     testImplementation("junit:junit:4.13.2")
-    androidTestImplementation("androidx.test.ext:junit:1.2.1")
-    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+}
+
+// UnifiedPush pulls the JRE Tink, security-crypto pulls tink-android. Both ship the same
+// classes, so keep only the Android variant (it also carries the Android Keystore
+// integration security-crypto needs) and align both on the version UnifiedPush asks for.
+configurations.configureEach {
+    exclude(group = "com.google.crypto.tink", module = "tink")
+    resolutionStrategy.force("com.google.crypto.tink:tink-android:1.17.0")
 }

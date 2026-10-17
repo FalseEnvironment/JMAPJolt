@@ -112,7 +112,7 @@ internal fun MainActivity.connectAndOpenMailbox() {
 }
 
 internal fun MainActivity.autoDetectUnifiedPush() {
-    val distributors = UnifiedPush.getDistributors(this, arrayListOf())
+    val distributors = UnifiedPush.getDistributors(this)
     val preferred = distributors.firstOrNull {
         it.contains("ntfy", ignoreCase = true) || it.contains("sunup", ignoreCase = true)
     } ?: distributors.firstOrNull()
@@ -120,7 +120,7 @@ internal fun MainActivity.autoDetectUnifiedPush() {
     if (preferred != null) {
         try {
             UnifiedPush.saveDistributor(this, preferred)
-            UnifiedPush.registerApp(this, INSTANCE_DEFAULT, arrayListOf(), packageName)
+            UnifiedPush.register(this, INSTANCE_DEFAULT, packageName)
             unifiedPushSwitch.isChecked = true
             saveUnifiedPushEnabled(true)
             Log.d("MainActivity", "UnifiedPush auto-registered: $preferred")

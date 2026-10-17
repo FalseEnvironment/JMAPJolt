@@ -11,15 +11,19 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import org.unifiedpush.android.connector.FailedReason
 import org.unifiedpush.android.connector.MessagingReceiver
+import org.unifiedpush.android.connector.data.PushEndpoint
+import org.unifiedpush.android.connector.data.PushMessage
 import java.util.UUID
 
 class UnifiedPushService : MessagingReceiver() {
 
-    override fun onMessage(context: android.content.Context, message: ByteArray, instance: String) {
-        Log.d(TAG, "UnifiedPush message received (instance=$instance, bytes=${message.size})")
+    override fun onMessage(context: android.content.Context, message: PushMessage, instance: String) {
+        val payload = message.content
+        Log.d(TAG, "UnifiedPush message received (instance=$instance, bytes=${payload.size}, decrypted=${message.decrypted})")
 
-        if (WebPushKeys.decrypt(context, message) == null) {
+        if (WebPushKeys.decrypt(context, payload) == null) {
             // Anyone who learns the endpoint URL can POST to it, so an undecryptable payload
             // is unauthenticated data: never render it, and never let it drive a sync.
             if (consumePendingTest(context)) {
@@ -30,7 +34,7 @@ class UnifiedPushService : MessagingReceiver() {
                 return
             }
             if (WebPushKeys.hasKeys(context)) {
-                Log.w(TAG, "Dropping push message that failed WebPush decryption (${message.size} bytes)")
+                Log.w(TAG, "Dropping push message that failed WebPush decryption (${payload.size} bytes)")
                 return
             }
             // No keys yet: the subscription was never registered with encryption, so there is
@@ -49,11 +53,11 @@ class UnifiedPushService : MessagingReceiver() {
         context.sendBroadcast(Intent(ACTION_PUSH_MESSAGE_RECEIVED).setPackage(context.packageName))
     }
 
-    override fun onNewEndpoint(context: android.content.Context, endpoint: String, instance: String) {
-        Log.d(TAG, "UnifiedPush new endpoint (instance=$instance, host=${LogRedact.host(endpoint)})")
+    override fun onNewEndpoint(context: android.content.Context, endpoint: PushEndpoint, instance: String) {
+        Log.d(TAG, "UnifiedPush new endpoint (instance=$instance, host=${LogRedact.host(endpoint.url)})")
         context.getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             .edit()
-            .putString(KEY_LAST_UP_ENDPOINT, endpoint)
+            .putString(KEY_LAST_UP_ENDPOINT, endpoint.url)
             .apply()
 
         EmailSyncWorker.schedule(context)
@@ -64,13 +68,13 @@ class UnifiedPushService : MessagingReceiver() {
                 Log.w(TAG, "No account configured — relying on WorkManager fallback only")
                 return@launch
             }
-            if (!endpoint.startsWith("https://")) {
-                Log.w(TAG, "Rejecting non-HTTPS push endpoint (host=${LogRedact.host(endpoint)})")
+            if (!endpoint.url.startsWith("https://")) {
+                Log.w(TAG, "Rejecting non-HTTPS push endpoint (host=${LogRedact.host(endpoint.url)})")
                 return@launch
             }
             val deviceClientId = getOrCreateDeviceClientId(context)
             val ok = try {
-                JMapClient(context).registerPushSubscription(context, account, endpoint, deviceClientId)
+                JMapClient(context).registerPushSubscription(context, account, endpoint.url, deviceClientId)
             } catch (e: Throwable) {
                 Log.e(TAG, "registerPushSubscription threw", e)
                 false
@@ -83,8 +87,8 @@ class UnifiedPushService : MessagingReceiver() {
         }
     }
 
-    override fun onRegistrationFailed(context: android.content.Context, instance: String) {
-        Log.w(TAG, "UnifiedPush registration failed (instance=$instance)")
+    override fun onRegistrationFailed(context: android.content.Context, reason: FailedReason, instance: String) {
+        Log.w(TAG, "UnifiedPush registration failed (instance=$instance, reason=$reason)")
     }
 
     override fun onUnregistered(context: android.content.Context, instance: String) {

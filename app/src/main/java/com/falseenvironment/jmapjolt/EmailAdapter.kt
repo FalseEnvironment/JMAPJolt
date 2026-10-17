@@ -307,7 +307,7 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
             scaleType = ImageView.ScaleType.FIT_CENTER
             imageTintList = ColorStateList.valueOf(
                 com.google.android.material.color.MaterialColors.getColor(
-                    activity, com.google.android.material.R.attr.colorError, Color.RED
+                    activity, androidx.appcompat.R.attr.colorError, Color.RED
                 )
             )
             visibility = android.view.View.GONE

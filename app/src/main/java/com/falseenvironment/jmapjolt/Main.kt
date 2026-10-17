@@ -495,10 +495,14 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching { SecureStorage.prefs(this@MainActivity) }
         }
-        // Android 15 (API 35) enforces edge-to-edge by default; opt out to keep
-        // the existing layout which does not handle system bar insets manually.
-        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, true)
+        // Android 15+ forces edge-to-edge and Android 16 (targetSdk 36) ignores the
+        // legacy opt-out; statusBarColor / navigationBarColor / systemUiVisibility are
+        // no-ops too. The layout predates edge-to-edge, so inset the whole window by the
+        // system bars to keep the top bar and bottom controls clear of them — the
+        // equivalent of the old decor-fits-system-windows behaviour.
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_main)
+        installSystemBarInsets()
         FaviconRepository.init(cacheDir)
 
         drawerLayout = findViewById(R.id.drawerLayout)

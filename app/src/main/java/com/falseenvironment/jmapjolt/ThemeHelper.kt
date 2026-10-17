@@ -18,6 +18,9 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.core.graphics.toColorInt
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.widget.CompoundButtonCompat
 
 internal fun MainActivity.loadThemePreference() {
@@ -492,22 +495,39 @@ internal fun MainActivity.setDrawerIndicator(enabled: Boolean) {
 internal fun MainActivity.topBarContentColor(): Int = tokens.textPrimary
 
 /**
- * Status bar on the theme background, navigation bar on the bottom-nav surface, with
- * dark system icons on the light theme so they stay visible.
+ * Insets the whole window by the system bars (and the IME) so the pre-edge-to-edge layout
+ * — which has no per-view inset handling — stays clear of them. Android 15+ forces
+ * edge-to-edge and Android 16 (targetSdk 36) disables the legacy opt-out, so the padding
+ * has to be applied here; the bar areas themselves are painted by the window background
+ * in [applySystemBars]. Installed once, right after setContentView.
+ */
+internal fun MainActivity.installSystemBarInsets() {
+    val decor = window.decorView
+    ViewCompat.setOnApplyWindowInsetsListener(decor) { view, insets ->
+        val bars = insets.getInsets(
+            WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+        )
+        val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+        view.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, ime.bottom))
+        insets
+    }
+    ViewCompat.requestApplyInsets(decor)
+}
+
+/**
+ * Paints the transparent system bar areas and tints their icons. From Android 15 on the
+ * window is always edge-to-edge and statusBarColor / navigationBarColor /
+ * systemUiVisibility are ignored, so the bar areas take the window background colour
+ * (the same colour the status bar used to have) and the icon tint is toggled through the
+ * insets controller.
  */
 internal fun MainActivity.applySystemBars() {
     val t = tokens
-    window.statusBarColor = t.background
-    window.navigationBarColor = t.surface
-    var flags = 0
-    if (!t.isDark) {
-        flags = flags or View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            flags = flags or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
-        }
+    window.decorView.setBackgroundColor(t.background)
+    WindowCompat.getInsetsController(window, window.decorView).apply {
+        isAppearanceLightStatusBars = !t.isDark
+        isAppearanceLightNavigationBars = !t.isDark
     }
-    @Suppress("DEPRECATION")
-    window.decorView.systemUiVisibility = flags
 }
 
 internal fun MainActivity.updateCustomTopBar(title: String, inMailbox: Boolean = false) {

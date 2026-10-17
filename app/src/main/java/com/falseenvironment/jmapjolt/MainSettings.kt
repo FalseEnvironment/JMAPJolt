@@ -700,7 +700,7 @@ internal fun MainActivity.bindSettingsActions() {
             registerUnifiedPushAuto("")
             sendUnifiedPushTestNotification()
         } else {
-            UnifiedPush.unregisterApp(this, INSTANCE_DEFAULT)
+            UnifiedPush.unregister(this, INSTANCE_DEFAULT)
             EmailSyncWorker.cancel(this)
             showThemedSnackbar(getString(R.string.settings_unifiedpush_disabled))
         }

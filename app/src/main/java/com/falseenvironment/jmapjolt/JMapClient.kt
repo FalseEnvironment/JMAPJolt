@@ -1180,21 +1180,23 @@ class JMapClient(private val context: Context) {
                     .keys(pushKeys)
                     .build()
 
+                // PushSubscription/set is a per-user (not per-account) method: RFC 8620
+                // section 7.2.3 shows no accountId in its arguments, so the 0.9.x call
+                // builder intentionally has no accountId setter.
                 val methodCall = rs.ltt.jmap.common.method.call.core.SetPushSubscriptionMethodCall
                     .builder()
-                    .accountId(connectedAccount.accountId)
                     .create(mapOf("ps0" to pushSubscription))
                     .build()
 
                 val response = jmapClient.call(methodCall).get(30, TimeUnit.SECONDS)
                     .getMain(rs.ltt.jmap.common.method.response.core.SetPushSubscriptionMethodResponse::class.java)
 
-                val list = response.list
-                if (!list.isNullOrEmpty()) {
-                    Log.d(TAG, "PushSubscription registered: id=${list[0]?.id}")
+                val created = response.created?.get("ps0")
+                if (created != null) {
+                    Log.d(TAG, "PushSubscription registered: id=${created.id}")
                     true
                 } else {
-                    Log.w(TAG, "PushSubscription: empty list in response")
+                    Log.w(TAG, "PushSubscription: not created in response")
                     false
                 }
             }

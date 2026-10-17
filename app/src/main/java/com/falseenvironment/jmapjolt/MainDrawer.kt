@@ -352,7 +352,7 @@ internal fun MainActivity.refreshInboxNow(onDone: (() -> Unit)? = null) {
 
 internal fun MainActivity.registerUnifiedPushAuto(manualDistributor: String) {
     try {
-        val distributors = UnifiedPush.getDistributors(this, arrayListOf())
+        val distributors = UnifiedPush.getDistributors(this)
         val preferred =
                 distributors.firstOrNull {
                     it.contains("ntfy", ignoreCase = true) ||
@@ -372,7 +372,7 @@ internal fun MainActivity.registerUnifiedPushAuto(manualDistributor: String) {
             UnifiedPush.saveDistributor(this, selected)
         }
 
-        UnifiedPush.registerApp(this, INSTANCE_DEFAULT, arrayListOf(), packageName)
+        UnifiedPush.register(this, INSTANCE_DEFAULT, packageName)
         // Schedule the periodic fallback immediately so background sync works
         // even with no distributor installed or before an endpoint arrives.
         EmailSyncWorker.schedule(this)
