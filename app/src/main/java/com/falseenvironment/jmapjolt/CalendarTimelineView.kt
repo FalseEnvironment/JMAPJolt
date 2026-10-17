@@ -74,7 +74,7 @@ class CalendarTimelineView(context: Context) : View(context) {
     /** Greedy row packing of banded occurrences over the visible day columns. */
     private fun buildBand(): List<List<Span>> {
         if (days.isEmpty()) return emptyList()
-        val dayEnd = days.last() + 86_400_000L
+        val dayEnd = nextMidnight(days.last(), CalendarPrefs.zone())
         val spans = occurrences.filter { isBanded(it) }.mapNotNull { occ ->
             // All-day instants are UTC-based; shift them to the local day they belong to.
             val off = if (occ.event.allDay)
@@ -153,8 +153,14 @@ class CalendarTimelineView(context: Context) : View(context) {
         for (hour in 0..24) {
             val y = top + hour * hourHeight
             canvas.drawLine(gutter, y, width.toFloat(), y, linePaint)
-            if (hour < 24) {
-                canvas.drawText(hourGutterLabel(hour), 4f * density, y + 14f * density, hourTextPaint)
+            // Label 01:00 … 23:00 down the gutter, and close the day with 00:00 on the
+            // bottom line instead of starting the grid with it.
+            if (hour in 1..24) {
+                // Vertically centred on the grid line (the line starts at the gutter, so
+                // the label sits clear of it in the left margin).
+                val labelY = y - (hourTextPaint.ascent() + hourTextPaint.descent()) / 2f
+                val label = if (hour == 24) hourGutterLabel(0) else hourGutterLabel(hour)
+                canvas.drawText(label, 4f * density, labelY, hourTextPaint)
             }
         }
         // Column separators
@@ -164,13 +170,17 @@ class CalendarTimelineView(context: Context) : View(context) {
         }
 
         // Event blocks
+        val zone = CalendarPrefs.zone()
         for (occ in occurrences) {
             if (isBanded(occ)) continue
             val colIndex = days.indexOfFirst { isSameDay(it, occ.start) }
             if (colIndex < 0) continue
             val dayStart = days[colIndex]
-            val startMin = ((occ.start - dayStart) / 60_000L).toInt().coerceIn(0, 1440)
-            val endMin = ((occ.end - dayStart) / 60_000L).toInt().coerceIn(startMin + 20, 1440)
+            // Wall-clock minutes, not elapsed milliseconds: a DST day is 23 or 25 hours
+            // long, so `(occ.start - dayStart) / 60_000` would shift the whole column.
+            val startMin = wallClockMinutes(dayStart, occ.start, zone).coerceIn(0, 1439)
+            val endMin = wallClockMinutes(dayStart, occ.end, zone)
+                .coerceAtLeast(startMin + 20).coerceAtMost(1440)
             val left = gutter + colIndex * colWidth + 2f * density
             val right = gutter + (colIndex + 1) * colWidth - 2f * density
             val blockTop = top + startMin / 60f * hourHeight
@@ -196,7 +206,7 @@ class CalendarTimelineView(context: Context) : View(context) {
         val now = DemoInbox.now(context)
         val nowCol = days.indexOfFirst { isSameDay(it, now) }
         if (nowCol >= 0) {
-            val nowMin = ((now - days[nowCol]) / 60_000L).toInt().coerceIn(0, 1440)
+            val nowMin = wallClockMinutes(days[nowCol], now, zone).coerceIn(0, 1440)
             val y = top + nowMin / 60f * hourHeight
             val left = gutter + nowCol * colWidth
             val right = gutter + (nowCol + 1) * colWidth
@@ -212,7 +222,7 @@ class CalendarTimelineView(context: Context) : View(context) {
         if (pendingSlot > 0) {
             val col = days.indexOfFirst { isSameDay(it, pendingSlot) }
             if (col >= 0) {
-                val minutes = ((pendingSlot - days[col]) / 60_000L).toInt().coerceIn(0, 1439)
+                val minutes = wallClockMinutes(days[col], pendingSlot, zone).coerceIn(0, 1439)
                 val cx = gutter + col * colWidth + colWidth / 2f
                 val cy = top + (minutes / 60f + 0.5f) * hourHeight
                 val r = 16f * density
@@ -288,4 +298,37 @@ class CalendarTimelineView(context: Context) : View(context) {
             return (a shl 24) or (color and 0x00FFFFFF)
         }
     }
+}
+
+/**
+ * Wall-clock minutes since the local midnight [dayStart] for [instant], in [zone].
+ *
+ * Computed from the calendar fields instead of raw elapsed milliseconds: a day that
+ * crosses a DST change is 23 or 25 hours long, so `(instant - dayStart) / 60_000` maps
+ * 20:00 to 19:00 (spring) or 21:00 (autumn) and shifts the whole column. Instants on a
+ * later local day return 1440 (grid end), earlier ones return 0.
+ */
+internal fun wallClockMinutes(dayStart: Long, instant: Long, zone: java.util.TimeZone): Int {
+    val cal = java.util.Calendar.getInstance(zone)
+    cal.timeInMillis = instant
+    val minutes = cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE)
+    cal.timeInMillis = dayStart
+    val startYear = cal.get(java.util.Calendar.YEAR)
+    val startDay = cal.get(java.util.Calendar.DAY_OF_YEAR)
+    cal.timeInMillis = instant
+    val sameDay = cal.get(java.util.Calendar.YEAR) == startYear &&
+        cal.get(java.util.Calendar.DAY_OF_YEAR) == startDay
+    return when {
+        sameDay -> minutes
+        instant >= dayStart -> 1440
+        else -> 0
+    }
+}
+
+/** Local midnight of the day after [dayStart] in [zone] (a DST day is not 24h long). */
+internal fun nextMidnight(dayStart: Long, zone: java.util.TimeZone): Long {
+    val cal = java.util.Calendar.getInstance(zone)
+    cal.timeInMillis = dayStart
+    cal.add(java.util.Calendar.DAY_OF_MONTH, 1)
+    return cal.timeInMillis
 }

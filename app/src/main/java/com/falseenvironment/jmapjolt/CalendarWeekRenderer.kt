@@ -21,7 +21,6 @@ object CalendarWeekRenderer {
     /** Bitmaps travel through a 1 MB binder transaction; stay well inside it. */
     private const val MAX_WIDTH_PX = 1400
     private const val MAX_HEIGHT_PX = 1400
-    private const val DAY_MS = 86_400_000L
 
     /** Hour window shown when the week is empty or only has all-day events. */
     private const val DEFAULT_FIRST_HOUR = 8
@@ -46,7 +45,7 @@ object CalendarWeekRenderer {
     fun week(context: Context, anchor: Long): Week {
         val days = weekDays(anchor)
         val from = days.first()
-        val to = days.last() + DAY_MS
+        val to = nextMidnight(days.last(), CalendarPrefs.zone())
         val occurrences = runCatching { CalendarRepository.occurrences(context, from, to) }
             .getOrDefault(emptyList())
         return Week(days, occurrences)
@@ -112,7 +111,8 @@ object CalendarWeekRenderer {
             val y = gridTop + (hour - firstHour) * hourHeight
             canvas.drawLine(gutter, y, w.toFloat(), y, linePaint)
             if (hour < lastHour && hourHeight > dp(9f)) {
-                canvas.drawText(hourLabel(hour, use24h), dp(2f), y + dp(8f), hourPaint)
+                val labelY = y - (hourPaint.ascent() + hourPaint.descent()) / 2f
+                canvas.drawText(hourLabel(hour, use24h), dp(2f), labelY, hourPaint)
             }
         }
         // Column separators.
@@ -167,7 +167,7 @@ object CalendarWeekRenderer {
         rowHeight: Float,
         density: Float
     ) {
-        val weekEnd = days.last() + DAY_MS
+        val weekEnd = nextMidnight(days.last(), CalendarPrefs.zone())
         banded.forEach { occ ->
             // All-day instants are UTC-based; shift them onto the local day they cover.
             val offset = if (occ.event.allDay)
@@ -225,8 +225,10 @@ object CalendarWeekRenderer {
             val laneCount = lanes.size.coerceAtLeast(1)
 
             ofDay.forEach { occ ->
-                val startMin = ((occ.start - day) / 60_000f - firstHour * 60f)
-                val endMin = ((occ.end - day) / 60_000f - firstHour * 60f)
+                val startMin = wallClockMinutes(day, occ.start, CalendarPrefs.zone()).toFloat() -
+                    firstHour * 60f
+                val endMin = wallClockMinutes(day, occ.end, CalendarPrefs.zone()).toFloat() -
+                    firstHour * 60f
                 val top = gridTop + startMin / 60f * hourHeight
                 val bottom = (gridTop + endMin / 60f * hourHeight)
                     .coerceAtLeast(top + 3f * density)
@@ -264,7 +266,7 @@ object CalendarWeekRenderer {
         val now = System.currentTimeMillis()
         val col = days.indexOfFirst { CalendarTimelineView.isSameDay(it, now) }
         if (col < 0) return
-        val minutes = (now - days[col]) / 60_000f - firstHour * 60f
+        val minutes = wallClockMinutes(days[col], now, CalendarPrefs.zone()).toFloat() - firstHour * 60f
         val y = gridTop + minutes / 60f * hourHeight
         if (y < gridTop || y > canvas.height) return
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -289,14 +291,15 @@ object CalendarWeekRenderer {
         var last = DEFAULT_LAST_HOUR
         val now = System.currentTimeMillis()
         days.firstOrNull { CalendarTimelineView.isSameDay(it, now) }?.let { today ->
-            val nowHour = ((now - today) / 3_600_000L).toInt()
+            val nowHour = wallClockMinutes(today, now, CalendarPrefs.zone()) / 60
             if (nowHour < first) first = nowHour
             if (nowHour + 1 > last) last = nowHour + 1
         }
         timed.forEach { occ ->
             val day = days.firstOrNull { CalendarTimelineView.isSameDay(it, occ.start) } ?: return@forEach
-            val startHour = ((occ.start - day) / 3_600_000L).toInt()
-            val endHour = (((occ.end - day) + 3_599_999L) / 3_600_000L).toInt()
+            val zone = CalendarPrefs.zone()
+            val startHour = wallClockMinutes(day, occ.start, zone) / 60
+            val endHour = (wallClockMinutes(day, occ.end, zone) + 59) / 60
             if (startHour < first) first = startHour
             if (endHour > last) last = endHour
         }
