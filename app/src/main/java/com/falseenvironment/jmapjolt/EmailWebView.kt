@@ -11,18 +11,26 @@ import java.io.ByteArrayInputStream
 /**
  * Hardened WebView setup shared by every surface that renders email HTML.
  *
- * Bodies are untrusted: JavaScript, file/content access and mixed content are off, and
- * every sub-resource request goes through an allowlist. With "load images" off nothing
- * reaches the network at all — not just `<img>` but stylesheets, fonts, media and CSS
- * `url()` fetches, which [WebSettings.blockNetworkImage] alone lets through and which
- * senders use as read receipts. With it on, only image requests are let out, over HTTPS.
+ * JavaScript is enabled only because the generated shrink-to-fit script needs it.
+ * Email scripts and event handlers are removed by the HTML sanitizer, and every
+ * generated document carries a nonce-based CSP that permits no script other than
+ * that one. File/content access and mixed content remain off, and every
+ * sub-resource request goes through an allowlist. With "load images" off nothing
+ * reaches the network at all — not just `<img>` but stylesheets, fonts, media and
+ * CSS `url()` fetches, which [WebSettings.blockNetworkImage] alone lets through
+ * and which senders use as read receipts. With it on, only image requests are let
+ * out, over HTTPS.
  */
 internal object EmailWebView {
     const val BASE_URL = "https://jmapjolt.invalid/email/"
 
     fun harden(wv: WebView, loadImages: () -> Boolean, onLink: ((String) -> Unit)? = null) {
         wv.settings.apply {
-            javaScriptEnabled = false
+            // Only the trusted fit script runs: the sanitized HTML cannot carry a
+            // script tag, and the CSP in each document allows just its own nonce.
+            javaScriptEnabled = true
+            javaScriptCanOpenWindowsAutomatically = false
+            domStorageEnabled = false
             allowFileAccess = false
             allowContentAccess = false
             @Suppress("DEPRECATION")
@@ -31,7 +39,11 @@ internal object EmailWebView {
             allowFileAccessFromFileURLs = false
             mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             useWideViewPort = true
-            loadWithOverviewMode = true
+            // Render at the declared CSS width instead of zooming the page to fit.
+            // Emails narrower than the screen used to be blown up by overview mode,
+            // and wide ones were scaled unpredictably. EMAIL_FIT_SCRIPT now owns
+            // shrink-to-fit, while CSS owns the centred reading column.
+            loadWithOverviewMode = false
             // Body HTML is local; without this WebView grows an unbounded
             // disk cache of remote images (~12 MB observed).
             cacheMode = WebSettings.LOAD_NO_CACHE

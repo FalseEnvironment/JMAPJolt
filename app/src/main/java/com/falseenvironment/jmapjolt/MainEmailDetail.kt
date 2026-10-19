@@ -672,6 +672,94 @@ body{background:$bg;padding:20px}
 </body></html>"""
 }
 
+/**
+ * Shrink-to-fit for fixed-width email layouts.
+ *
+ * Emails authored around a 600px table overflow a phone viewport. The CSS in
+ * [buildHtmlContent] keeps the reading column centred, but CSS alone cannot
+ * scale an arbitrary fixed-width layout to the available width. This script
+ * measures the natural content width, then scales the whole body wrapper down
+ * when needed. The negative margins compensate for the fact that a CSS
+ * transform does not change the layout box, so the WebView's `wrap_content`
+ * height shrinks with the visible content instead of leaving a blank tail.
+ */
+private val EMAIL_FIT_SCRIPT = """
+(function () {
+  var wrap = document.getElementById('jj-fit');
+  if (!wrap) return;
+  var pending = 0;
+  function fit() {
+    pending = 0;
+    wrap.style.width = '100%';
+    wrap.style.transform = 'none';
+    wrap.style.marginRight = '0px';
+    wrap.style.marginBottom = '0px';
+    var body = document.body;
+    if (!body) return;
+    var cs = window.getComputedStyle(body);
+    var avail = body.clientWidth
+      - (parseFloat(cs.paddingLeft) || 0)
+      - (parseFloat(cs.paddingRight) || 0);
+    if (!(avail > 0)) return;
+    var content = wrap.scrollWidth;
+    if (!(content > avail + 1)) return;
+    var scale = avail / content;
+    wrap.style.width = content + 'px';
+    var height = wrap.getBoundingClientRect().height;
+    wrap.style.transformOrigin = 'top left';
+    wrap.style.transform = 'scale(' + scale + ')';
+    wrap.style.marginRight = (avail - content) + 'px';
+    wrap.style.marginBottom = (height * (scale - 1)).toFixed(2) + 'px';
+  }
+  function schedule() {
+    if (pending) return;
+    pending = window.requestAnimationFrame(function () {
+      pending = window.requestAnimationFrame(fit);
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', schedule);
+  } else {
+    schedule();
+  }
+  window.addEventListener('load', schedule);
+  window.addEventListener('resize', schedule);
+  if (document.fonts && document.fonts.ready && document.fonts.ready.then) {
+    document.fonts.ready.then(schedule).catch(schedule);
+  }
+  Array.prototype.forEach.call(document.images || [], function (img) {
+    img.addEventListener('load', schedule);
+    img.addEventListener('error', schedule);
+  });
+})();
+""".trimIndent()
+
+/** Put the email body's children in one block so [EMAIL_FIT_SCRIPT] can measure and scale them. */
+private fun wrapEmailBody(html: String): String {
+    if (html.contains("id=\"jj-fit\"")) return html
+    val open = Regex("<body(?=[\\s/>])[^>]*>", RegexOption.IGNORE_CASE).find(html) ?: return html
+    val start = open.range.last + 1
+    val close = Regex("</body\\s*>", RegexOption.IGNORE_CASE).find(html, start)
+    return if (close != null) {
+        html.substring(0, start) +
+            "<div id=\"jj-fit\">" +
+            html.substring(start, close.range.first) +
+            "</div>" +
+            html.substring(close.range.first)
+    } else {
+        html.substring(0, start) + "<div id=\"jj-fit\">" + html.substring(start) + "</div>"
+    }
+}
+
+private fun insertBeforeBodyEnd(html: String, insertion: String): String {
+    val close = Regex("</body\\s*>", RegexOption.IGNORE_CASE).find(html)
+    return if (close != null) {
+        html.substring(0, close.range.first) + insertion + html.substring(close.range.first)
+    } else {
+        html + insertion
+    }
+}
+
 internal fun MainActivity.buildHtmlContent(rawBodyIn: String, subject: String = ""): String {
     // Inline cid: images are shown as attachment cards below the body; strip the in-body
     // <img src="cid:..."> tags so a broken-image placeholder is not rendered in the content.
@@ -683,10 +771,29 @@ internal fun MainActivity.buildHtmlContent(rawBodyIn: String, subject: String = 
     val textColor = tokens.textPrimary.toCssHex()
     val linkColor = currentAccentColor
 
+    // Shared reading column, modelled on Bulwark's email viewer: 14px base type at
+    // 100% text scale, centred at 720px on wide screens (tablets/landscape). The
+    // fixed-width overflow itself is handled by EMAIL_FIT_SCRIPT; the caps below
+    // only stop a single oversized image/table from forcing the whole mail to
+    // shrink, which is the same split Bulwark uses.
+    val readingCss = """
+        html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+        html,body{overflow-x:hidden}
+        body{margin-left:auto!important;margin-right:auto!important;max-width:720px!important;padding:16px;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:14px;line-height:1.6;word-wrap:break-word;overflow-wrap:break-word}
+        img:not([style*="max-width"]){max-width:100%!important}
+        img[style*="max-width"]{max-width:100%}
+        img{height:auto!important}
+        table:not([style*="max-width"]){max-width:100%!important}
+        table[style*="max-width"]{max-width:100%}
+        table{table-layout:auto;overflow-wrap:break-word}
+        td,th{overflow-wrap:break-word}
+        pre{white-space:pre-wrap;word-wrap:break-word}
+    """.trimIndent()
+
     // Subject is rendered inside the scrollable WebView content so it scrolls away,
-    // while the action row above stays pinned.
+    // while the action row above stays pinned. It shares the column's own padding.
     val subjectHeading = if (subject.isNotBlank())
-        "<div style=\"font-size:18px;font-weight:700;color:$textColor;padding:14px 12px 6px;line-height:1.3\">" +
+        "<div style=\"font-size:18px;font-weight:700;color:$textColor;padding:14px 0 6px;line-height:1.3\">" +
             android.text.TextUtils.htmlEncode(subject) + "</div>"
     else ""
 
@@ -721,32 +828,41 @@ internal fun MainActivity.buildHtmlContent(rawBodyIn: String, subject: String = 
 
     val isFullDoc = rawBody.contains("<html", ignoreCase = true)
     val isFragment = !isFullDoc && looksLikeHtml(rawBody)
-    return if (isFullDoc) {
+    val document = if (isFullDoc) {
         val body = collapseDeepQuotes(sanitizeEmailHtml(rawBody))
         var html = body
-        if (!html.contains("viewport", ignoreCase = true)) {
+        // The sanitizer strips <meta>, but an email's <style> may still contain the
+        // word "viewport"; test for the actual tag so the document always gets one.
+        val viewportRegex = Regex(
+            "<meta\\b[^>]*\\bname\\s*=\\s*[\"']?viewport[\"']?[^>]*>",
+            RegexOption.IGNORE_CASE
+        )
+        if (!viewportRegex.containsMatchIn(html)) {
             val viewport = "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=3.0\">"
-            html = insertAfterOpeningTag(html, "head", viewport) ?: html
+            html = insertAfterOpeningTag(html, "head", viewport)
+                ?: insertAfterOpeningTag(html, "html", viewport)
+                ?: (viewport + html)
         }
         // Insert the subject right after the opening <body> tag (fallback: prepend).
         if (subjectHeading.isNotEmpty()) {
             html = insertAfterOpeningTag(html, "body", subjectHeading) ?: (subjectHeading + html)
         }
+        val layoutCss = "<style id=\"jj-reading\">html{background-color:$bgColor}$readingCss</style>"
         if (isDark) html
             .replaceFirst("<html", "<html style=\"background-color:$bgColor\"", ignoreCase = true)
-            .replaceFirst("</head>", "<meta name=\"color-scheme\" content=\"dark\">$darkCss$accentQuoteCss</head>", ignoreCase = true)
+            .replaceFirst("</head>", "<meta name=\"color-scheme\" content=\"dark\">$layoutCss$darkCss$accentQuoteCss</head>", ignoreCase = true)
             .replaceFirst("<body", "<body style=\"background-color:$bgColor;color:$textColor\"", ignoreCase = true)
         else html.let { doc ->
             if (doc.contains("</head>", ignoreCase = true))
-                doc.replaceFirst("</head>", "$accentQuoteCss</head>", ignoreCase = true)
-            else doc.replaceFirst("<body", "$accentQuoteCss<body", ignoreCase = true)
+                doc.replaceFirst("</head>", "$layoutCss$accentQuoteCss</head>", ignoreCase = true)
+            else doc.replaceFirst("<body", "$layoutCss$accentQuoteCss<body", ignoreCase = true)
         }
     } else if (isFragment) {
         // HTML fragment (no <html> root, e.g. JMAP htmlBody parts or this app's replies).
         // Wrap it in a styled document and render as HTML instead of escaping the markup.
         val body = collapseDeepQuotes(sanitizeEmailHtml(rawBody))
         val colorScheme = if (isDark) "dark" else "light"
-        "<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=3.0\"><meta name=\"color-scheme\" content=\"$colorScheme\">$darkCss$accentQuoteCss<style>body{color:$textColor;background:$bgColor;font-family:-apple-system,sans-serif;word-wrap:break-word;padding:12px;margin:0;max-width:100%;box-sizing:border-box}img{max-width:100%;height:auto}a{color:$linkColor}</style></head><body>$subjectHeading$body</body></html>"
+        "<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=3.0\"><meta name=\"color-scheme\" content=\"$colorScheme\">$darkCss$accentQuoteCss<style>$readingCss\nbody{color:$textColor;background:$bgColor;font-family:-apple-system,sans-serif}\na{color:$linkColor}</style></head><body>$subjectHeading$body</body></html>"
     } else {
         // Plain text: escape HTML entities, then style quoted lines (lines starting with ">")
         val quoteColor = tokens.textSecondary.toCssHex()
@@ -760,8 +876,22 @@ internal fun MainActivity.buildHtmlContent(rawBodyIn: String, subject: String = 
             else
                 line
         }
-        "<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=3.0\">$darkCss$accentQuoteCss<style>body{color:$textColor;background:$bgColor;font-family:-apple-system,sans-serif;word-wrap:break-word;padding:12px;margin:0;max-width:100%;box-sizing:border-box}img{max-width:100%;height:auto}</style></head><body>$subjectHeading$lines</body></html>"
+        "<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=3.0\">$darkCss$accentQuoteCss<style>$readingCss\nbody{color:$textColor;background:$bgColor;font-family:-apple-system,sans-serif}</style></head><body>$subjectHeading$lines</body></html>"
     }
+
+    // JavaScript is enabled in the shared WebView only for the generated fit
+    // script. The sanitizer already removes email scripts and handlers; the CSP
+    // narrows execution to this document's nonce as a second layer, so even a
+    // sanitizer bypass cannot run code that the email smuggled in.
+    val nonce = java.util.UUID.randomUUID().toString().replace("-", "")
+    val csp = "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; " +
+        "img-src https: data:; style-src 'unsafe-inline'; script-src 'nonce-$nonce'; " +
+        "base-uri 'none'; form-action 'none'\">"
+    val withFit = wrapEmailBody(document)
+    val secured = insertAfterOpeningTag(withFit, "head", csp)
+        ?: insertAfterOpeningTag(withFit, "html", csp)
+        ?: (csp + withFit)
+    return insertBeforeBodyEnd(secured, "<script nonce=\"$nonce\">$EMAIL_FIT_SCRIPT</script>")
 }
 
 /** Thin receiver-bound wrapper over the top-level [collapseDeepQuotes]. */

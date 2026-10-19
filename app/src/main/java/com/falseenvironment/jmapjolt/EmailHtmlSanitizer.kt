@@ -15,8 +15,10 @@ import org.jsoup.parser.Parser
  * browser does, so an element either survives the allowlist or it does not — there is no
  * "one more pass" left to trick.
  *
- * JavaScript is disabled on the WebView, so this is defense in depth; it also protects the
- * quote islands that ComposeHelper embeds into outgoing mail.
+ * JavaScript is enabled on the WebView for the trusted fit script, so this sanitizer is the
+ * primary guard against email-supplied code; each rendered document also carries a
+ * nonce-based CSP. The same cleanup protects the quote islands that ComposeHelper embeds
+ * into outgoing mail.
  *
  * A `Safelist`-based `Jsoup.clean` is not used because it drops the document shell and
  * `<style>` blocks, which email layouts depend on and which `buildHtmlContent` patches to
