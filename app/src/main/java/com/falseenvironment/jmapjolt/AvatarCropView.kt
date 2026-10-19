@@ -11,6 +11,8 @@ import android.graphics.PorterDuffXfermode
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
+import kotlin.math.cos
+import kotlin.math.sin
 
 /**
  * Discord-style avatar editor: pan, pinch-zoom and free rotation of a source
@@ -29,6 +31,7 @@ class AvatarCropView(context: Context) : View(context) {
     var rotationDeg = 0f
         set(value) {
             field = value
+            clampPan()
             invalidate()
         }
 
@@ -49,8 +52,18 @@ class AvatarCropView(context: Context) : View(context) {
         context,
         object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
             override fun onScale(detector: ScaleGestureDetector): Boolean {
-                scale = (scale * detector.scaleFactor).coerceIn(minScale, minScale * 8f)
-                invalidate()
+                val previous = scale
+                val next = (scale * detector.scaleFactor).coerceIn(minScale, minScale * 8f)
+                if (next != previous) {
+                    // Zoom around the pinch focus instead of the view centre, so the
+                    // point under the fingers stays put while scaling.
+                    val ratio = next / previous
+                    posX = detector.focusX + (posX - detector.focusX) * ratio
+                    posY = detector.focusY + (posY - detector.focusY) * ratio
+                    scale = next
+                    clampPan()
+                    invalidate()
+                }
                 return true
             }
         }
@@ -77,6 +90,33 @@ class AvatarCropView(context: Context) : View(context) {
         rotationDeg = 0f
         posX = width / 2f
         posY = height / 2f
+        clampPan()
+    }
+
+    /**
+     * Keeps the photo covering the crop circle. Without this the picture can be
+     * dragged completely out of the circle, and releasing a pinch makes it jump.
+     * The circle is projected into the image's own (rotated) frame: it is fully
+     * covered when its centre stays at least one radius inside every edge.
+     */
+    private fun clampPan() {
+        val bmp = bitmap ?: return
+        if (width == 0 || height == 0) return
+        val r = cropDiameter() / 2f
+        val cx = width / 2f
+        val cy = height / 2f
+        val rad = Math.toRadians(rotationDeg.toDouble())
+        val cosA = cos(rad).toFloat()
+        val sinA = sin(rad).toFloat()
+        val limitX = (bmp.width * scale / 2f - r).coerceAtLeast(0f)
+        val limitY = (bmp.height * scale / 2f - r).coerceAtLeast(0f)
+        // Circle centre relative to the image centre, in the image's rotated frame.
+        val dx = cx - posX
+        val dy = cy - posY
+        val localX = (dx * cosA + dy * sinA).coerceIn(-limitX, limitX)
+        val localY = (-dx * sinA + dy * cosA).coerceIn(-limitY, limitY)
+        posX = cx - (localX * cosA - localY * sinA)
+        posY = cy - (localX * sinA + localY * cosA)
     }
 
     private fun buildMatrix(): Matrix {
@@ -107,16 +147,28 @@ class AvatarCropView(context: Context) : View(context) {
         scaleDetector.onTouchEvent(event)
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                parent?.requestDisallowInterceptTouchEvent(true)
                 lastX = event.x
                 lastY = event.y
             }
             MotionEvent.ACTION_MOVE -> {
-                if (!scaleDetector.isInProgress) {
+                if (event.pointerCount == 1 && !scaleDetector.isInProgress) {
                     posX += event.x - lastX
                     posY += event.y - lastY
-                    lastX = event.x
-                    lastY = event.y
+                    clampPan()
                     invalidate()
+                }
+                // Track every move, including while pinching, so the next single-finger
+                // move after a pointer lifts does not jump by the pinch distance.
+                lastX = event.x
+                lastY = event.y
+            }
+            MotionEvent.ACTION_POINTER_UP -> {
+                // Continue from the finger that is still on screen.
+                val remaining = if (event.actionIndex == 0) 1 else 0
+                if (remaining < event.pointerCount) {
+                    lastX = event.getX(remaining)
+                    lastY = event.getY(remaining)
                 }
             }
         }

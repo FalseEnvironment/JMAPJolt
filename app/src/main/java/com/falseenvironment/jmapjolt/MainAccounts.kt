@@ -418,13 +418,16 @@ internal fun MainActivity.showImageCropDialog(uri: android.net.Uri, onCropped: (
         return
     }
 
+    val themeTokens = tokens
     val dialogBg = getDialogBackgroundColor()
     val accentInt = currentAccentColor.toColorInt()
-    val secondaryColor = if (currentTheme == "light") "#757575".toColorInt() else "#9E9E9E".toColorInt()
+    val secondaryColor = themeTokens.textSecondary
+    val trackColor = themeTokens.inputStroke
 
+    // Full-screen canvas: the crop view takes all the space the controls leave.
     val cropView = AvatarCropView(this).apply {
         layoutParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, (280 * dp).toInt()
+            LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
         )
         setBitmap(source)
     }
@@ -436,9 +439,7 @@ internal fun MainActivity.showImageCropDialog(uri: android.net.Uri, onCropped: (
         progress = 180
         progressTintList = ColorStateList.valueOf(accentInt)
         thumbTintList = ColorStateList.valueOf(accentInt)
-        progressBackgroundTintList = ColorStateList.valueOf(
-            if (currentTheme == "light") "#C0C0C4".toColorInt() else "#5A5A5A".toColorInt()
-        )
+        progressBackgroundTintList = ColorStateList.valueOf(trackColor)
         layoutParams = android.widget.FrameLayout.LayoutParams(
             android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
             android.widget.FrameLayout.LayoutParams.WRAP_CONTENT
@@ -463,6 +464,7 @@ internal fun MainActivity.showImageCropDialog(uri: android.net.Uri, onCropped: (
         layoutParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
         ).apply { topMargin = (12 * dp).toInt() }
+        setPadding((16 * dp).toInt(), 0, (16 * dp).toInt(), 0)
         addView(ImageView(this@showImageCropDialog).apply {
             val sz = (24 * dp).toInt()
             layoutParams = LinearLayout.LayoutParams(sz, sz).apply { marginEnd = (8 * dp).toInt() }
@@ -477,24 +479,10 @@ internal fun MainActivity.showImageCropDialog(uri: android.net.Uri, onCropped: (
                 layoutParams = android.widget.FrameLayout.LayoutParams(
                     (2 * dp).toInt(), (14 * dp).toInt(), Gravity.CENTER
                 )
-                setBackgroundColor(
-                    if (currentTheme == "light") "#C0C0C4".toColorInt() else "#5A5A5A".toColorInt()
-                )
+                setBackgroundColor(trackColor)
             })
             addView(rotateSlider)
         })
-    }
-
-    val root = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        background = GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = 20 * dp
-            setColor(dialogBg)
-        }
-        setPadding((16 * dp).toInt(), (16 * dp).toInt(), (16 * dp).toInt(), (12 * dp).toInt())
-        addView(cropView)
-        addView(rotateBar)
     }
 
     val btnRow = LinearLayout(this).apply {
@@ -503,10 +491,27 @@ internal fun MainActivity.showImageCropDialog(uri: android.net.Uri, onCropped: (
         layoutParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
         ).apply { topMargin = (8 * dp).toInt() }
+        setPadding((16 * dp).toInt(), 0, (16 * dp).toInt(), (8 * dp).toInt())
     }
-    root.addView(btnRow)
 
-    val dialog = AlertDialog.Builder(this).setView(root).create()
+    val root = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setBackgroundColor(dialogBg)
+        addView(cropView)
+        addView(rotateBar)
+        addView(btnRow)
+    }
+
+    val dialog = android.app.Dialog(this).apply {
+        requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
+        setContentView(root)
+        window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+        window?.setDimAmount(0f)
+        window?.setLayout(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+        )
+        setCancelable(true)
+    }
 
     btnRow.addView(TextView(this).apply {
         text = getString(R.string.action_cancel)
@@ -529,12 +534,31 @@ internal fun MainActivity.showImageCropDialog(uri: android.net.Uri, onCropped: (
         }
     })
 
-    dialog.show()
-    dialog.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
-    dialog.window?.attributes?.let { lp ->
-        lp.width = (resources.displayMetrics.widthPixels * 0.92f).toInt()
-        dialog.window?.attributes = lp
+    // Keep the controls clear of the status and navigation bars on every API level.
+    androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+        val bars = insets.getInsets(
+            androidx.core.view.WindowInsetsCompat.Type.systemBars() or
+                androidx.core.view.WindowInsetsCompat.Type.displayCutout()
+        )
+        view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+        insets
     }
+
+    dialog.setOnShowListener {
+        // Set the layout again once shown: some versions reset it while attaching
+        // the window, which is what kept the old editor confined to a small card.
+        dialog.window?.let { window ->
+            window.setLayout(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            androidx.core.view.WindowCompat.getInsetsController(window, root).apply {
+                isAppearanceLightStatusBars = !themeTokens.isDark
+                isAppearanceLightNavigationBars = !themeTokens.isDark
+            }
+        }
+        androidx.core.view.ViewCompat.requestApplyInsets(root)
+    }
+    dialog.show()
 }
 
 /** Edit dialog: change the display name and the avatar photo for an account. */
