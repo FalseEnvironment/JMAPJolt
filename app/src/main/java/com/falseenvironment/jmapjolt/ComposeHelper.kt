@@ -31,14 +31,12 @@ import com.google.android.material.chip.Chip
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
-import androidx.core.content.ContextCompat
 import androidx.core.graphics.toColorInt
 import androidx.drawerlayout.widget.DrawerLayout
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-
-private const val MAX_ATTACHMENT_BYTES = 25L * 1024 * 1024
+import kotlinx.coroutines.withContext
 
 internal fun MainActivity.setupComposeView() {
     fabCompose.setOnClickListener { showComposeView() }
@@ -112,37 +110,30 @@ internal fun MainActivity.performSend() {
         return
     }
 
-    val jmapAttachments = pendingAttachments.mapNotNull { att ->
-        try {
-            if (att.size > MAX_ATTACHMENT_BYTES) {
-                showThemedSnackbar("${att.name} too large (max ${MAX_ATTACHMENT_BYTES / 1048576}MB)")
-                return@mapNotNull null
-            }
-            val bytes = contentResolver.openInputStream(att.uri)?.use { it.readBytes() } ?: return@mapNotNull null
-            JMapClient.Attachment(att.name, att.mimeType, att.size, bytes)
-        } catch (e: Exception) { null }
+    val outgoingAttachments = pendingAttachments.map { att ->
+        OutgoingAttachment(att.name, att.mimeType, att.size, uri = att.uri)
     } + carriedAttachments.map { att ->
         // Already on the server (carried over from an edited draft): reuse the blob.
-        JMapClient.Attachment(att.name, att.mimeType, att.size, ByteArray(0), existingBlobId = att.blobId)
+        OutgoingAttachment(att.name, att.mimeType, att.size, existingBlobId = att.blobId)
     }
 
-    val oldDraftId = editingDraftId
+    val request = EmailSender.Request(
+        accountEmail = accountToUse.email,
+        to = to,
+        cc = cc,
+        bcc = bcc,
+        subject = subject,
+        bodyHtml = body,
+        attachments = outgoingAttachments,
+        oldDraftId = editingDraftId
+    )
 
-    lifecycleScope.launch(Dispatchers.Main) {
-        topBarSendButton.isEnabled = false
-        val success = jmapClient.sendEmail(accountToUse, to, subject, body, "text/html", jmapAttachments, cc, bcc)
-        topBarSendButton.isEnabled = true
-        if (success) {
-            if (oldDraftId != null) jmapClient.destroyEmail(accountToUse, oldDraftId)
-            hideCompose()
-            composeToInput.text.clear()
-            composeSubjectInput.text.clear()
-            composeBodyInput.text.clear()
-            showThemedSnackbar("Email sent")
-        } else {
-            showThemedSnackbar("Failed to send email")
-        }
-    }
+    // Leave the compose screen at once. Staging, upload and submission run in the
+    // background; the notification reports the real outcome once the server accepts it.
+    clearComposeFields()
+    hideCompose()
+    showThemedSnackbar(getString(R.string.compose_sending))
+    EmailSender.send(this, request)
 }
 
 /**
@@ -673,18 +664,11 @@ internal fun MainActivity.saveDraftFromCompose() {
         return
     }
 
-    val jmapAttachments = pendingAttachments.mapNotNull { att ->
-        try {
-            if (att.size > MAX_ATTACHMENT_BYTES) {
-                showThemedSnackbar("${att.name} too large (max ${MAX_ATTACHMENT_BYTES / 1048576}MB)")
-                return@mapNotNull null
-            }
-            val bytes = contentResolver.openInputStream(att.uri)?.use { it.readBytes() } ?: return@mapNotNull null
-            JMapClient.Attachment(att.name, att.mimeType, att.size, bytes)
-        } catch (e: Exception) { null }
+    val outgoingAttachments = pendingAttachments.map { att ->
+        OutgoingAttachment(att.name, att.mimeType, att.size, uri = att.uri)
     } + carriedAttachments.map { att ->
         // Already on the server (carried over from an edited draft): reuse the blob.
-        JMapClient.Attachment(att.name, att.mimeType, att.size, ByteArray(0), existingBlobId = att.blobId)
+        OutgoingAttachment(att.name, att.mimeType, att.size, existingBlobId = att.blobId)
     }
 
     val oldDraftId = editingDraftId
@@ -696,8 +680,20 @@ internal fun MainActivity.saveDraftFromCompose() {
     clearComposeFields()
     hideCompose()
 
-    lifecycleScope.launch(Dispatchers.Main) {
-        val realId = jmapClient.saveDraft(accountToUse, to, subject, body, "text/html", jmapAttachments, cc, bcc)
+    lifecycleScope.launch {
+        val staged = withContext(Dispatchers.IO) {
+            runCatching { stageAttachments(this@saveDraftFromCompose, outgoingAttachments) }
+        }
+        val realId = if (staged.isSuccess) {
+            jmapClient.saveDraft(
+                accountToUse, to, subject, body, "text/html",
+                staged.getOrThrow().attachments, cc, bcc
+            )
+        } else {
+            Log.e(MainActivity.TAG, "Could not stage draft attachments", staged.exceptionOrNull())
+            null
+        }
+        staged.getOrNull()?.cleanup()
         if (realId != null) {
             replaceOptimisticDraftId(localDraftId, realId)
             if (oldDraftId != null) jmapClient.destroyEmail(accountToUse, oldDraftId)
@@ -706,31 +702,21 @@ internal fun MainActivity.saveDraftFromCompose() {
     }
 }
 
-internal fun MainActivity.requestStoragePermIfNeeded(): Boolean {
-    val needed = mutableListOf<String>()
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_MEDIA_IMAGES) != android.content.pm.PackageManager.PERMISSION_GRANTED)
-            needed.add(android.Manifest.permission.READ_MEDIA_IMAGES)
-        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_MEDIA_VIDEO) != android.content.pm.PackageManager.PERMISSION_GRANTED)
-            needed.add(android.Manifest.permission.READ_MEDIA_VIDEO)
-    } else {
-        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_EXTERNAL_STORAGE) != android.content.pm.PackageManager.PERMISSION_GRANTED)
-            needed.add(android.Manifest.permission.READ_EXTERNAL_STORAGE)
-    }
-    return if (needed.isNotEmpty()) {
-        requestStoragePermLauncher.launch(needed.toTypedArray())
-        false
-    } else true
-}
-
 internal fun MainActivity.pickPhoto() {
-    if (requestStoragePermIfNeeded())
-        pickMediaLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+    // The system photo picker grants read access to the chosen item on its own: asking
+    // for READ_MEDIA_* first only added a permission detour (and could block the picker
+    // entirely when the user had denied it).
+    pickMediaLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
 }
 
 internal fun MainActivity.pickVideo() {
-    if (requestStoragePermIfNeeded())
+    if (ActivityResultContracts.PickVisualMedia.isPhotoPickerAvailable(this)) {
         pickMediaLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
+    } else {
+        // Devices without the system picker fall back to the document picker, which
+        // opens video/mp4 files reliably and needs no storage permission either.
+        pickFileLauncher.launch(arrayOf("video/*"))
+    }
 }
 
 internal fun MainActivity.pickFile() {

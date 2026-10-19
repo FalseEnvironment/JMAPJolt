@@ -126,6 +126,15 @@
     <string name="background_sync_notification_group">%1$d new emails</string>
     <string name="background_sync_updating_title">Updating mailbox</string>
     <string name="background_sync_updating_text">Checking for new email…</string>
+    <string name="send_channel_name">Send status</string>
+    <string name="send_channel_description">Confirms when an email has actually been delivered to the server</string>
+    <string name="send_sending_title">Sending email…</string>
+    <string name="send_sending_text">To: %1$s</string>
+    <string name="send_sent_title">Email sent</string>
+    <string name="send_sent_text">Your message to %1$s was sent</string>
+    <string name="send_failed_title">Email not sent</string>
+    <string name="send_failed_generic">The message could not be sent</string>
+    <string name="compose_sending">Sending email…</string>
     <string name="mailbox_refreshing">[%1$s] Refreshing mailbox…</string>
     <string name="settings_unifiedpush_disabled">UnifiedPush disabled.</string>
     <string name="settings_unifiedpush_registered">[%1$s] UnifiedPush OK — distributor: %2$s</string>

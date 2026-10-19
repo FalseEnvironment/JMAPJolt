@@ -91,6 +91,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -669,6 +670,20 @@ class MainActivity : AppCompatActivity() {
         accentColorRow = findViewById(R.id.accentColorRow)
 
         jmapClient = JMapClient(this)
+        // Results of background sends come back through this flow while the activity is
+        // alive; the worker also posts a system notification so the outcome is visible
+        // when the app is closed.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                EmailSender.events.collect { event ->
+                    when (event) {
+                        is EmailSender.Event.Sent -> showThemedSnackbar(getString(R.string.send_sent_title))
+                        is EmailSender.Event.Failed ->
+                            showThemedSnackbar("${getString(R.string.send_failed_title)}: ${event.message}")
+                    }
+                }
+            }
+        }
         // Purge the WebView disk cache: detail views run with LOAD_NO_CACHE, but
         // caches accumulated before that (or by other WebView writes) linger forever.
         // Instantiating a WebView starts Chromium (100-300 ms), so this runs once
@@ -682,6 +697,12 @@ class MainActivity : AppCompatActivity() {
                 ?.filter { it.name.startsWith("cache_") && it.name.endsWith(".json") }
                 ?.forEach { it.delete() }
             runCatching { AttachmentCache.purgeExpired(this@MainActivity) }
+            // Abandoned outbox folders: a send that never reached WorkManager (crash or
+            // force-stop) leaves copies behind. Keep recent ones in case a worker is
+            // still consuming them.
+            File(cacheDir, EmailSender.STAGING_ROOT).listFiles()
+                ?.filter { System.currentTimeMillis() - it.lastModified() > 24 * 60 * 60 * 1000L }
+                ?.forEach { it.deleteRecursively() }
         }
 
         // Warm the address book once so the email list can draw contact photos for known senders

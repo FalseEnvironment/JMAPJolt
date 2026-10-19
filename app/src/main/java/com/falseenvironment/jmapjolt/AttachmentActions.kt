@@ -175,12 +175,15 @@ internal fun MainActivity.showAttachmentInApp(
                 )
             }, 0)
         } else {
-            val req = withContext(Dispatchers.IO) {
-                jmapClient.blobDownloadRequest(account, att.blobId, att.name, att.mimeType)
+            // Play from a local copy: MediaPlayer's ranged streaming of the authenticated
+            // JMAP download URL aborts with a ProtocolException part-way through the file
+            // and shows "Cannot play video" even though the attachment is fine.
+            val videoFile = withContext(Dispatchers.IO) {
+                jmapClient.downloadBlobToFile(account, att.blobId, att.name, att.mimeType)
             }
-            progress.visibility = View.GONE
-            if (req == null) {
-                showThemedSnackbar("Load failed")
+            if (videoFile == null) {
+                progress.visibility = View.GONE
+                showThemedSnackbar("Cannot play video")
                 dialog.dismiss()
                 return@launch
             }
@@ -315,13 +318,14 @@ internal fun MainActivity.showAttachmentInApp(
                 }
             }
 
-            videoView.setVideoURI(Uri.parse(req.first), req.second)
-            videoView.setOnPreparedListener {
+            videoView.setVideoURI(Uri.fromFile(videoFile))
+            videoView.setOnPreparedListener { mp ->
+                progress.visibility = View.GONE
                 // Size the VideoView to the video's exact aspect (fitting within the
                 // frame) and centre it, so the video is never distorted and the frame
                 // background (dialog colour) fills any remaining space - no app bleed.
-                val vw = it.videoWidth.toFloat()
-                val vh = it.videoHeight.toFloat()
+                val vw = mp.videoWidth.toFloat()
+                val vh = mp.videoHeight.toFloat()
                 if (vw > 0 && vh > 0) {
                     val aspect = vw / vh
                     var w = mediaFrame.width.toFloat().let { fw -> if (fw > 0) fw else resources.displayMetrics.widthPixels.toFloat() }
@@ -330,7 +334,7 @@ internal fun MainActivity.showAttachmentInApp(
                     videoView.layoutParams = FrameLayout.LayoutParams(w.toInt(), h.toInt(), Gravity.CENTER)
                     videoView.requestLayout()
                 }
-                it.start(); syncIcon()
+                mp.start(); syncIcon()
                 seekBar.max = videoView.duration
                 seekBar.post(tick)
                 // Controls hidden while playing; reveal only on tap.
@@ -341,7 +345,10 @@ internal fun MainActivity.showAttachmentInApp(
                 syncIcon(); showControls()
             }
             mediaFrame.addView(seekBar)
-            videoView.setOnErrorListener { _, _, _ ->
+            // Warning level: survives R8's log stripping, so the exact media error is on
+            // hand next time a file refuses to play.
+            videoView.setOnErrorListener { _, what, extra ->
+                Log.w(MainActivity.TAG, "VideoView error for '${att.name}': what=$what extra=$extra (local copy: ${videoFile.length()} bytes)")
                 showThemedSnackbar("Cannot play video")
                 true
             }

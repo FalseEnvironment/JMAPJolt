@@ -7,12 +7,16 @@ import kotlinx.coroutines.withContext
 import okhttp3.Credentials
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import rs.ltt.jmap.client.JmapClient
+import rs.ltt.jmap.common.entity.capability.CoreCapability
 import rs.ltt.jmap.common.entity.capability.MailAccountCapability
 import rs.ltt.jmap.common.util.Mapper
+import java.io.File
 import java.util.concurrent.TimeUnit
 import org.json.JSONArray
 import org.json.JSONObject
@@ -25,6 +29,7 @@ import rs.ltt.jmap.common.method.call.submission.SetEmailSubmissionMethodCall
 import rs.ltt.jmap.common.method.call.identity.GetIdentityMethodCall
 import rs.ltt.jmap.common.method.response.identity.GetIdentityMethodResponse
 import rs.ltt.jmap.common.method.response.email.SetEmailMethodResponse
+import rs.ltt.jmap.common.method.response.submission.SetEmailSubmissionMethodResponse
 
 class JMapClient(private val context: Context) {
 
@@ -433,8 +438,13 @@ class JMapClient(private val context: Context) {
         val data: ByteArray,
         // Set when this attachment already lives on the server (e.g. carried over from
         // an existing draft): reuse the blob instead of re-uploading [data].
-        val existingBlobId: String? = null
+        val existingBlobId: String? = null,
+        // Staged copy on disk. When present it is streamed to the server instead of
+        // [data], so a large video never has to be held in memory.
+        val file: File? = null
     )
+
+    data class SendOutcome(val success: Boolean, val error: String? = null)
 
     suspend fun fetchMailboxes(connectedAccount: ConnectedAccount): List<MailboxInfo> = withContext(Dispatchers.IO) {
         val client = newClient(connectedAccount)
@@ -895,7 +905,8 @@ class JMapClient(private val context: Context) {
     private fun uploadBlob(
         connectedAccount: ConnectedAccount,
         attachment: Attachment,
-        uploadUrlTemplate: String
+        uploadUrlTemplate: String,
+        http: OkHttpClient
     ): String? {
         return try {
             val uploadUrl = uploadUrlTemplate.replace("{accountId}", connectedAccount.accountId)
@@ -903,15 +914,22 @@ class JMapClient(private val context: Context) {
                 Log.w(TAG, "uploadBlob: refusing upload URL outside session origin")
                 return null
             }
-            val http = sharedHttp.newBuilder().callTimeout(30, TimeUnit.SECONDS).build()
-            val body = attachment.data.toRequestBody(attachment.mimeType.toMediaType())
+            val mediaType = attachment.mimeType.toMediaTypeOrNull()
+                ?: "application/octet-stream".toMediaType()
+            // Stream staged files straight from disk: a phone video can be far larger
+            // than the heap, and buffering it here used to fail silently.
+            val body = attachment.file?.asRequestBody(mediaType)
+                ?: attachment.data.toRequestBody(mediaType)
             val request = Request.Builder()
                 .url(uploadUrl)
                 .header("Authorization", Credentials.basic(connectedAccount.email, connectedAccount.password))
                 .post(body)
                 .build()
             http.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return null
+                if (!response.isSuccessful) {
+                    Log.e(TAG, "uploadBlob '${attachment.name}' failed: HTTP ${response.code}")
+                    return null
+                }
                 val json = org.json.JSONObject(response.body?.string() ?: return null)
                 json.optString("blobId").ifBlank { null }
             }
@@ -930,46 +948,81 @@ class JMapClient(private val context: Context) {
         attachments: List<Attachment> = emptyList(),
         ccEmailAddress: String = "",
         bccEmailAddress: String = ""
-    ): Boolean = withContext(Dispatchers.IO) {
+    ): SendOutcome = withContext(Dispatchers.IO) {
         val client = newClient(connectedAccount)
         client.use { jmapClient ->
             try {
                 val session = jmapClient.getSession().get(12, TimeUnit.SECONDS)
                 val accountId = session.getPrimaryAccount(MailAccountCapability::class.java)
-                    ?: return@withContext false
+                    ?: return@withContext SendOutcome(false, "No mail account found on the server")
 
                 // 1. Get Identity
                 val identityCall = GetIdentityMethodCall.builder().accountId(accountId).build()
                 val identityResponse = jmapClient.call(identityCall).get().getMain(GetIdentityMethodResponse::class.java)
-                val identity = identityResponse.list.firstOrNull() ?: return@withContext false
+                val identity = identityResponse.list.firstOrNull()
+                    ?: return@withContext SendOutcome(false, "No sender identity available")
                 val identityId = identity.id
 
                 // 2. Resolve Sent or Drafts mailbox
                 val sentMailboxId = resolveMailboxIdByRole(connectedAccount, "sent")
                 val mailboxIds = if (sentMailboxId != null) mapOf(sentMailboxId to true) else emptyMap()
 
-                // 3. Upload attachment blobs
+                // 3. Upload attachment blobs. Never continue without one: a message that
+                // says "sent" but silently drops its video is worse than a clear failure.
                 val uploadUrlTemplate = session.getUploadUrl(accountId)?.toString() ?: ""
-                val attachmentParts = if (attachments.isNotEmpty()) {
-                    attachments.mapNotNull { att ->
-                        val blobId = att.existingBlobId ?: run {
-                            if (uploadUrlTemplate.isBlank()) return@run null
-                            uploadBlob(connectedAccount, att, uploadUrlTemplate)
-                        } ?: return@mapNotNull null
-                        EmailBodyPart.builder()
-                            .blobId(blobId)
-                            .type(att.mimeType)
-                            .name(att.name)
-                            .build()
+                val uploads = attachments.filter { it.existingBlobId == null }
+                if (uploads.isNotEmpty()) {
+                    if (uploadUrlTemplate.isBlank()) {
+                        return@withContext SendOutcome(false, "The server did not provide an upload URL")
                     }
-                } else emptyList()
+                    val maxUpload = session.getCapability(CoreCapability::class.java)
+                        ?.getMaxSizeUpload()?.takeIf { it > 0 }
+                    val maxAttachments = session.getAccountCapability(accountId, MailAccountCapability::class.java)
+                        ?.getMaxSizeAttachmentsPerEmail()?.takeIf { it > 0 }
+                    val totalBytes = uploads.sumOf { attachmentBytes(it) }
+                    maxAttachments?.let { limit ->
+                        if (totalBytes > limit) {
+                            return@withContext SendOutcome(
+                                false,
+                                "Attachments are too large (${formatBytes(totalBytes)}, server limit ${formatBytes(limit)})"
+                            )
+                        }
+                    }
+                    maxUpload?.let { limit ->
+                        uploads.firstOrNull { attachmentBytes(it) > limit }?.let { tooBig ->
+                            return@withContext SendOutcome(
+                                false,
+                                "${tooBig.name} is too large (${formatBytes(attachmentBytes(tooBig))}, server limit ${formatBytes(limit)})"
+                            )
+                        }
+                    }
+                }
+                val uploadHttp = sharedHttp.newBuilder()
+                    .callTimeout(10, TimeUnit.MINUTES)
+                    .writeTimeout(10, TimeUnit.MINUTES)
+                    .readTimeout(2, TimeUnit.MINUTES)
+                    .build()
+                val attachmentParts = attachments.mapNotNull { att ->
+                    val blobId = att.existingBlobId ?: uploadBlob(
+                        connectedAccount, att, uploadUrlTemplate, uploadHttp
+                    )
+                    if (blobId == null) {
+                        Log.e(TAG, "sendEmail: could not upload '${att.name}'")
+                        return@withContext SendOutcome(false, "Could not upload ${att.name}")
+                    }
+                    EmailBodyPart.builder()
+                        .blobId(blobId)
+                        .type(att.mimeType)
+                        .name(att.name)
+                        .build()
+                }
 
                 // 4. Create Email object
                 val toAddresses = toEmailAddress.split(",")
                     .map { it.trim() }
                     .filter { it.isNotBlank() }
                     .map { EmailAddress.builder().email(it).build() }
-                if (toAddresses.isEmpty()) return@withContext false
+                if (toAddresses.isEmpty()) return@withContext SendOutcome(false, "No recipient")
                 val ccAddresses = ccEmailAddress.split(",")
                     .map { it.trim() }.filter { it.isNotBlank() }
                     .map { EmailAddress.builder().email(it).build() }
@@ -1003,7 +1056,7 @@ class JMapClient(private val context: Context) {
                     .also { b -> if (attachmentParts.isNotEmpty()) b.attachments(attachmentParts) }
                     .build()
 
-                // 4. Create Draft and Submission
+                // 5. Create the Email and submit it
                 val creationId = "draft1"
                 val setEmailCall = SetEmailMethodCall.builder()
                     .accountId(accountId)
@@ -1016,7 +1069,11 @@ class JMapClient(private val context: Context) {
                 if (createdEmailId == null) {
                     val setError = emailResponse.notCreated?.get(creationId)
                     Log.e(TAG, "Failed to create email draft: type=${setError?.type} desc=${setError?.description} mailboxIds=$mailboxIds")
-                    return@withContext false
+                    return@withContext SendOutcome(
+                        false,
+                        setError?.description?.takeIf { it.isNotBlank() }
+                            ?: "The server rejected the message${setError?.type?.let { " ($it)" } ?: ""}"
+                    )
                 }
 
                 val submission = EmailSubmission.builder()
@@ -1029,13 +1086,32 @@ class JMapClient(private val context: Context) {
                     .create(mapOf("sub1" to submission))
                     .build()
 
-                jmapClient.call(submitCall).get()
-                true
+                val submitResponse = jmapClient.call(submitCall).get()
+                    .getMain(SetEmailSubmissionMethodResponse::class.java)
+                if (submitResponse.created?.get("sub1") == null) {
+                    val setError = submitResponse.notCreated?.get("sub1")
+                    Log.e(TAG, "Failed to submit email: type=${setError?.type} desc=${setError?.description}")
+                    return@withContext SendOutcome(
+                        false,
+                        setError?.description?.takeIf { it.isNotBlank() }
+                            ?: "The server rejected the submission${setError?.type?.let { " ($it)" } ?: ""}"
+                    )
+                }
+                SendOutcome(true)
             } catch (e: Exception) {
                 Log.e(TAG, "sendEmail failed", e)
-                false
+                SendOutcome(false, e.message?.takeIf { it.isNotBlank() } ?: "Network error")
             }
         }
+    }
+
+    private fun attachmentBytes(attachment: Attachment): Long =
+        attachment.file?.length()?.takeIf { it > 0 } ?: attachment.data.size.toLong()
+
+    private fun formatBytes(bytes: Long): String = when {
+        bytes >= 1024L * 1024L -> String.format(java.util.Locale.US, "%.1f MB", bytes / (1024.0 * 1024.0))
+        bytes >= 1024L -> String.format(java.util.Locale.US, "%.0f KB", bytes / 1024.0)
+        else -> "$bytes B"
     }
 
     suspend fun saveDraft(
@@ -1064,12 +1140,21 @@ class JMapClient(private val context: Context) {
                 val mailboxIds = mapOf(draftsMailboxId to true)
 
                 val uploadUrlTemplate = session.getUploadUrl(accountId)?.toString() ?: ""
+                val uploadHttp = sharedHttp.newBuilder()
+                    .callTimeout(10, TimeUnit.MINUTES)
+                    .writeTimeout(10, TimeUnit.MINUTES)
+                    .readTimeout(2, TimeUnit.MINUTES)
+                    .build()
                 val attachmentParts = if (attachments.isNotEmpty()) {
                     attachments.mapNotNull { att ->
                         val blobId = att.existingBlobId ?: run {
                             if (uploadUrlTemplate.isBlank()) return@run null
-                            uploadBlob(connectedAccount, att, uploadUrlTemplate)
-                        } ?: return@mapNotNull null
+                            uploadBlob(connectedAccount, att, uploadUrlTemplate, uploadHttp)
+                        }
+                        if (blobId == null) {
+                            Log.e(TAG, "saveDraft: could not upload '${att.name}'")
+                            return@withContext null
+                        }
                         EmailBodyPart.builder()
                             .blobId(blobId)
                             .type(att.mimeType)
@@ -1206,39 +1291,6 @@ class JMapClient(private val context: Context) {
         }
     }
 
-    /**
-     * Resolves an authenticated download URL + headers for a blob without downloading it,
-     * so MediaMetadataRetriever can stream ranged reads (e.g. video thumbnails) instead of
-     * pulling the whole file. Returns null if the URL can't be resolved or isn't trusted.
-     */
-    suspend fun blobDownloadRequest(
-        connectedAccount: ConnectedAccount,
-        blobId: String,
-        filename: String,
-        mimeType: String
-    ): Pair<String, Map<String, String>>? = withContext(Dispatchers.IO) {
-        try {
-            val client = newClient(connectedAccount)
-            client.use { jmapClient ->
-                val session = jmapClient.getSession().get(12, TimeUnit.SECONDS)
-                val accountId = session.getPrimaryAccount(MailAccountCapability::class.java)
-                    ?: return@withContext null
-                val downloadUrl = session.getDownloadUrl(accountId, blobId, filename, mimeType)
-                    ?: return@withContext null
-                val urlStr = downloadUrl.toString()
-                if (!isTrustedServerUrl(urlStr, connectedAccount.sessionUrl)) {
-                    Log.w(TAG, "blobDownloadRequest: refusing URL outside session origin")
-                    return@withContext null
-                }
-                val auth = Credentials.basic(connectedAccount.email, connectedAccount.password)
-                urlStr to mapOf("Authorization" to auth)
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "blobDownloadRequest failed for $filename", e)
-            null
-        }
-    }
-
     suspend fun downloadBlob(
         connectedAccount: ConnectedAccount,
         blobId: String,
@@ -1270,6 +1322,74 @@ class JMapClient(private val context: Context) {
             }
         } catch (e: Exception) {
             Log.e(TAG, "downloadBlob failed for $filename", e)
+            null
+        }
+    }
+
+    /**
+     * Streams a blob into the app's attachment cache and returns the local file, or
+     * null on failure. The in-app video player receives `file://` media that way:
+     * MediaPlayer's ranged HTTP streaming of the (authenticated) JMAP download URL
+     * fails mid-transfer on several devices/servers, while images already play from
+     * an in-memory blob. Completed copies are reused (the blob never changes) and
+     * swept with the rest of [AttachmentCache] after 24 h.
+     */
+    suspend fun downloadBlobToFile(
+        connectedAccount: ConnectedAccount,
+        blobId: String,
+        filename: String,
+        mimeType: String
+    ): File? = withContext(Dispatchers.IO) {
+        try {
+            val dir = AttachmentCache.prepare(context)
+            val cached = File(dir, "${blobId.take(24)}_${safeAttachmentFileName(filename)}")
+            if (cached.isFile && cached.length() > 0) return@withContext cached
+            val client = newClient(connectedAccount)
+            client.use { jmapClient ->
+                val session = jmapClient.getSession().get(12, TimeUnit.SECONDS)
+                val accountId = session.getPrimaryAccount(MailAccountCapability::class.java)
+                    ?: return@withContext null
+                val downloadUrl = session.getDownloadUrl(accountId, blobId, filename, mimeType)
+                    ?: return@withContext null
+                if (!isTrustedServerUrl(downloadUrl.toString(), connectedAccount.sessionUrl)) {
+                    Log.w(TAG, "downloadBlobToFile: refusing download URL outside session origin")
+                    return@withContext null
+                }
+                val http = sharedHttp.newBuilder()
+                    .callTimeout(10, TimeUnit.MINUTES)
+                    .readTimeout(2, TimeUnit.MINUTES)
+                    .build()
+                val req = Request.Builder()
+                    .url(downloadUrl)
+                    .header("Authorization", Credentials.basic(connectedAccount.email, connectedAccount.password))
+                    .get()
+                    .build()
+                // Write to a private temp name, then rename: a crash mid-copy must not leave
+                // a half-written file that a later open reuses, and two concurrent requests
+                // for the same blob (thumbnail + player) never write the same path.
+                val partial = File(dir, "${cached.name}.${java.util.UUID.randomUUID()}.download")
+                try {
+                    http.newCall(req).execute().use { resp ->
+                        if (!resp.isSuccessful) {
+                            Log.w(TAG, "downloadBlobToFile '$filename': HTTP ${resp.code}")
+                            return@withContext null
+                        }
+                        resp.body?.byteStream()?.use { input ->
+                            partial.outputStream().use { output -> input.copyTo(output) }
+                        } ?: return@withContext null
+                    }
+                    if (partial.length() == 0L) return@withContext null
+                    if (!partial.renameTo(cached)) {
+                        // Another download finished first; its copy is as good as ours.
+                        return@withContext if (cached.isFile && cached.length() > 0) cached else null
+                    }
+                    cached
+                } finally {
+                    if (partial.exists()) partial.delete()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "downloadBlobToFile failed for $filename", e)
             null
         }
     }

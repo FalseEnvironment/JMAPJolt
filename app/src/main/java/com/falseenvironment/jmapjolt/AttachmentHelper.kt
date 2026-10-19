@@ -581,14 +581,16 @@ private fun decodeBytesThumbnail(bytes: ByteArray, targetPx: Int): Bitmap? {
 }
 
 /**
- * Decodes the first frame of a remote video via its authenticated URL. MediaMetadataRetriever
- * issues its own ranged HTTP reads, so only the metadata + one frame are fetched, not the whole file.
+ * Decodes the first frame of a video already written to disk. The previous ranged
+ * streaming through MediaMetadataRetriever used the same media HTTP stack that fails
+ * mid-transfer on some servers, which is why video cards had no thumbnail at all;
+ * [JMapClient.downloadBlobToFile] reuses the copy the player uses.
  */
-private fun decodeVideoUrlThumbnail(url: String, headers: Map<String, String>): Bitmap? {
+private fun decodeVideoFileThumbnail(file: File): Bitmap? {
     return try {
         val r = MediaMetadataRetriever()
         try {
-            r.setDataSource(url, headers)
+            r.setDataSource(file.absolutePath)
             r.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
         } finally {
             r.release()
@@ -693,7 +695,7 @@ internal fun MainActivity.buildEmailAttachmentRow(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
                 Gravity.CENTER
             )
-            visibility = View.GONE
+            visibility = View.VISIBLE
         }.also { preview.addView(it) } else null
         preview.setOnClickListener { showAttachmentInApp(att, account) }
         card.addView(preview)
@@ -702,9 +704,9 @@ internal fun MainActivity.buildEmailAttachmentRow(
         lifecycleScope.launch {
             val bmp = withContext(Dispatchers.IO) {
                 if (isVideo) {
-                    val req = jmapClient.blobDownloadRequest(account, att.blobId, att.name, att.mimeType)
+                    val file = jmapClient.downloadBlobToFile(account, att.blobId, att.name, att.mimeType)
                         ?: return@withContext null
-                    decodeVideoUrlThumbnail(req.first, req.second)
+                    decodeVideoFileThumbnail(file)
                 } else {
                     val bytes = blobByteCache.get(att.blobId)
                         ?: jmapClient.downloadBlob(account, att.blobId, att.name, att.mimeType)
