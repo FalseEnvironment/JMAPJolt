@@ -121,6 +121,20 @@ internal fun MainActivity.isThreadExpanded(key: String): Boolean = expandedThrea
 
 internal fun MainActivity.buildThreadedView(full: List<DisplayEmail>): List<DisplayEmail> {
     threadMembers.clear()
+    // Setting off: every message keeps its own row. Clear the transient thread state
+    // because these DisplayEmail instances are shared with other cached lists, and a
+    // stale head/child flag would still draw the conversation chevron.
+    if (!threadConversationsEnabled) {
+        full.forEach {
+            it.threadKey = ""
+            it.threadCount = 1
+            it.isThreadHeadRow = false
+            it.isThreadChildRow = false
+            it.isThreadMoreRow = false
+            it.threadHiddenCount = 0
+        }
+        return full
+    }
     val groups = LinkedHashMap<String, MutableList<DisplayEmail>>()
     for (e in full) groups.getOrPut(threadKeyOf(e)) { mutableListOf() }.add(e)
     val out = ArrayList<DisplayEmail>(full.size)

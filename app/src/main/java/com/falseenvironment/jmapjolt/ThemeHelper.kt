@@ -297,8 +297,8 @@ internal fun MainActivity.applyAccentColor() {
             android.graphics.Color.blue(accentInt)
         )
     )
-    listOf(loadImagesSwitch, loadFaviconsSwitch, unifiedPushSwitch, sseSwitch,
-        calendarEnabledSwitch, contactsEnabledSwitch).forEach {
+    listOf(loadImagesSwitch, loadFaviconsSwitch, threadConversationsSwitch, unifiedPushSwitch,
+        sseSwitch, calendarEnabledSwitch, contactsEnabledSwitch).forEach {
         it.setThumbTintList(thumbTint)
         it.setTrackTintList(trackTint)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {

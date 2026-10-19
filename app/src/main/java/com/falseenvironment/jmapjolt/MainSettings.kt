@@ -153,6 +153,19 @@ internal fun MainActivity.bindSettingsMenuNavigation() {
         }
     }
 
+    threadConversationsSwitch.setOnCheckedChangeListener { _, enabled ->
+        threadConversationsEnabled = enabled
+        // Re-enabling starts from a clean, collapsed conversation list.
+        expandedThreads.clear()
+        threadChildLimit.clear()
+        saveGeneralPreferences()
+        if (isSearchActive) {
+            applySearchFilter(searchInput.text?.toString() ?: "")
+        } else {
+            rebuildThreadedList()
+        }
+    }
+
     // Sections are always-expanded M3 grouped-list cards now; headers are static
     // labels (no more accordion expand/collapse).
     settingsCalendarChevron = findViewById(R.id.settingsCalendarChevron)
@@ -649,6 +662,8 @@ internal fun MainActivity.loadGeneralPreferences() {
     status.visibility = if (prefs.getBoolean("debug_mode", false)) android.view.View.VISIBLE else android.view.View.GONE
     loadImagesSwitch.isChecked = prefs.getBoolean("load_images", false)
     loadFaviconsSwitch.isChecked = prefs.getBoolean("load_favicons", false)
+    threadConversationsEnabled = prefs.getBoolean(MainActivity.KEY_THREAD_CONVERSATIONS, true)
+    threadConversationsSwitch.isChecked = threadConversationsEnabled
     markReadDelaySeconds = prefs.getInt(MainActivity.KEY_MARK_READ_DELAY_SECONDS, 0)
         .coerceIn(0, MainActivity.MARK_READ_DELAY_MAX_SECONDS)
     updateSettingsDropdownDisplays()
@@ -659,6 +674,7 @@ internal fun MainActivity.saveGeneralPreferences() {
     prefs.edit()
         .putBoolean("load_images", loadImagesSwitch.isChecked)
         .putBoolean("load_favicons", loadFaviconsSwitch.isChecked)
+        .putBoolean(MainActivity.KEY_THREAD_CONVERSATIONS, threadConversationsEnabled)
         .putInt(MainActivity.KEY_MARK_READ_DELAY_SECONDS, markReadDelaySeconds)
         .apply()
 }

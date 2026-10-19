@@ -166,6 +166,9 @@ class MainActivity : AppCompatActivity() {
     internal lateinit var settingsInfoArrow: ImageView
     internal lateinit var loadImagesSwitch: SwitchCompat
     internal lateinit var loadFaviconsSwitch: SwitchCompat
+    internal lateinit var threadConversationsSwitch: SwitchCompat
+    /** Whether reply/forward chains are collapsed into chat-style conversations. */
+    @Volatile internal var threadConversationsEnabled: Boolean = true
     // Guards the favicon switch listener against re-entry while we toggle it programmatically.
     internal var suppressFaviconToggle = false
     internal var themeIdx: Int = 0
@@ -543,6 +546,7 @@ class MainActivity : AppCompatActivity() {
         settingsInfoArrow = findViewById(R.id.settingsInfoArrow)
         loadImagesSwitch = findViewById(R.id.loadImagesSwitch)
         loadFaviconsSwitch = findViewById(R.id.loadFaviconsSwitch)
+        threadConversationsSwitch = findViewById(R.id.threadConversationsSwitch)
         themeDropdown = findViewById(R.id.themeDropdown)
         themeDropdownText = findViewById(R.id.themeDropdownText)
         emailInput = findViewById(R.id.emailInput)
@@ -1982,21 +1986,23 @@ class MainActivity : AppCompatActivity() {
                                         // Chat-style threading: pull replies from other mailboxes
                                         // (e.g. Sent) so a conversation groups under one head, same
                                         // as the single-account inbox does.
-                                        val threadIds = base.mapNotNull { it.threadId.ifBlank { null } }.toSet()
-                                        val haveIds = base.map { it.id }.toSet()
-                                        val extra = try {
-                                            jmapClient.fetchThreadMembers(acc, threadIds, haveIds).map {
-                                                DisplayEmail(
-                                                    it.id, it.subject, it.from, it.fromEmail, it.preview,
-                                                    it.fullBody, it.seen, it.isStarred, it.receivedAt, it.toEmail,
-                                                    ccEmail = it.ccEmail, bccEmail = it.bccEmail,
-                                                    attachments = it.attachments, accountEmail = acc.email,
-                                                    labels = it.keywords.toList(), threadId = it.threadId
-                                                )
-                                            }
-                                        } catch (e: kotlinx.coroutines.CancellationException) {
-                                            throw e
-                                        } catch (_: Exception) { emptyList() }
+                                        val extra = if (threadConversationsEnabled) {
+                                            val threadIds = base.mapNotNull { it.threadId.ifBlank { null } }.toSet()
+                                            val haveIds = base.map { it.id }.toSet()
+                                            try {
+                                                jmapClient.fetchThreadMembers(acc, threadIds, haveIds).map {
+                                                    DisplayEmail(
+                                                        it.id, it.subject, it.from, it.fromEmail, it.preview,
+                                                        it.fullBody, it.seen, it.isStarred, it.receivedAt, it.toEmail,
+                                                        ccEmail = it.ccEmail, bccEmail = it.bccEmail,
+                                                        attachments = it.attachments, accountEmail = acc.email,
+                                                        labels = it.keywords.toList(), threadId = it.threadId
+                                                    )
+                                                }
+                                            } catch (e: kotlinx.coroutines.CancellationException) {
+                                                throw e
+                                            } catch (_: Exception) { emptyList() }
+                                        } else emptyList()
                                         base + extra
                                     } catch (e: kotlinx.coroutines.CancellationException) {
                                         throw e
@@ -2066,7 +2072,7 @@ class MainActivity : AppCompatActivity() {
                                     }
                             // Chat-style threading: pull in replies that live in other
                             // mailboxes (e.g. Sent) so a conversation groups under one head.
-                            val threadedList = if (isInbox) {
+                            val threadedList = if (isInbox && threadConversationsEnabled) {
                                 val threadIds = newEmailsList.mapNotNull { it.threadId.ifBlank { null } }.toSet()
                                 val haveIds = newEmailsList.map { it.id }.toSet()
                                 val extra = try {
@@ -2506,6 +2512,7 @@ class MainActivity : AppCompatActivity() {
         internal const val KEY_SWIPE_RIGHT_ACTION = "swipe_right_action"
         internal const val KEY_SWIPE_LEFT_ACTION = "swipe_left_action"
         internal const val KEY_MARK_READ_DELAY_SECONDS = "mark_read_delay_seconds"
+        internal const val KEY_THREAD_CONVERSATIONS = "thread_conversations"
         internal const val MARK_READ_DELAY_MAX_SECONDS = 300
         internal const val KEY_ACCOUNTS_JSON = "accounts_json"
         internal const val KEY_LAST_SYNC_APP_VERSION = "last_sync_app_version"
