@@ -265,6 +265,9 @@
     <string name="cd_menu">Menu</string>
     <string name="cd_pick_contact">Pick contact</string>
     <string name="cd_remove_quote">Remove quoted message</string>
+    <string name="cd_show_cc">Add Cc</string>
+    <string name="cd_show_bcc">Add Bcc</string>
+    <string name="cd_recipient_options">Recipient options</string>
     <string name="cd_attach">Attach file</string>
     <string name="cd_mark_read_toggle">Toggle read state</string>
     <string name="empty_inbox">Inbox is empty</string>

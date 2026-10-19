@@ -461,71 +461,202 @@
 
                 <View android:layout_width="match_parent" android:layout_height="1dp" android:tag="token:divider" />
 
-                <!-- Recipients (To / Cc / Bcc) -->
+                <!-- Recipients: To is always visible; Cc and Bcc appear when the
+                     chevron at the start of the previous row is tapped. Chips and
+                     the input share one flow so they wrap naturally. -->
                 <LinearLayout
+                    android:id="@+id/composeRecipientsContainer"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:paddingStart="16dp"
-                    android:paddingEnd="16dp"
-                    android:paddingTop="6dp">
+                    android:paddingStart="12dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="2dp"
+                    android:paddingBottom="2dp">
 
+                    <!-- To -->
                     <LinearLayout
+                        android:id="@+id/composeToRow"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="horizontal"
-                        android:gravity="center_vertical"
-                        android:minHeight="52dp">
+                        android:gravity="top"
+                        android:minHeight="52dp"
+                        android:paddingStart="4dp"
+                        android:paddingEnd="4dp">
 
-                        <!-- Accent category selector To/Cc/Bcc (built/styled in code) -->
-                        <LinearLayout
-                            android:id="@+id/composeCategoryTabs"
-                            android:layout_width="wrap_content"
+                        <ImageButton
+                            android:id="@+id/composeToExpand"
+                            android:layout_width="28dp"
+                            android:layout_height="44dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:contentDescription="@string/cd_show_cc"
+                            android:padding="8dp"
+                            android:src="@drawable/ic_lucide_chevron_down" />
+
+                        <TextView
+                            android:layout_width="34dp"
                             android:layout_height="wrap_content"
-                            android:orientation="horizontal" />
+                            android:layout_gravity="top"
+                            android:paddingTop="13dp"
+                            android:tag="token:textSecondary"
+                            android:text="To"
+                            android:textSize="@dimen/text_sm" />
 
-                        <EditText
-                            android:id="@+id/composeToInput"
+                        <com.google.android.material.chip.ChipGroup
+                            android:id="@+id/composeToChipsGroup"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:background="@null"
-                            android:hint="Add recipient"
-                            android:inputType="textEmailAddress"
-                            android:imeOptions="actionDone"
-                            android:textSize="@dimen/text_body" />
+                            android:paddingTop="8dp"
+                            android:paddingBottom="8dp"
+                            app:chipSpacingHorizontal="6dp"
+                            app:chipSpacingVertical="4dp">
+
+                            <EditText
+                                android:id="@+id/composeToInput"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:background="@null"
+                                android:hint="Add recipient"
+                                android:imeOptions="actionDone"
+                                android:inputType="textEmailAddress"
+                                android:maxLines="1"
+                                android:minWidth="140dp"
+                                android:paddingStart="6dp"
+                                android:paddingEnd="6dp"
+                                android:textSize="@dimen/text_body" />
+                        </com.google.android.material.chip.ChipGroup>
 
                         <!-- Address book picker for the active recipient category -->
-                        <ImageView
+                        <ImageButton
                             android:id="@+id/composeContactsButton"
                             android:layout_width="48dp"
                             android:layout_height="48dp"
-                            android:padding="9dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
                             android:contentDescription="@string/contacts_pick_title"
+                            android:padding="9dp"
                             android:src="@drawable/ic_lucide_user" />
 
                     </LinearLayout>
 
-                    <com.google.android.material.chip.ChipGroup
-                        android:id="@+id/composeToChipsGroup"
+                    <!-- Cc: shown by the To chevron; its own chevron reveals Bcc. -->
+                    <LinearLayout
+                        android:id="@+id/composeCcRow"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:paddingBottom="8dp"
-                        android:visibility="gone" />
+                        android:orientation="horizontal"
+                        android:gravity="top"
+                        android:minHeight="52dp"
+                        android:paddingStart="4dp"
+                        android:paddingEnd="4dp"
+                        android:visibility="gone">
 
-                    <com.google.android.material.chip.ChipGroup
-                        android:id="@+id/composeCcChipsGroup"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:paddingBottom="8dp"
-                        android:visibility="gone" />
+                        <ImageButton
+                            android:id="@+id/composeCcExpand"
+                            android:layout_width="28dp"
+                            android:layout_height="44dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:contentDescription="@string/cd_show_bcc"
+                            android:padding="8dp"
+                            android:src="@drawable/ic_lucide_chevron_down" />
 
-                    <com.google.android.material.chip.ChipGroup
-                        android:id="@+id/composeBccChipsGroup"
+                        <TextView
+                            android:layout_width="34dp"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="top"
+                            android:paddingTop="13dp"
+                            android:tag="token:textSecondary"
+                            android:text="Cc"
+                            android:textSize="@dimen/text_sm" />
+
+                        <com.google.android.material.chip.ChipGroup
+                            android:id="@+id/composeCcChipsGroup"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:paddingTop="8dp"
+                            android:paddingBottom="8dp"
+                            app:chipSpacingHorizontal="6dp"
+                            app:chipSpacingVertical="4dp">
+
+                            <EditText
+                                android:id="@+id/composeCcInput"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:background="@null"
+                                android:hint="Add Cc"
+                                android:imeOptions="actionDone"
+                                android:inputType="textEmailAddress"
+                                android:maxLines="1"
+                                android:minWidth="140dp"
+                                android:paddingStart="6dp"
+                                android:paddingEnd="6dp"
+                                android:textSize="@dimen/text_body" />
+                        </com.google.android.material.chip.ChipGroup>
+
+                        <!-- Matches the contacts button so all three flows line up. -->
+                        <View
+                            android:layout_width="48dp"
+                            android:layout_height="1dp" />
+
+                    </LinearLayout>
+
+                    <!-- Bcc -->
+                    <LinearLayout
+                        android:id="@+id/composeBccRow"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:paddingBottom="8dp"
-                        android:visibility="gone" />
+                        android:orientation="horizontal"
+                        android:gravity="top"
+                        android:minHeight="52dp"
+                        android:paddingStart="4dp"
+                        android:paddingEnd="4dp"
+                        android:visibility="gone">
+
+                        <View
+                            android:layout_width="28dp"
+                            android:layout_height="1dp" />
+
+                        <TextView
+                            android:layout_width="34dp"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="top"
+                            android:paddingTop="13dp"
+                            android:tag="token:textSecondary"
+                            android:text="Bcc"
+                            android:textSize="@dimen/text_sm" />
+
+                        <com.google.android.material.chip.ChipGroup
+                            android:id="@+id/composeBccChipsGroup"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:paddingTop="8dp"
+                            android:paddingBottom="8dp"
+                            app:chipSpacingHorizontal="6dp"
+                            app:chipSpacingVertical="4dp">
+
+                            <EditText
+                                android:id="@+id/composeBccInput"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:background="@null"
+                                android:hint="Add Bcc"
+                                android:imeOptions="actionDone"
+                                android:inputType="textEmailAddress"
+                                android:maxLines="1"
+                                android:minWidth="140dp"
+                                android:paddingStart="6dp"
+                                android:paddingEnd="6dp"
+                                android:textSize="@dimen/text_body" />
+                        </com.google.android.material.chip.ChipGroup>
+
+                        <View
+                            android:layout_width="48dp"
+                            android:layout_height="1dp" />
+
+                    </LinearLayout>
 
                 </LinearLayout>
 

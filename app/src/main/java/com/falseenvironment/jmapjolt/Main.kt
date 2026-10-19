@@ -265,14 +265,20 @@ class MainActivity : AppCompatActivity() {
     internal lateinit var composeToChipsGroup: com.google.android.material.chip.ChipGroup
     internal lateinit var composeCcChipsGroup: com.google.android.material.chip.ChipGroup
     internal lateinit var composeBccChipsGroup: com.google.android.material.chip.ChipGroup
-    internal lateinit var composeCategoryTabs: LinearLayout
+    internal lateinit var composeToRow: LinearLayout
+    internal lateinit var composeCcRow: LinearLayout
+    internal lateinit var composeBccRow: LinearLayout
+    internal lateinit var composeToExpand: ImageView
+    internal lateinit var composeCcExpand: ImageView
     internal val recipientEmails = mutableListOf<String>()
     internal val ccEmails = mutableListOf<String>()
     internal val bccEmails = mutableListOf<String>()
-    // Active recipient category: 0 = To, 1 = Cc, 2 = Bcc.
+    // Active recipient category: 0 = To, 1 = Cc, 2 = Bcc. Follows the focused input.
     internal var composeCategory = 0
     internal var selectedFromEmail = ""
     internal lateinit var composeToInput: EditText
+    internal lateinit var composeCcInput: EditText
+    internal lateinit var composeBccInput: EditText
     internal lateinit var composeContactsButton: ImageView
     internal lateinit var composeSubjectInput: EditText
     internal lateinit var composeBodyInput: EditText
@@ -567,8 +573,14 @@ class MainActivity : AppCompatActivity() {
         composeToChipsGroup = findViewById(R.id.composeToChipsGroup)
         composeCcChipsGroup = findViewById(R.id.composeCcChipsGroup)
         composeBccChipsGroup = findViewById(R.id.composeBccChipsGroup)
-        composeCategoryTabs = findViewById(R.id.composeCategoryTabs)
+        composeToRow = findViewById(R.id.composeToRow)
+        composeCcRow = findViewById(R.id.composeCcRow)
+        composeBccRow = findViewById(R.id.composeBccRow)
+        composeToExpand = findViewById(R.id.composeToExpand)
+        composeCcExpand = findViewById(R.id.composeCcExpand)
         composeToInput = findViewById(R.id.composeToInput)
+        composeCcInput = findViewById(R.id.composeCcInput)
+        composeBccInput = findViewById(R.id.composeBccInput)
         composeContactsButton = findViewById(R.id.composeContactsButton)
         composeSubjectInput = findViewById(R.id.composeSubjectInput)
         composeBodyInput = findViewById(R.id.composeBodyInput)
