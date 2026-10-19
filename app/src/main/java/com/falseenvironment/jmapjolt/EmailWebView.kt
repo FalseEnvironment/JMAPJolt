@@ -50,6 +50,14 @@ internal object EmailWebView {
             blockNetworkImage = !loadImages()
         }
         wv.webViewClient = GuardedClient(loadImages, onLink)
+        // A body WebView is laid out at its full content height inside a
+        // NestedScrollView. If it takes focus on tap, Android scrolls both the
+        // WebView and the outer ScrollView to reveal the focused link — the whole
+        // message jumps as soon as a link is touched. Links still fire through
+        // shouldOverrideUrlLoading without focus, so keep the WebView out of the
+        // focus chain.
+        wv.isFocusable = false
+        wv.isFocusableInTouchMode = false
     }
 
     fun isImageLoadingEnabled(context: Context): Boolean =
