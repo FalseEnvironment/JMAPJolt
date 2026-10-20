@@ -528,6 +528,13 @@ internal fun MainActivity.applySystemBars() {
         isAppearanceLightStatusBars = !t.isDark
         isAppearanceLightNavigationBars = !t.isDark
     }
+    // Theme changes repaint the decor background and toggle the icon appearance,
+    // which can coincide with a fresh insets dispatch where the padding applied by
+    // installSystemBarInsets ends up stale/zero — the top bar and bottom nav then
+    // slide under the system bars until the app is restarted. Re-installing the
+    // listener and re-dispatching the live insets re-syncs the padding right away;
+    // ids/params are fixed so this is idempotent and cheap.
+    installSystemBarInsets()
 }
 
 internal fun MainActivity.updateCustomTopBar(title: String, inMailbox: Boolean = false) {
