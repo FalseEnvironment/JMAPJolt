@@ -115,8 +115,6 @@ class MainActivity : AppCompatActivity() {
         THEME
     }
 
-    private data class TestNotificationResult(val success: Boolean, val httpCode: Int?)
-
     internal lateinit var drawerLayout: DrawerLayout
     internal lateinit var navigationView: NavigationView
     internal lateinit var toolbar: Toolbar
@@ -767,6 +765,7 @@ class MainActivity : AppCompatActivity() {
         bindSettingsMenuNavigation()
         bindPullToRefresh()
         loadAccounts()
+        ensurePushSubscription(register = true)
         applyTheme()
         handleMailtoIntent(intent)
         handleWidgetIntent(intent)
@@ -876,9 +875,9 @@ class MainActivity : AppCompatActivity() {
                 showOnboarding()
             }
         } else if (unifiedPushSwitch.isChecked) {
-            // Restored a saved session: ensure the periodic fallback worker is
-            // active (it may have been cancelled by a past push registration).
-            EmailSyncWorker.schedule(this)
+            // Restored a saved session: UnifiedPush-only mode — cancel any periodic
+            // email-sync job left over from an older build (WorkManager persists it).
+            EmailSyncWorker.cancel(this)
         }
         // After the session restore decided the initial screen, honor a pending calendar
         // widget tap so it lands on the calendar (WEEK) instead of the inbox.
@@ -2226,107 +2225,6 @@ class MainActivity : AppCompatActivity() {
         runOnUiThread { if (connectedAccount != null) refreshInboxNow() }
     }
 
-    private fun loadUnifiedPushPreferences() {
-        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-        unifiedPushSwitch.isChecked = prefs.getBoolean(KEY_UP_ENABLED, false)
-        sseSwitch.isChecked = JmapEventSourceService.isEnabled(this)
-    }
-
-    internal fun saveUnifiedPushEnabled(enabled: Boolean) {
-        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-                .edit()
-                .putBoolean(KEY_UP_ENABLED, enabled)
-                .apply()
-    }
-
-    private fun normalizeUnifiedPushLink(value: String): String? {
-        val trimmed = value.trim().trimEnd('/')
-        if (trimmed.isBlank()) return null
-        val withScheme =
-                if (trimmed.startsWith("http://", ignoreCase = true) ||
-                                trimmed.startsWith("https://", ignoreCase = true)
-                ) {
-                    trimmed
-                } else {
-                    "https://$trimmed"
-                }
-        return try {
-            val url = URL(withScheme)
-            if (url.protocol != "https" || url.host.isNullOrBlank()) return null
-            val topic = url.path.trim('/').ifBlank { getOrCreateUnifiedPushTopic() }
-            URL("https", url.host, url.port, "/$topic").toString()
-        } catch (_: Throwable) {
-            null
-        }
-    }
-
-    private fun getOrCreateUnifiedPushTopic(): String {
-        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-        val saved = prefs.getString(KEY_UP_AUTO_TOPIC, null)
-        if (!saved.isNullOrBlank()) return saved
-        val generated = "jmapjolt-${UUID.randomUUID().toString().take(8)}"
-        prefs.edit().putString(KEY_UP_AUTO_TOPIC, generated).apply()
-        return generated
-    }
-
-    private fun sendUnifiedPushTestNotification() {
-        lifecycleScope.launch {
-            // Registration is asynchronous: when the switch is toggled on, the fresh
-            // endpoint arrives via onNewEndpoint a moment later. Poll the pref for a
-            // short window so the test isn't sent to a stale/missing endpoint.
-            val endpoint = withContext(Dispatchers.IO) {
-                var attempt = 0
-                var found: String? = null
-                while (attempt < 24) { // ~12s at 500ms
-                    found = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-                        .getString(KEY_LAST_UP_ENDPOINT, null)
-                        ?.takeIf { it.isNotBlank() }
-                    if (found != null) break
-                    Thread.sleep(500)
-                    attempt++
-                }
-                found
-            }
-            if (endpoint == null) {
-                showThemedSnackbar(getString(R.string.settings_unifiedpush_waiting_endpoint))
-                return@launch
-            }
-            // The test push travels unencrypted, so onMessage would otherwise drop it:
-            // open the short window that lets exactly this payload be shown.
-            UnifiedPushService.markPendingTest(this@MainActivity)
-            val result =
-                    withContext(Dispatchers.IO) {
-                        try {
-                            val connection = URL(endpoint).openConnection() as HttpURLConnection
-                            connection.requestMethod = "POST"
-                            connection.connectTimeout = 10000
-                            connection.readTimeout = 10000
-                            connection.doOutput = true
-                            connection.setRequestProperty("Content-Type", "text/plain; charset=utf-8")
-                            connection.outputStream.use {
-                                it.write(getString(R.string.settings_unifiedpush_test_body).toByteArray())
-                            }
-                            val code = connection.responseCode
-                            connection.disconnect()
-                            TestNotificationResult(code in 200..299, code)
-                        } catch (e: Throwable) {
-                            Log.e(TAG, "UnifiedPush test notification failed", e)
-                            TestNotificationResult(false, null)
-                        }
-                    }
-
-            showThemedSnackbar(
-                if (result.success) {
-                    getString(R.string.settings_unifiedpush_test_sent)
-                } else if (result.httpCode != null) {
-                    getString(R.string.settings_unifiedpush_error_with_code, result.httpCode)
-                } else {
-                    getString(R.string.settings_unifiedpush_error)
-                }
-            )
-        }
-    }
-
     internal fun hideKeyboard() {
         val imm = getSystemService(InputMethodManager::class.java)
         // currentFocus is already null when the focused view was hidden first
@@ -2517,10 +2415,8 @@ class MainActivity : AppCompatActivity() {
 
         private const val KEY_WELCOME_SHOWN = "welcome_shown"
         internal const val KEY_CATEGORY_ORDER = "category_order"
-        private const val KEY_UP_ENABLED = "up_enabled"
-        private const val KEY_UP_MANUAL_DISTRIBUTOR = "up_manual_distributor"
-        private const val KEY_UP_AUTO_TOPIC = "up_auto_topic"
-        private const val KEY_LAST_UP_ENDPOINT = "last_up_endpoint"
+        // The UnifiedPush keys (KEY_UP_*) live in UnifiedPushHelper.kt as internal consts:
+        // duplicating them here shadowed the helper functions and broke the test push.
         internal const val KEY_SWIPE_RIGHT_ACTION = "swipe_right_action"
         internal const val KEY_SWIPE_LEFT_ACTION = "swipe_left_action"
         internal const val KEY_MARK_READ_DELAY_SECONDS = "mark_read_delay_seconds"

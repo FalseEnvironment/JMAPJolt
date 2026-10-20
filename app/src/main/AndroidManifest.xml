@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
@@ -28,17 +29,23 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
-        <receiver
+        <!-- UnifiedPush 3: the library's receiver forwards events to this non-exported
+             service. Do NOT declare the connector intent filters on an app receiver:
+             that would disable the library receiver. -->
+        <service
             android:name=".UnifiedPushService"
-            android:exported="true">
+            android:exported="false">
             <intent-filter>
-                <action android:name="org.unifiedpush.android.connector.NEW_ENDPOINT" />
-                <action android:name="org.unifiedpush.android.connector.UNREGISTERED" />
-                <action android:name="org.unifiedpush.android.connector.MESSAGE" />
-                <action android:name="org.unifiedpush.android.connector.REGISTRATION_FAILED" />
-                <action android:name="org.unifiedpush.android.connector.TEMPORARY_UNAVAILABLE" />
+                <action android:name="org.unifiedpush.android.connector.PUSH_EVENT" />
             </intent-filter>
-        </receiver>
+        </service>
+
+        <!-- WorkManager runs expedited work as a foreground service below Android 12;
+             targetSdk 34+ requires the service to declare its type. -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
 
         <receiver
             android:name=".SseBootReceiver"

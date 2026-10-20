@@ -716,7 +716,12 @@ internal fun MainActivity.bindSettingsActions() {
             registerUnifiedPushAuto("")
             sendUnifiedPushTestNotification()
         } else {
-            UnifiedPush.unregister(this, INSTANCE_DEFAULT)
+            // Keep the distributor registration (and therefore the same endpoint/topic):
+            // unregistering would rotate the ntfy topic and make the next test/wake-up wait
+            // for a reconnect. Destroying the JMAP subscription stops server-side pushes.
+            lifecycleScope.launch(Dispatchers.IO) {
+                PushSubscriptionManager.disable(applicationContext)
+            }
             EmailSyncWorker.cancel(this)
             showThemedSnackbar(getString(R.string.settings_unifiedpush_disabled))
         }

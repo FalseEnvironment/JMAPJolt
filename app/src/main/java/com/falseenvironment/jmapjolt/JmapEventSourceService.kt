@@ -38,12 +38,6 @@ class JmapEventSourceService : Service() {
     // down instead of being restarted by onTaskRemoved, which would only time out again.
     @Volatile
     private var stoppedByTimeout = false
-    // Mirrors whether the periodic WorkManager fallback is running. It starts true:
-    // Main.kt, UnifiedPushService and tryStartForeground all schedule it independently
-    // of this service. SSE cancels it the first time it proves it can reach the server,
-    // and it is scheduled again as soon as SSE stops working.
-    @Volatile
-    private var fallbackScheduled = true
 
     // startForeground() must run as early as possible: onCreate fires before
     // onStartCommand, and a busy main thread at app launch can otherwise push the
@@ -84,12 +78,7 @@ class JmapEventSourceService : Service() {
     private fun handleForegroundTimeout() {
         if (stoppedByTimeout) return
         stoppedByTimeout = true
-        Log.w(TAG, "dataSync FGS budget exhausted — stopping SSE, falling back to periodic sync")
-        try {
-            EmailSyncWorker.schedule(this)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to schedule periodic sync fallback", e)
-        }
+        Log.w(TAG, "dataSync FGS budget exhausted — stopping SSE")
         stopSelf()
     }
 
@@ -98,14 +87,10 @@ class JmapEventSourceService : Service() {
         true
     } catch (e: Exception) {
         Log.e(TAG, "startForeground refused (FGS time-limit likely exhausted)", e)
-        // Same budget exhaustion as onTimeout(), just observed on the start path: keep the
-        // service down and let the periodic worker carry the sync.
+        // Same budget exhaustion as onTimeout(), just observed on the start path:
+        // keep the service down. UnifiedPush-only mode has no periodic fallback,
+        // so the next push/SSE event will drive the sync.
         stoppedByTimeout = true
-        try {
-            EmailSyncWorker.schedule(this)
-        } catch (scheduleError: Exception) {
-            Log.e(TAG, "Failed to schedule periodic sync fallback", scheduleError)
-        }
         false
     }
 
@@ -137,21 +122,16 @@ class JmapEventSourceService : Service() {
                     val sseUrl = JmapSse.resolveEventSourceUrl(account)
                     if (sseUrl == null) {
                         // A session that never yields an eventSourceUrl is just as fatal to push
-                        // as a dropped stream, so it counts towards the periodic fallback too:
+                        // as a dropped stream, so it counts towards the retry backoff:
                         // otherwise this loop spins forever while new mail waits for nothing.
                         consecutiveFailures++
                         Log.w(TAG, "No eventSourceUrl for ${LogRedact.email(account.email)} — retrying in ${backoffMs}ms")
-                        scheduleFallbackIfSseUnstable(consecutiveFailures, account)
                         delay(backoffMs)
                         backoffMs = minOf(backoffMs * 2, BACKOFF_MAX_MS)
                         continue
                     }
                     backoffMs = BACKOFF_INITIAL_MS
                     Log.d(TAG, "Connecting SSE for ${LogRedact.email(account.email)} (host=${LogRedact.host(sseUrl)})")
-                    if (fallbackScheduled) {
-                        fallbackScheduled = false
-                        EmailSyncWorker.cancel(this@JmapEventSourceService)
-                    }
                     JmapSse.connectAndListen(account, sseUrl) { type, data ->
                         handleEvent(type, data, account)
                     }
@@ -162,7 +142,6 @@ class JmapEventSourceService : Service() {
                 } catch (e: Throwable) {
                     Log.e(TAG, "SSE error for ${LogRedact.email(account.email)}, reconnecting in ${backoffMs}ms", e)
                     consecutiveFailures++
-                    scheduleFallbackIfSseUnstable(consecutiveFailures, account)
                     delay(backoffMs)
                     backoffMs = minOf(backoffMs * 2, BACKOFF_MAX_MS)
                 }
@@ -170,16 +149,6 @@ class JmapEventSourceService : Service() {
         } finally {
             activeLoops.remove(account.email)
         }
-    }
-
-    private fun scheduleFallbackIfSseUnstable(
-        consecutiveFailures: Int,
-        account: JMapClient.ConnectedAccount
-    ) {
-        if (consecutiveFailures < SSE_FAILURES_BEFORE_FALLBACK || fallbackScheduled) return
-        Log.w(TAG, "SSE unstable for ${LogRedact.email(account.email)} — re-enabling periodic fallback")
-        fallbackScheduled = true
-        EmailSyncWorker.schedule(this)
     }
 
     private fun handleEvent(type: String, data: String, account: JMapClient.ConnectedAccount) {
@@ -257,7 +226,6 @@ class JmapEventSourceService : Service() {
         private const val CHANNEL_ID = "background_email_sync_status"
         private const val BACKOFF_INITIAL_MS = 5_000L
         private const val BACKOFF_MAX_MS = 60_000L
-        private const val SSE_FAILURES_BEFORE_FALLBACK = 3
         const val KEY_SSE_ENABLED = "sse_enabled"
         private const val PREFS_NAME = "jmap_service_prefs"
 

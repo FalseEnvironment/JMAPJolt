@@ -1,29 +1,65 @@
 package com.falseenvironment.jmapjolt
 
+import android.content.Context
+import android.content.Context.MODE_PRIVATE
 import android.content.Intent
 import android.util.Log
-import android.content.Context.MODE_PRIVATE
 import androidx.work.Constraints
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 import org.unifiedpush.android.connector.FailedReason
-import org.unifiedpush.android.connector.MessagingReceiver
+import org.unifiedpush.android.connector.PushService
 import org.unifiedpush.android.connector.data.PushEndpoint
 import org.unifiedpush.android.connector.data.PushMessage
-import java.util.UUID
 
-class UnifiedPushService : MessagingReceiver() {
+/**
+ * Receives UnifiedPush events from the user's distributor app (ntfy, ...).
+ *
+ * This is the UnifiedPush 3 API: a non-exported [PushService] declared with the
+ * `org.unifiedpush.android.connector.PUSH_EVENT` action. The library's own receiver talks
+ * to the distributor and binds this service to deliver events. The old `MessagingReceiver`
+ * broadcast API is deprecated and its direct intent filters also disable the library
+ * receiver, which makes delivery dependent on the distributor's intent shape.
+ */
+class UnifiedPushService : PushService() {
 
-    override fun onMessage(context: android.content.Context, message: PushMessage, instance: String) {
+    override fun onMessage(message: PushMessage, instance: String) {
+        val context = applicationContext
         val payload = message.content
-        Log.d(TAG, "UnifiedPush message received (instance=$instance, bytes=${payload.size}, decrypted=${message.decrypted})")
+        Log.d(
+            TAG,
+            "UnifiedPush message received (instance=$instance, bytes=${payload.size}, " +
+                "decrypted=${message.decrypted})"
+        )
 
-        if (WebPushKeys.decrypt(context, payload) == null) {
+        if (!PushSubscriptionManager.isEnabled(context)) {
+            Log.d(TAG, "UnifiedPush is disabled - ignoring message")
+            return
+        }
+
+        val plaintext = WebPushKeys.decrypt(context, payload)
+
+        // RFC 8620 §7.2.2: right after a PushSubscription is created the server posts a
+        // PushVerification here and refuses to send anything else until the code comes
+        // back via PushSubscription/set. This is the step that makes push active at all.
+        val verification = plaintext?.let { parsePushVerification(it) }
+        if (verification != null) {
+            val (subscriptionId, code) = verification
+            Log.d(TAG, "PushVerification received (subscription=$subscriptionId)")
+            receiverScope.launch {
+                PushSubscriptionManager.verify(context, subscriptionId, code)
+            }
+            return
+        }
+
+        if (plaintext == null) {
             // Anyone who learns the endpoint URL can POST to it, so an undecryptable payload
             // is unauthenticated data: never render it, and never let it drive a sync.
             if (consumePendingTest(context)) {
@@ -44,57 +80,53 @@ class UnifiedPushService : MessagingReceiver() {
 
         // A decrypted payload is a JMAP StateChange, not user-facing text. The new-mail
         // notification is raised by EmailSyncWorker once it knows what actually changed.
+        // Expedited: on Android 12+ this runs even in Doze (subject to quota) instead of
+        // waiting for a maintenance window, which is what keeps the notification instant.
         WorkManager.getInstance(context).enqueue(
             OneTimeWorkRequestBuilder<EmailSyncWorker>()
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
                 .build()
         )
 
         context.sendBroadcast(Intent(ACTION_PUSH_MESSAGE_RECEIVED).setPackage(context.packageName))
     }
 
-    override fun onNewEndpoint(context: android.content.Context, endpoint: PushEndpoint, instance: String) {
+    override fun onNewEndpoint(endpoint: PushEndpoint, instance: String) {
+        val context = applicationContext
         Log.d(TAG, "UnifiedPush new endpoint (instance=$instance, host=${LogRedact.host(endpoint.url)})")
         context.getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             .edit()
             .putString(KEY_LAST_UP_ENDPOINT, endpoint.url)
+            .putLong(KEY_UP_ENDPOINT_UPDATED_AT, System.currentTimeMillis())
+            .putBoolean(KEY_UP_REGISTERED, true)
             .apply()
 
-        EmailSyncWorker.schedule(context)
-
+        if (!endpoint.url.startsWith("https://")) {
+            Log.w(TAG, "Rejecting non-HTTPS push endpoint (host=${LogRedact.host(endpoint.url)})")
+            return
+        }
         receiverScope.launch {
-            val account = BackgroundEmailSyncReceiver.readCurrentAccount(context)
-            if (account == null) {
-                Log.w(TAG, "No account configured — relying on WorkManager fallback only")
-                return@launch
-            }
-            if (!endpoint.url.startsWith("https://")) {
-                Log.w(TAG, "Rejecting non-HTTPS push endpoint (host=${LogRedact.host(endpoint.url)})")
-                return@launch
-            }
-            val deviceClientId = getOrCreateDeviceClientId(context)
-            val ok = try {
-                JMapClient(context).registerPushSubscription(context, account, endpoint.url, deviceClientId)
-            } catch (e: Throwable) {
-                Log.e(TAG, "registerPushSubscription threw", e)
-                false
-            }
-            if (ok) {
-                Log.d(TAG, "PushSubscription/set succeeded — periodic fallback kept active as safety net")
+            // Creates/refreshes the JMAP PushSubscription; the verification that follows
+            // arrives on this same endpoint and is answered in onMessage.
+            if (PushSubscriptionManager.ensure(context)) {
+                Log.d(TAG, "PushSubscription registered - new mail is pushed instantly")
             } else {
-                Log.w(TAG, "PushSubscription/set failed — periodic fallback (15 min) is the active path")
+                Log.w(TAG, "PushSubscription not active - periodic fallback (15 min) is the active path")
             }
         }
     }
 
-    override fun onRegistrationFailed(context: android.content.Context, reason: FailedReason, instance: String) {
+    override fun onRegistrationFailed(reason: FailedReason, instance: String) {
         Log.w(TAG, "UnifiedPush registration failed (instance=$instance, reason=$reason)")
     }
 
-    override fun onUnregistered(context: android.content.Context, instance: String) {
+    override fun onUnregistered(instance: String) {
+        val context = applicationContext
         context.getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             .edit()
             .remove(KEY_LAST_UP_ENDPOINT)
+            .putBoolean(KEY_UP_REGISTERED, false)
             .apply()
     }
 
@@ -103,7 +135,7 @@ class UnifiedPushService : MessagingReceiver() {
         private const val TAG = "UnifiedPushService"
         private const val PREFS_NAME = "mail_prefs"
         private const val KEY_LAST_UP_ENDPOINT = "last_up_endpoint"
-        private const val KEY_DEVICE_CLIENT_ID = "up_device_client_id"
+        private const val KEY_UP_REGISTERED = "up_registered"
 
         private val receiverScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -115,15 +147,20 @@ class UnifiedPushService : MessagingReceiver() {
          * is allowed to raise a notification. Without this window an undecryptable message is
          * always dropped, and a stranger POSTing to the endpoint cannot make the app buzz.
          */
-        fun markPendingTest(context: android.content.Context) {
+        fun markPendingTest(context: Context) {
             context.getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
                 .edit()
                 .putLong(KEY_PUSH_TEST_PENDING_UNTIL, System.currentTimeMillis() + PUSH_TEST_WINDOW_MS)
                 .apply()
         }
 
+        /** True until the test payload has been delivered and shown. */
+        fun isTestPending(context: Context): Boolean =
+            context.getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                .getLong(KEY_PUSH_TEST_PENDING_UNTIL, 0L) > System.currentTimeMillis()
+
         /** Single-use: the window closes on the first message that claims it. */
-        private fun consumePendingTest(context: android.content.Context): Boolean {
+        private fun consumePendingTest(context: Context): Boolean {
             val prefs = context.getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             val until = prefs.getLong(KEY_PUSH_TEST_PENDING_UNTIL, 0L)
             if (until <= 0L) return false
@@ -131,13 +168,21 @@ class UnifiedPushService : MessagingReceiver() {
             return System.currentTimeMillis() <= until
         }
 
-        private fun getOrCreateDeviceClientId(context: android.content.Context): String {
-            val prefs = context.getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-            val existing = prefs.getString(KEY_DEVICE_CLIENT_ID, null)
-            if (!existing.isNullOrBlank()) return existing
-            val generated = UUID.randomUUID().toString()
-            prefs.edit().putString(KEY_DEVICE_CLIENT_ID, generated).apply()
-            return generated
+        /**
+         * {"@type":"PushVerification","pushSubscriptionId":"...","verificationCode":"..."}
+         * A decrypted StateChange carries a different @type, so it falls through to the sync.
+         */
+        private fun parsePushVerification(payload: ByteArray): Pair<String, String>? = try {
+            val json = JSONObject(String(payload, Charsets.UTF_8))
+            if (json.optString("@type") != "PushVerification") {
+                null
+            } else {
+                val id = json.optString("pushSubscriptionId").takeIf { it.isNotBlank() }
+                val code = json.optString("verificationCode").takeIf { it.isNotBlank() }
+                if (id != null && code != null) id to code else null
+            }
+        } catch (_: Exception) {
+            null
         }
     }
 }

@@ -114,8 +114,9 @@
     <string name="settings_unifiedpush_toggle">UnifiedPush</string>
     <string name="settings_sse_toggle">Direct server push (JMAP EventSource)</string>
     <string name="settings_sse_subtitle">Shows a persistent notification while active</string>
-    <string name="settings_unifiedpush_subtitle">Checks for new emails every 15 minutes as fallback</string>
+    <string name="settings_unifiedpush_subtitle">Instant push for new mail</string>
     <string name="sse_notification_text">Listening for new emails…</string>
+    <string name="settings_unifiedpush_test_sending">Sending test notification…</string>
     <string name="settings_unifiedpush_test_sent">Test notification sent.</string>
     <string name="settings_unifiedpush_test_title">JMAPJolt test</string>
     <string name="settings_unifiedpush_waiting_endpoint">UnifiedPush endpoint not ready yet. Registration started; retry in a few seconds.</string>

@@ -23,7 +23,7 @@ class BackgroundEmailSyncReceiver {
         private const val SYNC_CHANNEL_ID = "background_email_sync_status"
         private const val EMAIL_NOTIFICATION_ID = 4001   // group summary
         private const val EMAIL_INDIVIDUAL_BASE = 4010   // 4010, 4011, ... per-email
-        private const val SYNC_NOTIFICATION_ID = 4003
+        const val SYNC_NOTIFICATION_ID = 4003
         private const val EMAIL_GROUP_KEY = "com.falseenvironment.jmapjolt.email_group"
         private const val PREFS_NAME = "mail_prefs"
         private const val KEY_LAST_EMAIL_IDS = "background_last_email_ids"   // legacy, migrated

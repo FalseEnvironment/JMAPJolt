@@ -1,17 +1,33 @@
 package com.falseenvironment.jmapjolt
 
 import android.content.Context
+import android.content.pm.ServiceInfo
+import android.os.Build
 import android.util.Log
-import androidx.work.Constraints
 import androidx.work.CoroutineWorker
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.NetworkType
-import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.ForegroundInfo
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import java.util.concurrent.TimeUnit
 
 class EmailSyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+
+    /**
+     * Needed for the expedited flavour enqueued by UnifiedPush: below Android 12
+     * WorkManager runs it as a foreground service, which the platform only allows with
+     * a notification and a declared type.
+     */
+    override suspend fun getForegroundInfo(): ForegroundInfo {
+        val notification = BackgroundEmailSyncReceiver.buildSyncInProgressNotification(applicationContext)
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ForegroundInfo(
+                BackgroundEmailSyncReceiver.SYNC_NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            )
+        } else {
+            ForegroundInfo(BackgroundEmailSyncReceiver.SYNC_NOTIFICATION_ID, notification)
+        }
+    }
 
     override suspend fun doWork(): Result {
         return try {
@@ -39,24 +55,23 @@ class EmailSyncWorker(context: Context, params: WorkerParameters) : CoroutineWor
     companion object {
         private const val TAG = "EmailSyncWorker"
         private const val WORK_NAME = "email_sync_periodic"
+        /**
+         * Removed: the app is UnifiedPush-only, there is no 15-minute periodic
+         * fallback. Push messages and SSE events enqueue one-time expedited
+         * [EmailSyncWorker] runs instead. `cancel` still exists to stop legacy
+         * periodic jobs scheduled by older builds.
+         */
         const val KEY_ACCOUNT_EMAIL = "account_email"
 
-        fun schedule(context: Context) {
-            val request = PeriodicWorkRequestBuilder<EmailSyncWorker>(15, TimeUnit.MINUTES)
-                .setConstraints(
-                    Constraints.Builder()
-                        .setRequiredNetworkType(NetworkType.CONNECTED)
-                        .build()
-                )
-                .build()
-            WorkManager.getInstance(context)
-                .enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.UPDATE, request)
-            Log.d(TAG, "Scheduled periodic email sync (15 min fallback)")
-        }
-
+        /**
+         * Kept after the 15-minute fallback was removed: WorkManager persists jobs
+         * across reinstalls and app updates, so this is both the toggle-off path
+         * ("no background sync when UnifiedPush is off") and the migration path that
+         * cancels periodic jobs scheduled by older builds.
+         */
         fun cancel(context: Context) {
             WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
-            Log.d(TAG, "Cancelled periodic email sync")
+            Log.d(TAG, "Cancelled periodic email sync (UnifiedPush-only mode)")
         }
     }
 }

@@ -59,6 +59,13 @@ class JMapClient(private val context: Context) {
         val threadId: String = ""
     )
 
+    /** The parts of a server-side PushSubscription needed to reap this device's leftovers. */
+    data class PushSubscriptionInfo(
+        val id: String,
+        val deviceClientId: String?,
+        val expires: java.time.Instant?
+    )
+
     data class ConnectResult(
         val success: Boolean,
         val resolvedSessionUrl: String? = null,
@@ -1244,12 +1251,104 @@ class JMapClient(private val context: Context) {
         }
     }
 
+    /**
+     * Lists the PushSubscriptions of the current credentials (RFC 8620 section 7.2.1).
+     *
+     * Goes through a raw JMAP request because jmap-client 0.9.0's typed
+     * GetPushSubscriptionMethodResponse exposes no accessors for its list.
+     */
+    suspend fun listPushSubscriptions(
+        connectedAccount: ConnectedAccount
+    ): List<PushSubscriptionInfo> = withContext(Dispatchers.IO) {
+        try {
+            val apiUrl = newClient(connectedAccount).use { client ->
+                client.getSession().get(12, TimeUnit.SECONDS).apiUrl.toString()
+            }
+            if (!isTrustedServerUrl(apiUrl, connectedAccount.sessionUrl)) {
+                Log.w(TAG, "listPushSubscriptions: refusing API URL outside session origin")
+                return@withContext emptyList()
+            }
+            val payload = JSONObject()
+                .put("using", JSONArray().put("urn:ietf:params:jmap:core"))
+                .put(
+                    "methodCalls",
+                    JSONArray().put(
+                        JSONArray()
+                            .put("PushSubscription/get")
+                            .put(
+                                JSONObject()
+                                    .put("ids", JSONObject.NULL)
+                                    .put(
+                                        "properties",
+                                        JSONArray()
+                                            .put("id")
+                                            .put("deviceClientId")
+                                            .put("expires")
+                                    )
+                            )
+                            .put("0")
+                    )
+                )
+            val request = Request.Builder()
+                .url(apiUrl)
+                .header("Authorization", Credentials.basic(connectedAccount.email, connectedAccount.password))
+                .post(payload.toString().toRequestBody("application/json".toMediaType()))
+                .build()
+            AppHttp.noRedirects.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    Log.w(TAG, "listPushSubscriptions: HTTP ${response.code}")
+                    return@use emptyList()
+                }
+                val body = JSONObject(response.body?.string() ?: "{}")
+                val list = body.optJSONArray("methodResponses")
+                    ?.optJSONArray(0)
+                    ?.optJSONObject(1)
+                    ?.optJSONArray("list")
+                    ?: JSONArray()
+                buildList {
+                    for (i in 0 until list.length()) {
+                        val item = list.optJSONObject(i) ?: continue
+                        val id = item.optString("id").takeIf { it.isNotBlank() } ?: continue
+                        val expires = item.optString("expires")
+                            .takeIf { it.isNotBlank() }
+                            ?.let { runCatching { java.time.Instant.parse(it) }.getOrNull() }
+                        add(
+                            PushSubscriptionInfo(
+                                id = id,
+                                deviceClientId = item.optString("deviceClientId").takeIf { it.isNotBlank() },
+                                expires = expires
+                            )
+                        )
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "listPushSubscriptions failed: ${e.message}")
+            emptyList()
+        }
+    }
+
+    /**
+     * Creates the server-side PushSubscription that makes new mail arrive without polling.
+     * Returns the server-assigned id, or null on failure.
+     *
+     * The subscription is not usable until the server's PushVerification post is answered
+     * with [verifyPushSubscription] (RFC 8620 section 7.2.2); until then JMAP servers are
+     * not allowed to send anything else to the endpoint.
+     *
+     * [types] is limited to EmailDelivery: without it the server subscribes to every data
+     * type and wakes the app for sent mail, flag changes and mailbox edits too.
+     * [expires] is the maximum we want - Stalwart clamps it to 7 days, so it is refreshed
+     * on every launch (see PushSubscriptionManager).
+     */
     suspend fun registerPushSubscription(
         context: android.content.Context,
         connectedAccount: ConnectedAccount,
         pushEndpointUrl: String,
-        deviceClientId: String
-    ): Boolean = withContext(Dispatchers.IO) {
+        deviceClientId: String,
+        types: List<String> = listOf(PUSH_TYPE_EMAIL_DELIVERY),
+        lifetimeDays: Long = PUSH_SUBSCRIPTION_LIFETIME_DAYS
+    ): String? = withContext(Dispatchers.IO) {
         try {
             val keys = WebPushKeys.getOrCreate(context)
             val client = newClient(connectedAccount)
@@ -1259,37 +1358,138 @@ class JMapClient(private val context: Context) {
                     .auth(keys.auth)
                     .build()
 
-                val pushSubscription = rs.ltt.jmap.common.entity.PushSubscription.builder()
-                    .deviceClientId(deviceClientId)
-                    .url(pushEndpointUrl)
-                    .keys(pushKeys)
-                    .build()
+                // The requested types keep the push channel to delivered mail. A server that
+                // does not know EmailDelivery refuses the whole create, so retry once with the
+                // server default (= all types) rather than ending up with no push at all.
+                val attempts: List<List<String>?> =
+                    if (types.isEmpty()) listOf(types) else listOf(types, null)
+                attempts.forEachIndexed { index, wantedTypes ->
+                    val builder = rs.ltt.jmap.common.entity.PushSubscription.builder()
+                        .deviceClientId(deviceClientId)
+                        .url(pushEndpointUrl)
+                        .keys(pushKeys)
+                        .expires(pushExpiry(lifetimeDays))
+                    if (wantedTypes != null) builder.types(wantedTypes)
 
-                // PushSubscription/set is a per-user (not per-account) method: RFC 8620
-                // section 7.2.3 shows no accountId in its arguments, so the 0.9.x call
-                // builder intentionally has no accountId setter.
-                val methodCall = rs.ltt.jmap.common.method.call.core.SetPushSubscriptionMethodCall
-                    .builder()
-                    .create(mapOf("ps0" to pushSubscription))
-                    .build()
+                    // PushSubscription/set is a per-user (not per-account) method: RFC 8620
+                    // section 7.2.3 shows no accountId in its arguments, so the 0.9.x call
+                    // builder intentionally has no accountId setter.
+                    val methodCall = rs.ltt.jmap.common.method.call.core.SetPushSubscriptionMethodCall
+                        .builder()
+                        .create(mapOf("ps0" to builder.build()))
+                        .build()
 
-                val response = jmapClient.call(methodCall).get(30, TimeUnit.SECONDS)
-                    .getMain(rs.ltt.jmap.common.method.response.core.SetPushSubscriptionMethodResponse::class.java)
+                    val response = jmapClient.call(methodCall).get(30, TimeUnit.SECONDS)
+                        .getMain(rs.ltt.jmap.common.method.response.core.SetPushSubscriptionMethodResponse::class.java)
 
-                val created = response.created?.get("ps0")
-                if (created != null) {
-                    Log.d(TAG, "PushSubscription registered: id=${created.id}")
-                    true
-                } else {
-                    Log.w(TAG, "PushSubscription: not created in response")
-                    false
+                    val created = response.created?.get("ps0")
+                    if (created?.id != null) {
+                        Log.d(TAG, "PushSubscription registered: id=${created.id} types=${wantedTypes ?: "all"}")
+                        return@withContext created.id
+                    }
+                    val error = response.notCreated?.get("ps0")
+                    Log.w(TAG, "PushSubscription not created (types=${wantedTypes ?: "all"}): ${error?.type} ${error?.description ?: ""}")
                 }
+                null
             }
         } catch (e: Exception) {
             Log.e(TAG, "registerPushSubscription failed: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Pushes a subscription's expiry forward without touching url/keys (immutable).
+     * Returns false when the server no longer knows the subscription (expired/revoked),
+     * which tells the caller to create a fresh one.
+     */
+    suspend fun renewPushSubscription(
+        connectedAccount: ConnectedAccount,
+        subscriptionId: String,
+        lifetimeDays: Long = PUSH_SUBSCRIPTION_LIFETIME_DAYS
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val client = newClient(connectedAccount)
+            client.use { jmapClient ->
+                // UTCDate: seconds precision, no fractional part.
+                val expires = pushExpiry(lifetimeDays).toString()
+                val methodCall = rs.ltt.jmap.common.method.call.core.SetPushSubscriptionMethodCall
+                    .builder()
+                    .update(mapOf(subscriptionId to mapOf("expires" to expires)))
+                    .build()
+                val response = jmapClient.call(methodCall).get(30, TimeUnit.SECONDS)
+                    .getMain(rs.ltt.jmap.common.method.response.core.SetPushSubscriptionMethodResponse::class.java)
+                val updated = response.updated?.containsKey(subscriptionId) == true
+                if (!updated) {
+                    Log.w(TAG, "PushSubscription renew failed: ${response.notUpdated?.get(subscriptionId)?.type}")
+                }
+                updated
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "renewPushSubscription failed: ${e.message}")
             false
         }
     }
+
+    /**
+     * Answers the PushVerification the server posted to the endpoint, the call that flips
+     * the subscription from pending to active (RFC 8620 section 7.2.2).
+     */
+    suspend fun verifyPushSubscription(
+        connectedAccount: ConnectedAccount,
+        subscriptionId: String,
+        verificationCode: String
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val client = newClient(connectedAccount)
+            client.use { jmapClient ->
+                val methodCall = rs.ltt.jmap.common.method.call.core.SetPushSubscriptionMethodCall
+                    .builder()
+                    .update(mapOf(subscriptionId to mapOf("verificationCode" to verificationCode)))
+                    .build()
+                val response = jmapClient.call(methodCall).get(30, TimeUnit.SECONDS)
+                    .getMain(rs.ltt.jmap.common.method.response.core.SetPushSubscriptionMethodResponse::class.java)
+                val ok = response.updated?.containsKey(subscriptionId) == true
+                if (ok) {
+                    Log.d(TAG, "PushSubscription verified: id=$subscriptionId")
+                } else {
+                    Log.w(TAG, "PushSubscription verify rejected: ${response.notUpdated?.get(subscriptionId)?.type}")
+                }
+                ok
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "verifyPushSubscription failed: ${e.message}")
+            false
+        }
+    }
+
+    suspend fun destroyPushSubscription(
+        connectedAccount: ConnectedAccount,
+        subscriptionId: String
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val client = newClient(connectedAccount)
+            client.use { jmapClient ->
+                val methodCall = rs.ltt.jmap.common.method.call.core.SetPushSubscriptionMethodCall
+                    .builder()
+                    .destroy(arrayOf(subscriptionId))
+                    .build()
+                val response = jmapClient.call(methodCall).get(30, TimeUnit.SECONDS)
+                    .getMain(rs.ltt.jmap.common.method.response.core.SetPushSubscriptionMethodResponse::class.java)
+                val destroyed = response.destroyed?.contains(subscriptionId) == true
+                Log.d(TAG, "PushSubscription destroyed=$destroyed id=$subscriptionId")
+                destroyed
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "destroyPushSubscription failed: ${e.message}")
+            false
+        }
+    }
+
+    private fun pushExpiry(lifetimeDays: Long): java.time.Instant =
+        java.time.Instant.now()
+            .plusSeconds(lifetimeDays * 24 * 60 * 60)
+            .truncatedTo(java.time.temporal.ChronoUnit.SECONDS)
 
     suspend fun downloadBlob(
         connectedAccount: ConnectedAccount,
@@ -1412,6 +1612,20 @@ class JMapClient(private val context: Context) {
 
         /** Default page size for email queries. UI grows this for infinite scroll. */
         const val DEFAULT_EMAIL_LIMIT = 50L
+
+        /**
+         * The only push data type mail notifications need: it fires when a message is
+         * delivered. Subscribing with no `types` means "everything", which wakes the app
+         * for sent mail, read flags and mailbox edits too.
+         */
+        const val PUSH_TYPE_EMAIL_DELIVERY = "EmailDelivery"
+
+        /**
+         * Lifetime we ask for. Stalwart clamps it to 7 days; other servers may honour it.
+         * The subscription is renewed on every app launch, so what matters is that it
+         * outlives the gap between launches.
+         */
+        const val PUSH_SUBSCRIPTION_LIFETIME_DAYS = 90L
 
         // Shared session cache: avoids a session round-trip on every call without
         // sharing the JmapClient instance itself (which is not thread-safe).

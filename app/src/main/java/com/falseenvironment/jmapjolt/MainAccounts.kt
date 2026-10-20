@@ -797,6 +797,7 @@ internal fun MainActivity.switchToSavedAccount(account: AccountEntry, forceInbox
         JmapEventSourceService.stop(this)
         JmapEventSourceService.start(this)
     }
+    ensurePushSubscription()
 
     lifecycleScope.launch {
         val restoredFolder =

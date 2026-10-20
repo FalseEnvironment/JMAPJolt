@@ -186,6 +186,7 @@ internal fun MainActivity.showAddAccountDialog() {
                 saveAccounts()
                 connectedAccount = newAccount
                 refreshInboxNow()
+                ensurePushSubscription()
                 renderAccountHeader()
                 dialog.dismiss()
             } else {
@@ -372,10 +373,19 @@ internal fun MainActivity.registerUnifiedPushAuto(manualDistributor: String) {
             UnifiedPush.saveDistributor(this, selected)
         }
 
+        // Remember when registration started *before* asking the distributor: a NEW_ENDPOINT
+        // broadcast may arrive before register() returns, and the test must not treat that
+        // fresh endpoint as older than the request.
+        getSharedPreferences(MainActivity.PREFS_NAME, android.content.Context.MODE_PRIVATE)
+            .edit()
+            .putLong(KEY_UP_REGISTER_REQUESTED_AT, System.currentTimeMillis())
+            .apply()
         UnifiedPush.register(this, INSTANCE_DEFAULT, packageName)
-        // Schedule the periodic fallback immediately so background sync works
-        // even with no distributor installed or before an endpoint arrives.
-        EmailSyncWorker.schedule(this)
+        // UnifiedPush-only mode: no periodic fallback; push messages enqueue
+        // one-time expedited EmailSyncWorker runs.
+        EmailSyncWorker.cancel(this)
+        // Create/refresh the JMAP PushSubscription as soon as an endpoint exists.
+        ensurePushSubscription()
         status.text = getString(R.string.settings_unifiedpush_registered, debugTs(), selected ?: "auto")
     } catch (_: Throwable) {
         status.text = getString(R.string.settings_unifiedpush_failed, debugTs())
