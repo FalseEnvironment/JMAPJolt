@@ -36,7 +36,7 @@ internal class OnboardingHeroView(
     }
 
     private val logo: Bitmap =
-        BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher_foreground)
+        BitmapFactory.decodeResource(resources, R.drawable.ic_app_icon)
 
     private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE

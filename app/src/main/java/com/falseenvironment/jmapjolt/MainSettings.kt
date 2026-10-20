@@ -510,7 +510,7 @@ internal fun MainActivity.showAboutDialog() {
             layoutParams = LinearLayout.LayoutParams((72 * dp).toInt(), (72 * dp).toInt()).also {
                 it.bottomMargin = (16 * dp).toInt()
             }
-            setImageResource(R.mipmap.ic_launcher_foreground)
+            setImageResource(R.drawable.ic_app_icon)
             scaleType = ImageView.ScaleType.FIT_CENTER
         })
         addView(TextView(activity).apply {
