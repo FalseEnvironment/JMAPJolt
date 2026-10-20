@@ -82,6 +82,10 @@ internal fun MainActivity.connectAndOpenMailbox() {
                             debugTs()
                     )
             pendingMailboxShow = true
+            // First-run default (runs once): prefer UnifiedPush when a distributor app
+            // (ntfy, Sunup, …) is installed, otherwise JMAP eventsource. Once the
+            // decision is recorded, the Settings switches are never overridden.
+            applyDefaultNotificationMode()
             refreshInboxNow {
                 fetchAllFoldersBackground()
             }
@@ -108,27 +112,5 @@ internal fun MainActivity.connectAndOpenMailbox() {
                     }
             updateFormState()
         }
-    }
-}
-
-internal fun MainActivity.autoDetectUnifiedPush() {
-    val distributors = UnifiedPush.getDistributors(this)
-    val preferred = distributors.firstOrNull {
-        it.contains("ntfy", ignoreCase = true) || it.contains("sunup", ignoreCase = true)
-    } ?: distributors.firstOrNull()
-
-    if (preferred != null) {
-        try {
-            UnifiedPush.saveDistributor(this, preferred)
-            UnifiedPush.register(this, INSTANCE_DEFAULT, packageName)
-            unifiedPushSwitch.isChecked = true
-            saveUnifiedPushEnabled(true)
-            Log.d("MainActivity", "UnifiedPush auto-registered: $preferred")
-        } catch (e: Throwable) {
-            Log.e("MainActivity", "UnifiedPush auto-registration failed", e)
-            saveUnifiedPushEnabled(false)
-        }
-    } else {
-        saveUnifiedPushEnabled(false)
     }
 }

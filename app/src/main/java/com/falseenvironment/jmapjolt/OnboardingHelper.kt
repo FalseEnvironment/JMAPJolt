@@ -17,6 +17,7 @@ import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
 import android.content.res.ColorStateList
 import android.graphics.drawable.GradientDrawable
+import org.unifiedpush.android.connector.UnifiedPush
 
 internal fun MainActivity.showOnboarding(page: Int = 0) {
     onboardingContainer.visibility = View.VISIBLE
@@ -159,7 +160,14 @@ internal fun MainActivity.setupOnboardingPager() {
                 this, android.Manifest.permission.POST_NOTIFICATIONS
             ) == android.content.pm.PackageManager.PERMISSION_GRANTED
         else true
-        val battery = (getSystemService(android.content.Context.POWER_SERVICE)
+        // The battery exemption is only requested when there is no UnifiedPush
+        // distributor (SSE mode); it is not "skipped" when the row doesn't exist.
+        val needsBattery = try {
+            UnifiedPush.getDistributors(this).isEmpty()
+        } catch (_: Throwable) {
+            true
+        }
+        val battery = !needsBattery || (getSystemService(android.content.Context.POWER_SERVICE)
                 as android.os.PowerManager).isIgnoringBatteryOptimizations(packageName)
         return notif && battery
     }
@@ -466,21 +474,34 @@ internal fun MainActivity.buildOnboardingGetStartedPage(
         }
     ))
 
-    page.addView(permRow(
-        iconRes = R.drawable.ic_lucide_battery,
-        title = "Background activity",
-        subtitle = "Sync emails without restrictions",
-        grantedCheck = {
-            val pm = getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
-            pm.isIgnoringBatteryOptimizations(packageName)
-        },
-        onAllow = {
-            startActivity(android.content.Intent(
-                android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                android.net.Uri.parse("package:$packageName")
-            ))
-        }
-    ))
+    // The battery-optimization exemption matters only for long-lived in-app work. With
+    // UnifiedPush the distributor keeps the push connection (and asks for its own
+    // exemption), the app receives messages via a bound service and expedited syncs
+    // survive Doze — so there is nothing for this app to whitelist. Without a
+    // distributor, the default channel is the SSE foreground service, whose network
+    // access is throttled by Doze unless the app is exempted.
+    val hasUnifiedPushDistributor = try {
+        UnifiedPush.getDistributors(this).isNotEmpty()
+    } catch (_: Throwable) {
+        false
+    }
+    if (!hasUnifiedPushDistributor) {
+        page.addView(permRow(
+            iconRes = R.drawable.ic_lucide_battery,
+            title = "Background activity",
+            subtitle = "Sync emails without restrictions",
+            grantedCheck = {
+                val pm = getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
+                pm.isIgnoringBatteryOptimizations(packageName)
+            },
+            onAllow = {
+                startActivity(android.content.Intent(
+                    android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                    android.net.Uri.parse("package:$packageName")
+                ))
+            }
+        ))
+    }
 
     // Optional section
     page.addView(sectionLabel("OPTIONAL", subColor).also {

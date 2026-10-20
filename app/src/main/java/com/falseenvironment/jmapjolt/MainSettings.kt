@@ -710,7 +710,13 @@ internal fun MainActivity.bindSettingsActions() {
         setOnClickListener { showFolderEditorDialog() }
     }
 
+    // Programmatic updates (applyDefaultNotificationMode, loadUnifiedPushPreferences)
+    // also flip isChecked: only react when the stored state actually changes, so the
+    // app never fires register + test push on open — the test is user-initiated only.
     unifiedPushSwitch.setOnCheckedChangeListener { _: CompoundButton, enabled: Boolean ->
+        val already = getSharedPreferences(MainActivity.PREFS_NAME, android.content.Context.MODE_PRIVATE)
+            .getBoolean(KEY_UP_ENABLED, false)
+        if (already == enabled) return@setOnCheckedChangeListener
         saveUnifiedPushEnabled(enabled)
         if (enabled) {
             registerUnifiedPushAuto("")
@@ -728,7 +734,11 @@ internal fun MainActivity.bindSettingsActions() {
     }
 
     sseSwitch.setOnCheckedChangeListener { _: CompoundButton, enabled: Boolean ->
+        // Same guard as unifiedPushSwitch: programmatic state updates must not
+        // restart the SSE service as a side effect.
+        val already = JmapEventSourceService.isEnabled(this)
         JmapEventSourceService.setEnabled(this, enabled)
+        if (already == enabled) return@setOnCheckedChangeListener
         if (enabled && connectedAccount != null) {
             JmapEventSourceService.start(this)
         } else {

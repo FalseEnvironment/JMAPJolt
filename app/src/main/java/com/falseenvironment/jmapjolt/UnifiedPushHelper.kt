@@ -82,6 +82,47 @@ internal fun MainActivity.ensurePushSubscription(register: Boolean = false) {
     }
 }
 
+/**
+ * Runs once on the first successful sign-in: picks the notification channel to
+ * enable by default.
+ *
+ * - A UnifiedPush distributor app installed (ntfy, Sunup, …) → UnifiedPush, and the
+ *   SSE service stays off (both on would deliver every message twice).
+ * - No distributor at all → JMAP eventsource (SSE) foreground service.
+ *
+ * Once [KEY_NOTIFY_DEFAULT_DECIDED] is set the function is a no-op, so explicit
+ * choices made in Settings are always preserved on later launches and logins.
+ */
+internal fun MainActivity.applyDefaultNotificationMode() {
+    val prefs = getSharedPreferences(MainActivity.PREFS_NAME, android.content.Context.MODE_PRIVATE)
+    if (prefs.getBoolean(KEY_NOTIFY_DEFAULT_DECIDED, false)) return
+    prefs.edit().putBoolean(KEY_NOTIFY_DEFAULT_DECIDED, true).apply()
+
+    val hasDistributor = try {
+        UnifiedPush.getDistributors(this).isNotEmpty()
+    } catch (e: Throwable) {
+        Log.w(MainActivity.TAG, "UnifiedPush distributor lookup failed — defaulting to SSE", e)
+        false
+    }
+
+    if (hasDistributor) {
+        unifiedPushSwitch.isChecked = true
+        saveUnifiedPushEnabled(true)
+        registerUnifiedPushAuto("")
+        JmapEventSourceService.setEnabled(this, false)
+        JmapEventSourceService.stop(this)
+        sseSwitch.isChecked = false
+        Log.d(MainActivity.TAG, "Default notification mode: UnifiedPush (distributor installed)")
+    } else {
+        unifiedPushSwitch.isChecked = false
+        saveUnifiedPushEnabled(false)
+        JmapEventSourceService.setEnabled(this, true)
+        JmapEventSourceService.start(this)
+        sseSwitch.isChecked = true
+        Log.d(MainActivity.TAG, "Default notification mode: JMAP eventsource (no distributor installed)")
+    }
+}
+
 internal fun MainActivity.sendUnifiedPushTestNotification() {
     lifecycleScope.launch {
         val endpoint = withContext(Dispatchers.IO) { awaitTestEndpoint() }
@@ -181,6 +222,7 @@ private fun MainActivity.postTestPush(endpoint: String): UnifiedPushTestResult {
 // Constants (moved from MainActivity companion to allow cross-file access)
 // ---------------------------------------------------------------------------
 internal const val KEY_UP_ENABLED = "up_enabled"
+internal const val KEY_NOTIFY_DEFAULT_DECIDED = "notify_default_decided"
 internal const val KEY_UP_AUTO_TOPIC = "up_auto_topic"
 internal const val KEY_LAST_UP_ENDPOINT = "last_up_endpoint"
 /** Wall-clock of the last NEW_ENDPOINT broadcast; lets the test wait out a topic rotation. */
