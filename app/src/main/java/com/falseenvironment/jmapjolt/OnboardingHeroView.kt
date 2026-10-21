@@ -15,7 +15,8 @@ import kotlin.math.sin
 
 /**
  * Animated email-themed hero for the onboarding welcome page.
- * Draws a gently floating envelope (the launcher foreground) surrounded by
+ * Draws a gently floating envelope (the blue envelope artwork from the old
+ * launcher foreground) surrounded by
  * expanding ripple rings, orbiting accent dots and small paper planes that
  * fly off the envelope and fade out. All motion is driven by a single
  * looping ValueAnimator and uses only canvas transforms (no layout passes).
@@ -36,7 +37,7 @@ internal class OnboardingHeroView(
     }
 
     private val logo: Bitmap =
-        BitmapFactory.decodeResource(resources, R.drawable.ic_app_icon)
+        BitmapFactory.decodeResource(resources, R.drawable.ic_onboarding_logo)
 
     private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -106,7 +107,7 @@ internal class OnboardingHeroView(
         // --- Envelope logo: gentle vertical bob + soft tilt ---
         val bob = sin(t * 2f * Math.PI.toFloat()) * 7f * dp
         val tilt = sin(t * 2f * Math.PI.toFloat() + 1.3f) * 2.5f
-        val logoSize = base * 1.05f
+        val logoSize = base * 0.85f
         canvas.save()
         canvas.translate(cx, cy + bob)
         canvas.rotate(tilt)

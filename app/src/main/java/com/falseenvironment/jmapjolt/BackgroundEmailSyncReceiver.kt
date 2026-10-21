@@ -62,7 +62,25 @@ class BackgroundEmailSyncReceiver {
             writeSeenIds(context, account.email, currentIds + seenIds)
             if (newEmails.isEmpty()) return
 
+            Log.d(TAG, "fetchAndNotify: showing notification for ${newEmails.size} new email(s)")
             showNewEmailNotification(context, newEmails)
+        }
+
+        /**
+         * Records the current inbox as the "already seen" baseline when this account has
+         * none yet. Called before a PushSubscription is created: a push can only arrive
+         * after that, so the first wake-up no longer experiences a missing baseline and
+         * the new email it announced is not mistaken for pre-existing mail.
+         */
+        suspend fun seedBaselineIfMissing(context: Context, account: JMapClient.ConnectedAccount) {
+            if (readSeenIds(context, account.email) != null) return
+            // Best effort: a slow server must not delay/abort the push registration.
+            runCatching {
+                val emails = JMapClient(context).fetchEmails(account)
+                if (emails.isEmpty()) return@runCatching
+                Log.d(TAG, "seedBaseline: recording ${emails.size} existing ids for ${account.email}")
+                writeSeenIds(context, account.email, emails.map { it.id })
+            }.onFailure { Log.w(TAG, "seedBaseline failed for ${account.email}", it) }
         }
 
         // Ids already observed for this account, newest first, or null when this account

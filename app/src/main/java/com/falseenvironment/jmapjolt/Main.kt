@@ -33,7 +33,6 @@ import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.PowerManager
 import android.provider.OpenableColumns
-import android.provider.Settings
 import android.view.Gravity
 import android.view.Menu
 import android.widget.HorizontalScrollView
@@ -492,6 +491,22 @@ class MainActivity : AppCompatActivity() {
                 }
                 onboardingPermRefresh?.invoke()
             }
+
+    internal val batteryExemptionLauncher =
+            registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        // The user answered the "Allow to always run in the background?" dialog. When
+        // the exemption is still missing, Doze would throttle the SSE foreground
+        // service's network (and can kill its persistent notification), so Direct
+        // Server Push (JMAP EventSource) is switched off instead of running degraded.
+        // Also covers dismissing the dialog (RESULT_CANCELED, still not exempt).
+        val pm = getSystemService(PowerManager::class.java)
+        if (pm == null || !pm.isIgnoringBatteryOptimizations(packageName)) {
+            JmapEventSourceService.setEnabled(this, false)
+            JmapEventSourceService.stop(this)
+            sseSwitch.isChecked = false
+            showThemedSnackbar(getString(R.string.settings_sse_denied_background))
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -1919,21 +1934,15 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun requestBatteryOptimizationExemption() {
-        val pm = getSystemService(PowerManager::class.java) ?: return
-        if (pm.isIgnoringBatteryOptimizations(packageName)) return
-        try {
-            startActivity(
-                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
-                    .setData(Uri.parse("package:$packageName"))
-            )
-        } catch (_: Exception) {}
-    }
-
     internal fun startPeriodicSync() {
         syncJob?.cancel()
         if (DemoInbox.isEnabled(this)) return
-        requestBatteryOptimizationExemption()
+        // No battery-optimization prompt here: this loop only polls while the app is
+        // open (Doze doesn't throttle foreground network access), and with UnifiedPush
+        // the distributor keeps its own push connection alive in the background.
+        // The only exemption requests are user-initiated: the onboarding
+        // "Background activity" row (SSE mode without a distributor) and the SSE
+        // switch in Settings when it is turned on.
         val account = connectedAccount ?: return
         val currentFolderId = selectedFolder
         val role = getFolderRole(selectedFolder)

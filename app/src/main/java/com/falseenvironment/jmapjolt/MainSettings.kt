@@ -15,6 +15,8 @@ import android.graphics.Typeface
 import android.view.MotionEvent
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
 import android.text.Editable
 import android.text.Html
 import android.text.Layout
@@ -740,12 +742,34 @@ internal fun MainActivity.bindSettingsActions() {
         JmapEventSourceService.setEnabled(this, enabled)
         if (already == enabled) return@setOnCheckedChangeListener
         if (enabled && connectedAccount != null) {
+            // The SSE foreground service (its persistent notification and its network
+            // access) suffers under Doze: a user-initiated enable is the right moment
+            // to ask for the battery-optimization exemption. Skipped when already
+            // granted, and never fired by the programmatic updates above.
+            requestBatteryOptimizationExemption()
             JmapEventSourceService.start(this)
         } else {
             JmapEventSourceService.stop(this)
         }
     }
 
+}
+
+/**
+ * Opens the system "Allow to always run in the background?" dialog for the
+ * battery-optimization exemption. Call only from user-initiated flows (SSE switch
+ * enable, onboarding row): the exempted app is excluded from Doze restrictions.
+ * If the user refuses, [batteryExemptionLauncher] disables Direct Server Push.
+ */
+internal fun MainActivity.requestBatteryOptimizationExemption() {
+    val pm = getSystemService(PowerManager::class.java) ?: return
+    if (pm.isIgnoringBatteryOptimizations(packageName)) return
+    try {
+        batteryExemptionLauncher.launch(
+            Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                .setData(Uri.parse("package:$packageName"))
+        )
+    } catch (_: Exception) {}
 }
 
 internal fun MainActivity.setupSwipeSpinners() {

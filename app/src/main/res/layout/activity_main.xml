@@ -1169,6 +1169,15 @@
                                 android:textOff=""
                                 android:textSize="@dimen/text_md" />
 
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:paddingStart="4dp"
+                                android:text="@string/settings_favicons_subtitle"
+                                android:textColor="?attr/colorOnSurfaceVariant"
+                                android:textSize="@dimen/text_xs" />
+
                             <View
                                 android:layout_width="match_parent"
                                 android:layout_height="10dp" />
@@ -1493,6 +1502,28 @@
                             android:visibility="visible">
 
                             <androidx.appcompat.widget.SwitchCompat
+                                android:id="@+id/unifiedPushSwitch"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="@string/settings_unifiedpush_toggle"
+                                android:textOn=""
+                                android:textOff=""
+                                android:textSize="@dimen/text_md" />
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:paddingStart="4dp"
+                                android:text="@string/settings_unifiedpush_subtitle"
+                                android:textColor="?attr/colorOnSurfaceVariant"
+                                android:textSize="@dimen/text_xs" />
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="10dp" />
+
+                            <androidx.appcompat.widget.SwitchCompat
                                 android:id="@+id/sseSwitch"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
@@ -1508,28 +1539,6 @@
                                 android:layout_marginTop="2dp"
                                 android:paddingStart="4dp"
                                 android:text="@string/settings_sse_subtitle"
-                                android:textColor="?attr/colorOnSurfaceVariant"
-                                android:textSize="@dimen/text_xs" />
-
-                            <View
-                                android:layout_width="match_parent"
-                                android:layout_height="10dp" />
-
-                            <androidx.appcompat.widget.SwitchCompat
-                                android:id="@+id/unifiedPushSwitch"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:text="@string/settings_unifiedpush_toggle"
-                                android:textOn=""
-                                android:textOff=""
-                                android:textSize="@dimen/text_md" />
-
-                            <TextView
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="2dp"
-                                android:paddingStart="4dp"
-                                android:text="@string/settings_unifiedpush_subtitle"
                                 android:textColor="?attr/colorOnSurfaceVariant"
                                 android:textSize="@dimen/text_xs" />
                         </LinearLayout>

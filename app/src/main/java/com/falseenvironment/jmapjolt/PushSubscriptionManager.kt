@@ -101,6 +101,11 @@ internal object PushSubscriptionManager {
             return false
         }
 
+        // Record what is already in the inbox *before* the server can push anything.
+        // Otherwise the first push-triggered sync finds no baseline, records the whole
+        // inbox as seen and silently swallows the new email (and its notification).
+        BackgroundEmailSyncReceiver.seedBaselineIfMissing(context, account)
+
         val deviceClientId = getOrCreateDeviceClientId(context)
         val client = JMapClient(context)
         val storedId = prefs(context).getString(subscriptionKey(account.email), null)

@@ -495,10 +495,9 @@ internal fun MainActivity.buildOnboardingGetStartedPage(
                 pm.isIgnoringBatteryOptimizations(packageName)
             },
             onAllow = {
-                startActivity(android.content.Intent(
-                    android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                    android.net.Uri.parse("package:$packageName")
-                ))
+                // Same launcher-backed flow as the Settings SSE switch: when the user
+                // refuses here, batteryExemptionLauncher turns Direct Server Push off.
+                requestBatteryOptimizationExemption()
             }
         ))
     }

@@ -106,18 +106,22 @@ internal fun MainActivity.applyDefaultNotificationMode() {
     }
 
     if (hasDistributor) {
-        unifiedPushSwitch.isChecked = true
+        // Persist the choice BEFORE flipping the switch: the Settings listener skips
+        // programmatic updates only when the stored state already matches, so writing
+        // after isChecked would fire register + test push right at first sign-in.
         saveUnifiedPushEnabled(true)
+        unifiedPushSwitch.isChecked = true
         registerUnifiedPushAuto("")
         JmapEventSourceService.setEnabled(this, false)
         JmapEventSourceService.stop(this)
         sseSwitch.isChecked = false
         Log.d(MainActivity.TAG, "Default notification mode: UnifiedPush (distributor installed)")
     } else {
-        unifiedPushSwitch.isChecked = false
-        saveUnifiedPushEnabled(false)
+        // Same order: SSE enabled pref first, switch flip after (listener no-ops).
         JmapEventSourceService.setEnabled(this, true)
         JmapEventSourceService.start(this)
+        unifiedPushSwitch.isChecked = false
+        saveUnifiedPushEnabled(false)
         sseSwitch.isChecked = true
         Log.d(MainActivity.TAG, "Default notification mode: JMAP eventsource (no distributor installed)")
     }
