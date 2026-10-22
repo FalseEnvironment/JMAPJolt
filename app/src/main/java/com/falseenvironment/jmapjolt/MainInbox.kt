@@ -209,24 +209,51 @@ internal fun MainActivity.attachLabelDrag() {
         return (itemView.itemData as? MenuItem)?.itemId
     }
 
-    // Section drag bounds are computed once when a drag starts, not per-frame —
-    // recomputing from live child positions during the swap animation feeds back
-    // into the clamp and causes visible jitter as neighbors are mid-transition.
+    fun sameSection(first: Int, second: Int): Boolean =
+        (labelNavIds.containsKey(first) && labelNavIds.containsKey(second)) ||
+            (subfolderNavIds.containsKey(first) && subfolderNavIds.containsKey(second))
+
+    // The adapter is Menu-backed, so rows keep their layout slots for the whole drag and
+    // the order only changes in the data lists. Each row's visual offset is therefore
+    // derived from where its item sits in the data order now versus where it sat when the
+    // drag started: bounded by the section size and self-correcting, unlike accumulating
+    // per-swap translations.
+    var draggedView: View? = null
+    var sectionRows: List<Pair<View, Int>> = emptyList()
+    var startIndices: Map<View, Int> = emptyMap()
     var dragMinDY = -Float.MAX_VALUE
     var dragMaxDY = Float.MAX_VALUE
-
-    // Neighbor rows shifted out of the way during a drag, with their applied offset.
-    // Animated manually via translationY: the adapter is Menu-backed, so
-    // notifyItemMoved-driven animations desync RecyclerView from the Menu (the old
-    // flicker/revert bug) — pure view translation stays outside the adapter entirely.
-    val shiftedRows = mutableMapOf<android.view.View, Float>()
-    // Net slots the dragged row has moved (as a translationY), so on drop it can be
-    // parked directly in its new slot instead of sliding back to the original one.
-    var draggedNetShift = 0f
-    // Last clamped drag translation, captured per-frame in onChildDraw — ItemTouchHelper's
-    // zero-length recovery wipes the view's translation before clearView runs, so this is
-    // the only record of where the finger actually released the row.
     var lastDragDY = 0f
+    // True while the drop animation is running. Starting another drag in that window
+    // would have the pending rebuild swap the menu under the new drag.
+    var dropAnimating = false
+
+    fun dataIndex(id: Int): Int {
+        labelNavIds[id]?.let { keyword -> return labels.indexOfFirst { it.keyword == keyword } }
+        subfolderNavIds[id]?.let { mailboxId -> return subfolderDisplayOrder.indexOf(mailboxId) }
+        return -1
+    }
+
+    fun rowCenter(view: View, id: Int): Float {
+        val start = startIndices[view] ?: return view.top + view.height / 2f
+        val data = dataIndex(id)
+        if (data < 0) return view.top + view.height / 2f
+        return view.top + (data - start) * view.height + view.height / 2f
+    }
+
+    fun reflowSection() {
+        val dragged = draggedView ?: return
+        sectionRows.forEach { (view, id) ->
+            if (view === dragged) return@forEach
+            val start = startIndices[view] ?: return@forEach
+            val data = dataIndex(id)
+            if (data < 0) return@forEach
+            view.animate()
+                .translationY((data - start) * view.height.toFloat())
+                .setDuration(150)
+                .start()
+        }
+    }
 
     val callback = object : ItemTouchHelper.Callback() {
         override fun isLongPressDragEnabled() = true
@@ -236,11 +263,23 @@ internal fun MainActivity.attachLabelDrag() {
             recyclerView: RecyclerView,
             viewHolder: RecyclerView.ViewHolder
         ): Int {
+            if (dropAnimating) return 0
             val id = itemIdOf(viewHolder) ?: return 0
             return if (labelNavIds.containsKey(id) || subfolderNavIds.containsKey(id))
                 makeMovementFlags(ItemTouchHelper.UP or ItemTouchHelper.DOWN, 0)
             else 0
         }
+
+        // ItemTouchHelper finds candidates from row *layout* rects, but during a drag the
+        // rows only move visually (translations); their layout slots stay put. Widen the
+        // search box to the whole list so our chooseDropTarget can work with the visual
+        // positions instead of missing the row that is visually next to the finger.
+        override fun getBoundingBoxMargin() = rv.height
+
+        // The default half-item threshold drops swap checks in a dead zone around the
+        // dragged row's original slot, which is exactly where the finger is when coming
+        // back from the other end. onMove's own guard already prevents needless swaps.
+        override fun getMoveThreshold(viewHolder: RecyclerView.ViewHolder) = 0f
 
         override fun canDropOver(
             recyclerView: RecyclerView,
@@ -249,8 +288,7 @@ internal fun MainActivity.attachLabelDrag() {
         ): Boolean {
             val fromId = itemIdOf(current) ?: return false
             val toId = itemIdOf(target) ?: return false
-            return (labelNavIds.containsKey(fromId) && labelNavIds.containsKey(toId)) ||
-                   (subfolderNavIds.containsKey(fromId) && subfolderNavIds.containsKey(toId))
+            return sameSection(fromId, toId)
         }
 
         override fun onMove(
@@ -260,97 +298,58 @@ internal fun MainActivity.attachLabelDrag() {
         ): Boolean {
             val fromId = itemIdOf(viewHolder) ?: return false
             val toId = itemIdOf(target) ?: return false
-            // With data-only swaps the layout never changes under the drag, so the same
-            // crossing keeps re-firing onMove every frame. Gate on visual position: only
-            // swap when the data order doesn't already match where the finger has put
-            // the row relative to the target — makes repeated calls no-ops instead of
-            // an A/B oscillation.
-            val selVisCenter = viewHolder.itemView.let { it.top + it.translationY + it.height / 2f }
-            val tgtVisCenter = target.itemView.let { it.top + it.translationY + it.height / 2f }
-            val shouldBeAbove = selVisCenter < tgtVisCenter
-            fun orderAlreadyCorrect(from: Int, to: Int): Boolean =
-                if (shouldBeAbove) from < to else from > to
-            // Slide the target row into the slot the dragged row is vacating.
-            fun animateTargetShift() {
-                val v = target.itemView
-                val shift = if (shouldBeAbove) viewHolder.itemView.height.toFloat()
-                            else -viewHolder.itemView.height.toFloat()
-                val newTy = (shiftedRows[v] ?: 0f) + shift
-                shiftedRows[v] = newTy
-                draggedNetShift -= shift
-                v.animate().translationY(newTy).setDuration(150).start()
-            }
-            // Labels
-            val fromKw = labelNavIds[fromId]
-            val toKw = labelNavIds[toId]
-            if (fromKw != null && toKw != null) {
-                val from = labels.indexOfFirst { it.keyword == fromKw }
-                val to = labels.indexOfFirst { it.keyword == toKw }
-                if (from < 0 || to < 0 || from == to || orderAlreadyCorrect(from, to)) return false
-                // Data-only swap: the adapter is Menu-backed, so notifyItemMoved would
-                // animate rows the underlying Menu never reorders — RecyclerView and
-                // ItemTouchHelper desync and long drags cancel out in pairs. The static
-                // layout keeps every crossing test deterministic; clearView's menu
-                // rebuild applies the new order visually on drop.
+            if (!sameSection(fromId, toId)) return false
+            val from = dataIndex(fromId)
+            val to = dataIndex(toId)
+            // Only swap with the direct neighbour in the data order: one swap then moves
+            // the row exactly one slot, which is what the visual offset math assumes.
+            if (from < 0 || to < 0 || kotlin.math.abs(from - to) != 1) return false
+            val selectedItem = viewHolder.itemView
+            val selectedCenter = selectedItem.top + selectedItem.translationY +
+                selectedItem.height / 2f
+            val shouldBeAbove = selectedCenter < rowCenter(target.itemView, toId)
+            val alreadyOrdered = if (shouldBeAbove) from < to else from > to
+            if (alreadyOrdered) return false
+            if (labelNavIds.containsKey(fromId)) {
                 labels.add(to, labels.removeAt(from))
-                animateTargetShift()
-                return true
-            }
-            // Subfolders
-            val fromMbId = subfolderNavIds[fromId]
-            val toMbId = subfolderNavIds[toId]
-            if (fromMbId != null && toMbId != null) {
-                val from = subfolderDisplayOrder.indexOf(fromMbId)
-                val to = subfolderDisplayOrder.indexOf(toMbId)
-                if (from < 0 || to < 0 || from == to || orderAlreadyCorrect(from, to)) return false
-                // Data-only swap — same rationale as the labels branch above.
+            } else {
                 subfolderDisplayOrder.add(to, subfolderDisplayOrder.removeAt(from))
-                animateTargetShift()
-                return true
             }
-            return false
+            reflowSection()
+            return true
         }
 
         override fun onSelectedChanged(viewHolder: RecyclerView.ViewHolder?, actionState: Int) {
             super.onSelectedChanged(viewHolder, actionState)
-            if (actionState == ItemTouchHelper.ACTION_STATE_DRAG && viewHolder != null) {
-                viewHolder.itemView.performHapticFeedback(
-                    android.view.HapticFeedbackConstants.LONG_PRESS
-                )
-                viewHolder.itemView.alpha = 0.7f
-                draggedNetShift = 0f
+            if (actionState != ItemTouchHelper.ACTION_STATE_DRAG || viewHolder == null) return
+            viewHolder.itemView.performHapticFeedback(
+                android.view.HapticFeedbackConstants.LONG_PRESS
+            )
+            viewHolder.itemView.alpha = 0.7f
+            draggedView = viewHolder.itemView
+            lastDragDY = 0f
+            dragMinDY = -Float.MAX_VALUE
+            dragMaxDY = Float.MAX_VALUE
 
-                // Snapshot the section's row bounds once, before any swap animation begins.
-                dragMinDY = -Float.MAX_VALUE
-                dragMaxDY = Float.MAX_VALUE
-                val id = itemIdOf(viewHolder)
-                val sectionIds: Set<Int>? = when {
-                    id != null && labelNavIds.containsKey(id) -> labelNavIds.keys
-                    id != null && subfolderNavIds.containsKey(id) -> subfolderNavIds.keys
-                    else -> null
+            val id = itemIdOf(viewHolder)
+            val rows = mutableListOf<Pair<View, Int>>()
+            if (id != null) {
+                for (i in 0 until rv.childCount) {
+                    val child = rv.getChildAt(i)
+                    val childId = itemIdOf(rv.getChildViewHolder(child)) ?: continue
+                    if (sameSection(id, childId)) rows += child to childId
                 }
-                if (sectionIds != null) {
-                    var minTop = Float.MAX_VALUE
-                    var maxBottom = -Float.MAX_VALUE
-                    for (i in 0 until rv.childCount) {
-                        val child = rv.getChildAt(i)
-                        val childId = itemIdOf(rv.getChildViewHolder(child))
-                        if (childId != null && childId in sectionIds) {
-                            minTop = minOf(minTop, child.top.toFloat())
-                            maxBottom = maxOf(maxBottom, child.bottom.toFloat())
-                        }
-                    }
-                    if (minTop != Float.MAX_VALUE) {
-                        val itemHeight = viewHolder.itemView.height
-                        // Half-item slack past the section edges: ItemTouchHelper's
-                        // chooseDropTarget uses strict comparisons for upward swaps, so
-                        // clamping exactly at the boundary makes the top-most swap
-                        // trigger only intermittently (down was fine, up flickered).
-                        val slack = itemHeight / 2f
-                        dragMinDY = minTop - viewHolder.itemView.top - slack
-                        dragMaxDY = maxBottom - itemHeight - viewHolder.itemView.top + slack
-                    }
-                }
+            }
+            rows.sortBy { it.first.top }
+            sectionRows = rows
+            startIndices = rows.associate { (view, rowId) -> view to dataIndex(rowId) }
+            if (rows.isNotEmpty()) {
+                val itemHeight = viewHolder.itemView.height
+                val slack = itemHeight / 2f
+                dragMinDY = rows.first().first.top - viewHolder.itemView.top - slack
+                dragMaxDY = rows.last().first.bottom - itemHeight -
+                    viewHolder.itemView.top + slack
+                reflowSection()
             }
         }
 
@@ -359,36 +358,56 @@ internal fun MainActivity.attachLabelDrag() {
             viewHolder.itemView.alpha = 1f
             dragMinDY = -Float.MAX_VALUE
             dragMaxDY = Float.MAX_VALUE
-            // Recovery animation is zero-length (getAnimationDuration), so ItemTouchHelper
-            // has just snapped the dragged row back to its layout slot. Restore it to
-            // where the finger released it, then swoosh it into the slot its data now
-            // occupies; neighbors hold their shifted positions until the rebuild.
-            viewHolder.itemView.translationY = lastDragDY
             saveLabels()
             saveSubfolderOrder()
-            // NavigationView's adapter is Menu-backed: the row order reverts on any
-            // relayout unless the underlying Menu itself is rebuilt in the new order —
-            // so this rebuild is required, not optional. It runs from the animation's
-            // end callback (a safe frame, outside any RecyclerView layout pass), in the
-            // same frame all manual translations are zeroed, so the rebuilt layout takes
-            // over exactly where the animation ended.
-            viewHolder.itemView.animate()
-                .translationY(draggedNetShift)
-                .setDuration(180)
-                .withEndAction {
-                    shiftedRows.keys.forEach { it.animate().cancel(); it.translationY = 0f }
-                    shiftedRows.clear()
-                    viewHolder.itemView.translationY = 0f
-                    rebuildDrawerMenu()
+
+            val id = itemIdOf(viewHolder)
+            val start = startIndices[viewHolder.itemView]
+            val data = id?.let { dataIndex(it) } ?: -1
+            val finalOffset = if (start != null && data >= 0)
+                (data - start) * viewHolder.itemView.height.toFloat() else 0f
+            // ItemTouchHelper's recovery is zero-length, so it has already snapped the
+            // row back to its layout slot: put it back under the finger, then animate it
+            // into the slot its data order now owns before rebuilding the menu there.
+            viewHolder.itemView.translationY = lastDragDY
+            val rows = sectionRows
+            draggedView = null
+            sectionRows = emptyList()
+            startIndices = emptyMap()
+            dropAnimating = true
+
+            fun finishDrop() {
+                viewHolder.itemView.animate().setListener(null)
+                rows.forEach { (view, _) ->
+                    view.animate().cancel()
+                    view.translationY = 0f
                 }
-                .start()
+                viewHolder.itemView.translationY = 0f
+                dropAnimating = false
+                rebuildDrawerMenu()
+            }
+
+            if (kotlin.math.abs(lastDragDY - finalOffset) < 0.5f) {
+                finishDrop()
+            } else {
+                viewHolder.itemView.animate()
+                    .translationY(finalOffset)
+                    .setDuration(180)
+                    // onAnimationEnd also runs on cancel, so the rebuild (and clearing
+                    // dropAnimating) can never be skipped and leave drag disabled.
+                    .setListener(object : android.animation.AnimatorListenerAdapter() {
+                        override fun onAnimationEnd(animation: android.animation.Animator) {
+                            finishDrop()
+                        }
+                    })
+                    .start()
+            }
         }
 
         override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {}
 
-        // Kill the drop "recovery" slide — by default ItemTouchHelper animates the
-        // released row back to its layout slot (the pre-drag position), which reads
-        // as a flick to the old spot right before the rebuild snaps it to the new one.
+        // No drop "recovery" slide back to the pre-drag slot; clearView animates into
+        // the new one instead.
         override fun getAnimationDuration(
             recyclerView: RecyclerView,
             animationType: Int,
@@ -396,41 +415,35 @@ internal fun MainActivity.attachLabelDrag() {
             animateDy: Float
         ): Long = 0L
 
-        // Default chooseDropTarget is asymmetric: upward swaps use strict comparisons
-        // against neighbors that are mid-swap-animation, so dragging up would flicker
-        // or intermittently revert while dragging down worked. Symmetric rule instead:
-        // swap with whichever candidate's center the dragged row's center has crossed.
         override fun chooseDropTarget(
             selected: RecyclerView.ViewHolder,
             dropTargets: MutableList<RecyclerView.ViewHolder>,
             curX: Int,
             curY: Int
         ): RecyclerView.ViewHolder? {
-            val selectedCenter = curY + selected.itemView.height / 2
+            val selectedId = itemIdOf(selected) ?: return null
+            val selectedData = dataIndex(selectedId)
+            if (selectedData < 0) return null
+            val selectedItem = selected.itemView
+            val selectedCenter = selectedItem.top + selectedItem.translationY +
+                selectedItem.height / 2f
             var best: RecyclerView.ViewHolder? = null
-            var bestDist = Int.MAX_VALUE
+            var bestDistance = Float.MAX_VALUE
             for (target in dropTargets) {
-                // A neighbor mid-swap-animation has its layout `top` already updated
-                // while its visual position lags in translationY — compare against the
-                // on-screen center, or the crossing test fires against a position the
-                // row isn't actually at yet and the swap oscillates.
-                val visualTop = target.itemView.top + target.itemView.translationY
-                val targetCenter = (visualTop + target.itemView.height / 2f).toInt()
-                val movingUp = targetCenter < selected.itemView.top + selected.itemView.height / 2
-                val crossed = if (movingUp) selectedCenter <= targetCenter
-                              else selectedCenter >= targetCenter
-                if (!crossed) continue
-                val dist = kotlin.math.abs(selectedCenter - targetCenter)
-                if (dist < bestDist) { bestDist = dist; best = target }
+                val targetId = itemIdOf(target) ?: continue
+                val targetData = dataIndex(targetId)
+                if (targetData < 0 || kotlin.math.abs(targetData - selectedData) != 1) continue
+                val distance = kotlin.math.abs(selectedCenter - rowCenter(target.itemView, targetId))
+                if (distance < bestDistance) {
+                    bestDistance = distance
+                    best = target
+                }
             }
             return best
         }
 
-        // Clamp the visual drag translation so a dragged row can't be pulled past
-        // the boundaries of its own section (labels only travel within labels,
-        // folders only within folders) even though canDropOver already blocks the
-        // actual reorder — without this the row still visually escapes into the
-        // adjacent section while following the finger.
+        // Keep the dragged row inside its own section (labels only travel within labels,
+        // folders only within folders) while it follows the finger.
         override fun onChildDraw(
             c: android.graphics.Canvas,
             recyclerView: RecyclerView,
