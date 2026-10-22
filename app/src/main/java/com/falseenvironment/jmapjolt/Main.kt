@@ -796,16 +796,21 @@ class MainActivity : AppCompatActivity() {
                         if (calendarPanelView?.onBackPressed() != true) showMailboxScreen()
                     contactsPanelView?.visibility == View.VISIBLE ->
                         if (contactsPanelView?.onBackPressed() != true) showMailboxScreen()
+                    // Detail first: opening a message hides the search keyboard, so back
+                    // must leave the email and land back on the results with the query
+                    // intact — never dismiss the search from inside the message.
+                    isShowingEmailDetail -> closeEmailDetail()
                     selectedEmails.isNotEmpty() -> clearSelection()
                     isSearchActive -> {
-                        // First back press only dismisses the keyboard so results stay
-                        // visible; a second press (or the back-arrow icon) exits search.
-                        val insets = androidx.core.view.ViewCompat.getRootWindowInsets(drawerLayout)
-                        val imeVisible = insets
-                            ?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true
-                        if (imeVisible) hideKeyboard() else deactivateSearch()
+                        // Leave search in one press. The keyboard needs no handling here:
+                        // while it is visible the IME registers its own back callback and
+                        // swallows the press to hide itself, so this callback only runs when
+                        // the keyboard is already gone. Reading the cached window insets to
+                        // "detect" the IME was unreliable (they stay stale after the IME
+                        // hides), which left back presses doing nothing until a later press
+                        // fell through and closed the app.
+                        deactivateSearch()
                     }
-                    isShowingEmailDetail -> closeEmailDetail()
                     settingsContainer.visibility == View.VISIBLE -> {
                         if (currentSettingsSection != SettingsSection.ROOT) attemptLeaveSettingsSubmenu()
                         else showMailboxScreen()
@@ -1101,6 +1106,10 @@ class MainActivity : AppCompatActivity() {
     /** Opens a pending widget email when its account is active and the message is loaded. */
 
     internal fun showEmailDetail(email: DisplayEmail, fromSwipe: Boolean = false) {
+        // Opening a message from search results must put the search keyboard away right
+        // away: the query and results stay loaded behind the detail, so back returns to
+        // them instead of first swallowing a press to dismiss the IME.
+        hideKeyboard()
         if (!fromSwipe) {
             mailSwipeRefresh.visibility = View.GONE
             fabCompose.animateFabOut()

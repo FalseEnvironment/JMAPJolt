@@ -1057,7 +1057,9 @@ internal fun MainActivity.closeEmailDetail() {
     fabCompose.animateFabIn()
     isShowingEmailDetail = false
     refreshBottomNav()
-    setDrawerIndicator(true)
+    // Back into search keeps the search bar in "back-arrow" mode: the hamburger would
+    // otherwise appear over the active query and hide the way out of search.
+    setDrawerIndicator(!isSearchActive)
     supportActionBar?.setDisplayHomeAsUpEnabled(false)
     drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED)
     drawerToggle.syncState()
