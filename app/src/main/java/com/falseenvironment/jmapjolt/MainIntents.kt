@@ -131,7 +131,9 @@ internal fun MainActivity.applyPendingCalendarIntent() {
     val eventStart = pendingCalendarEventStart
     pendingCalendarNewEvent = false
     pendingCalendarEventStart = 0L
-    showCalendarScreen()
+    // Opened from a widget or notification: remember the screen being left so back
+    // returns to it instead of always landing in the inbox.
+    navigateToRoot(RootDestination.Calendar)
     calendarPanelView?.post {
         val panel = calendarPanelView ?: return@post
         when {

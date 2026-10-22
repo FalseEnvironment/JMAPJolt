@@ -154,10 +154,13 @@ private fun MainActivity.onBottomNavTabSelected(tab: BottomNavTab) {
     when (tab) {
         // The sync loop keeps running on the other tabs, so the list is already current:
         // re-querying the folder here is what made coming back to Mail feel like a reload.
-        BottomNavTab.MAIL -> showMailboxScreen(skipRefresh = emails.isNotEmpty() && isPeriodicSyncActive)
-        BottomNavTab.CALENDAR -> showCalendarScreen()
-        BottomNavTab.CONTACTS -> showContactsScreen()
-        BottomNavTab.SETTINGS -> showSettingsScreen()
+        BottomNavTab.MAIL -> navigateToRoot(
+            RootDestination.Folder(selectedFolder),
+            mailboxSkipRefresh = emails.isNotEmpty() && isPeriodicSyncActive
+        )
+        BottomNavTab.CALENDAR -> navigateToRoot(RootDestination.Calendar)
+        BottomNavTab.CONTACTS -> navigateToRoot(RootDestination.Contacts)
+        BottomNavTab.SETTINGS -> navigateToRoot(RootDestination.Settings)
     }
     tabScreenFor(tab)?.fadeInTab()
     refreshBottomNav()

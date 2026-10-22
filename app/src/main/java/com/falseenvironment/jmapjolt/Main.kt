@@ -793,9 +793,13 @@ class MainActivity : AppCompatActivity() {
                     drawerLayout.isDrawerOpen(GravityCompat.START) ->
                         drawerLayout.closeDrawer(GravityCompat.START)
                     calendarPanelView?.visibility == View.VISIBLE ->
-                        if (calendarPanelView?.onBackPressed() != true) showMailboxScreen()
+                        if (calendarPanelView?.onBackPressed() != true) {
+                            if (!restorePreviousRoot()) showMailboxScreen()
+                        }
                     contactsPanelView?.visibility == View.VISIBLE ->
-                        if (contactsPanelView?.onBackPressed() != true) showMailboxScreen()
+                        if (contactsPanelView?.onBackPressed() != true) {
+                            if (!restorePreviousRoot()) showMailboxScreen()
+                        }
                     // Detail first: opening a message hides the search keyboard, so back
                     // must leave the email and land back on the results with the query
                     // intact — never dismiss the search from inside the message.
@@ -813,12 +817,14 @@ class MainActivity : AppCompatActivity() {
                     }
                     settingsContainer.visibility == View.VISIBLE -> {
                         if (currentSettingsSection != SettingsSection.ROOT) attemptLeaveSettingsSubmenu()
-                        else showMailboxScreen()
+                        else if (!restorePreviousRoot()) showMailboxScreen()
                     }
                     loginContainer.visibility == View.VISIBLE -> showOnboarding()
                     onboardingContainer.visibility == View.VISIBLE && onboardingPager.currentItem > 0 ->
                         onboardingPager.setCurrentItem(onboardingPager.currentItem - 1, true)
-                    else -> {
+                    // Walk back through the root screens visited this session before
+                    // letting the system close the app.
+                    else -> if (!restorePreviousRoot()) {
                         isEnabled = false
                         onBackPressedDispatcher.onBackPressed()
                         isEnabled = true
@@ -946,6 +952,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     internal var isShowingEmailDetail = false
+
+    /** Root screens (folders, tabs) visited this session, most recent last. */
+    internal val rootDestinationHistory = ArrayDeque<RootDestination>()
 
     /** Pending "mark as read" coroutine honoring [markReadDelaySeconds]; cancelled on navigation away. */
     internal var markSeenJob: Job? = null
@@ -2299,7 +2308,7 @@ class MainActivity : AppCompatActivity() {
             if (settingsContainer.visibility == View.VISIBLE) {
                 if (currentSettingsSection != SettingsSection.ROOT) {
                     attemptLeaveSettingsSubmenu()
-                } else {
+                } else if (!restorePreviousRoot()) {
                     showMailboxScreen()
                 }
                 return true
@@ -2331,7 +2340,7 @@ class MainActivity : AppCompatActivity() {
         } else if (settingsContainer.visibility == View.VISIBLE &&
                         currentSettingsSection == SettingsSection.ROOT
         ) {
-            showMailboxScreen()
+            if (!restorePreviousRoot()) showMailboxScreen()
             return true
         } else if (isShowingEmailDetail) {
             closeEmailDetail()

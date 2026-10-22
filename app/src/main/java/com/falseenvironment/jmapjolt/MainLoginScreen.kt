@@ -10,6 +10,9 @@ import org.unifiedpush.android.connector.INSTANCE_DEFAULT
 import org.unifiedpush.android.connector.UnifiedPush
 
 internal fun MainActivity.showLoginScreen() {
+    // Leaving the account invalidates the root history: folders/tabs from the old
+    // session must not be restorable after logging in as someone else.
+    rootDestinationHistory.clear()
     onboardingContainer.visibility = View.GONE
     loginContainer.visibility = View.VISIBLE
     loginContainer.setBackgroundColor(tokens.background)

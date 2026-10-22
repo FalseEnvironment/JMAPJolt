@@ -20,6 +20,7 @@ import android.graphics.drawable.GradientDrawable
 import org.unifiedpush.android.connector.UnifiedPush
 
 internal fun MainActivity.showOnboarding(page: Int = 0) {
+    rootDestinationHistory.clear()
     onboardingContainer.visibility = View.VISIBLE
     loginContainer.visibility = View.GONE
     loginBackBtn.visibility = View.GONE

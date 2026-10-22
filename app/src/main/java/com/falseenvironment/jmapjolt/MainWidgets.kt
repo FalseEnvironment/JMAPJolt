@@ -114,8 +114,8 @@ internal fun MainActivity.handleWidgetIntent(intent: Intent?) {
 internal fun MainActivity.openWidgetInbox(selection: String) {
     if (composeContainer.visibility == View.VISIBLE) hideCompose()
     if (selection == WidgetSupport.UNIFIED || savedAccounts.size <= 1) {
-        selectedFolder = if (savedAccounts.size > 1) R.id.nav_unified_inbox else R.id.nav_inbox
-        showMailboxScreen()
+        val navId = if (savedAccounts.size > 1) R.id.nav_unified_inbox else R.id.nav_inbox
+        navigateToRoot(RootDestination.Folder(navId))
         applyFolderFilterAndRefresh()
         navigationView.post { rebuildDrawerMenu() }
         return

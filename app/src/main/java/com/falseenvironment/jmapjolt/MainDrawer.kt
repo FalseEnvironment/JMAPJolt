@@ -208,9 +208,9 @@ internal fun MainActivity.bindDrawerNavigation() {
     navigationView.setNavigationItemSelectedListener { item ->
         // Calendar, Contacts and Settings live in the bottom navigation bar; the drawer
         // only lists mail destinations.
-        selectedFolder = item.itemId
         if (composeContainer.visibility == View.VISIBLE) hideCompose()
-        showMailboxScreen()
+        // Remember the folder being left so back returns there instead of the inbox.
+        navigateToRoot(RootDestination.Folder(item.itemId))
         applyFolderFilterAndRefresh()
         navigationView.post { rebuildDrawerMenu() }
         drawerLayout.closeDrawer(GravityCompat.START)
