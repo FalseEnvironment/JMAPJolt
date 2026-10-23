@@ -100,20 +100,37 @@ internal fun MainActivity.connectAndOpenMailbox() {
             }
         } else {
             loadingOverlay.visibility = View.GONE
-            val attempted = result.attemptedEndpoints.joinToString(" | ")
+            // Restore the button first: updateFormState() also rewrites the status line,
+            // so doing it after the error would replace it with a neutral idle message.
+            updateFormState()
+            // Full diagnostics stay in the debug readout (hidden unless Debug mode);
+            // the pill below is the short, user-facing message.
             status.text =
                     if (result.authFailed) {
-                        // Credentials were refused: the endpoint list is noise here.
                         getString(R.string.error_auth_app_password)
                     } else {
                         getString(
                                 R.string.status_connection_failed_verbose,
                                 debugTs(),
-                                result.errorMessage ?: getString(R.string.status_connection_failed),
-                                attempted
+                                result.errorMessage
+                                        ?: getString(R.string.status_connection_failed_generic),
+                                result.attemptedEndpoints.joinToString(" | ")
                         )
                     }
-            updateFormState()
+            // The IME would cover a bottom-anchored pill: drop it before showing the
+            // failure and keep the fields' focus from bringing it back.
+            hideKeyboard()
+            showThemedSnackbar(
+                    if (result.authFailed) {
+                        getString(R.string.error_auth_app_password)
+                    } else {
+                        getString(
+                                R.string.login_error_connection,
+                                result.errorMessage
+                                        ?: getString(R.string.status_connection_failed_generic)
+                        )
+                    }
+            )
         }
     }
 }

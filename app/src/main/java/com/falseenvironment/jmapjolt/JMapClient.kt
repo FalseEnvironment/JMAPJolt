@@ -92,11 +92,25 @@ class JMapClient(private val context: Context) {
                 val httpUrl = sessionUrl.toHttpUrlOrNull() ?: continue
                 try {
                     JmapClient(email, password, httpUrl).use { client ->
-                        client.setSessionCache(sessionCache)
+                        // No shared session cache here: its key is (username, session URL)
+                        // without the password, so a session cached earlier in the process
+                        // would be returned as-is and any password would "authenticate".
+                        // The login probe must always make an authenticated request.
                         val session = client.getSession().get(12, TimeUnit.SECONDS)
                         val apiUrl = session.getApiUrl().toString()
                         val accountId = session.getPrimaryAccount(MailAccountCapability::class.java)
                             ?: throw IllegalStateException("No mail account found on JMAP session")
+
+                        // The session resource alone does not prove the password: some
+                        // servers serve it without authenticating. One cheap API call
+                        // makes the endpoint check the credentials for real.
+                        client.call(
+                            rs.ltt.jmap.common.method.call.email.GetEmailMethodCall.builder()
+                                .accountId(accountId)
+                                .ids(emptyArray())
+                                .properties(arrayOf("id"))
+                                .build()
+                        ).get(12, TimeUnit.SECONDS)
 
                         return@withContext ConnectResult(
                             success = true,
