@@ -139,6 +139,9 @@ dependencies {
     implementation("org.jsoup:jsoup:1.23.2")
 
     testImplementation("junit:junit:4.13.2")
+    // The Android org.json stub is not implemented in local unit tests; use the real
+    // implementation so payload parsers (EmailPush, ...) can be tested on the JVM.
+    testImplementation("org.json:json:20250517")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")

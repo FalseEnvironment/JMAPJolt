@@ -49,6 +49,7 @@ class JMapClient(private val context: Context) {
         val preview: String,
         val seen: Boolean,
         val isStarred: Boolean = false,
+        val isJunk: Boolean = false,
         val fullBody: String = "",
         val receivedAt: Long = 0L,
         val toEmail: String = "",
@@ -65,6 +66,26 @@ class JMapClient(private val context: Context) {
         val deviceClientId: String?,
         val expires: java.time.Instant?
     )
+
+    /**
+     * draft-ietf-jmap-emailpush config attached to a PushSubscription: the server then
+     * pushes an `EmailPush` object carrying the delivered email ids (instead of only a
+     * StateChange), so the client notifies exactly what arrived, in any mailbox.
+     */
+    data class EmailPushConfig(
+        val accountId: String,
+        val filter: JSONObject,
+        val properties: List<String> = listOf("id"),
+        val urgency: String = "high"
+    ) {
+        fun toJson(): JSONObject = JSONObject().put(
+            accountId,
+            JSONObject()
+                .put("filter", filter)
+                .put("properties", JSONArray(properties))
+                .put("urgency", urgency)
+        )
+    }
 
     data class ConnectResult(
         val success: Boolean,
@@ -237,6 +258,7 @@ class JMapClient(private val context: Context) {
                 val fromName = SenderName.clean(email.from?.firstOrNull()?.name)
                 val isSeen = email.keywords?.containsKey("\$seen") == true
                 val isStarred = email.keywords?.containsKey("\$flagged") == true
+                val isJunk = email.keywords?.containsKey("\$junk") == true
                 // Without body values the preview must NOT stand in for the body:
                 // a blank fullBody is what makes the detail view fetch the real one.
                 val body = if (!withBodies) "" else email.htmlBody?.firstOrNull()?.let { part ->
@@ -263,7 +285,7 @@ class JMapClient(private val context: Context) {
                     from = if (fromName.isNotBlank()) fromName else fromEmail,
                     fromEmail = fromEmail,
                     preview = bodyPreview.ifBlank { PreviewText.clean(email.preview) },
-                    seen = isSeen, isStarred = isStarred, fullBody = body,
+                    seen = isSeen, isStarred = isStarred, isJunk = isJunk, fullBody = body,
                     receivedAt = email.receivedAt?.toEpochMilli() ?: 0L,
                     toEmail = email.to.orEmpty().joinToString(", ") { it.email ?: "" },
                     ccEmail = email.cc.orEmpty().joinToString(", ") { it.email ?: "" },
@@ -271,6 +293,100 @@ class JMapClient(private val context: Context) {
                     attachments = atts,
                     keywords = customKeywords(email.keywords),
                     threadId = email.threadId ?: "")
+            }
+        }
+    }
+
+    /**
+     * Newest emails received after [afterEpochMillis] in every mailbox except Sent,
+     * Drafts, Trash and Junk. This is the notification fallback for servers without
+     * `urn:ietf:params:jmap:emailpush`: the old inbox-only diff never saw mail that a
+     * server-side filter filed straight into Archive or a custom folder.
+     *
+     * Deliberately not unread-only: the caller updates the seen baseline with these
+     * ids and only notifies the ones that are unread and not junk.
+     */
+    suspend fun fetchEmailsReceivedAfter(
+        connectedAccount: ConnectedAccount,
+        afterEpochMillis: Long,
+        limit: Long = 50
+    ): List<EmailSummary> = withContext(Dispatchers.IO) {
+        val client = newClient(connectedAccount)
+        client.use { jmapClient ->
+            val session = jmapClient.getSession().get(12, TimeUnit.SECONDS)
+            val accountId = session.getPrimaryAccount(MailAccountCapability::class.java)
+                ?: return@withContext emptyList()
+
+            val excluded = (
+                queryMailboxIds(jmapClient, accountId, JSONObject().put("role", "trash")) +
+                    queryMailboxIds(jmapClient, accountId, JSONObject().put("role", "junk")) +
+                    queryMailboxIds(jmapClient, accountId, JSONObject().put("role", "sent")) +
+                    queryMailboxIds(jmapClient, accountId, JSONObject().put("role", "drafts"))
+                ).distinct().toTypedArray()
+
+            val filter = rs.ltt.jmap.common.entity.filter.EmailFilterCondition.builder()
+                .notKeyword("\$junk")
+                .also { if (excluded.isNotEmpty()) it.inMailboxOtherThan(excluded) }
+                .also {
+                    if (afterEpochMillis > 0L) {
+                        it.after(java.time.Instant.ofEpochMilli(afterEpochMillis))
+                    }
+                }
+                .build()
+
+            val queryCall = rs.ltt.jmap.common.method.call.email.QueryEmailMethodCall.builder()
+                .accountId(accountId)
+                .filter(filter)
+                .sort(arrayOf(rs.ltt.jmap.common.entity.Comparator("receivedAt", false)))
+                .limit(limit)
+                .build()
+
+            val ids = jmapClient.call(queryCall).get()
+                .getMain(rs.ltt.jmap.common.method.response.email.QueryEmailMethodResponse::class.java)
+                .ids
+            if (ids.isNullOrEmpty()) return@withContext emptyList()
+
+            val getCall = rs.ltt.jmap.common.method.call.email.GetEmailMethodCall.builder()
+                .accountId(accountId)
+                .ids(ids)
+                .properties(
+                    arrayOf(
+                        "id", "threadId", "subject", "from", "to", "preview",
+                        "keywords", "receivedAt", "attachments"
+                    )
+                )
+                .build()
+            val list = jmapClient.call(getCall).get()
+                .getMain(rs.ltt.jmap.common.method.response.email.GetEmailMethodResponse::class.java)
+                .list
+
+            list.map { email ->
+                val fromEmail = email.from?.firstOrNull()?.email ?: ""
+                val fromName = SenderName.clean(email.from?.firstOrNull()?.name)
+                val attachments = email.attachments?.mapNotNull { part ->
+                    val blobId = part.blobId ?: return@mapNotNull null
+                    EmailAttachmentInfo(
+                        blobId = blobId,
+                        name = part.name ?: "attachment",
+                        mimeType = part.type ?: "application/octet-stream",
+                        size = part.size ?: 0L
+                    )
+                } ?: emptyList()
+                EmailSummary(
+                    id = email.id,
+                    subject = email.subject ?: "(No Subject)",
+                    from = if (fromName.isNotBlank()) fromName else fromEmail,
+                    fromEmail = fromEmail,
+                    preview = PreviewText.clean(email.preview),
+                    seen = email.keywords?.containsKey("\$seen") == true,
+                    isStarred = email.keywords?.containsKey("\$flagged") == true,
+                    isJunk = email.keywords?.containsKey("\$junk") == true,
+                    receivedAt = email.receivedAt?.toEpochMilli() ?: 0L,
+                    toEmail = email.to?.firstOrNull()?.email ?: "",
+                    attachments = attachments,
+                    keywords = customKeywords(email.keywords),
+                    threadId = email.threadId ?: ""
+                )
             }
         }
     }
@@ -1343,6 +1459,73 @@ class JMapClient(private val context: Context) {
     }
 
     /**
+     * True when the session (and this account) advertises draft-ietf-jmap-emailpush.
+     *
+     * jmap-common 0.9.0 has no typed capability for it and drops unknown URIs from the
+     * modelled session, so the session resource is read as raw JSON. The account-level
+     * capability matters: a server may support it globally but not for this account.
+     */
+    suspend fun supportsEmailPush(connectedAccount: ConnectedAccount): Boolean =
+        withContext(Dispatchers.IO) {
+            val cacheKey = connectedAccount.sessionUrl + "|" + connectedAccount.accountId
+            emailPushCapabilityCache[cacheKey]?.let { return@withContext it }
+            val supported = try {
+                val session = authenticatedSessionJson(connectedAccount) ?: return@withContext false
+                val server = session.optJSONObject("capabilities")
+                    ?.has(PUSH_CAPABILITY_EMAILPUSH) == true
+                val account = session.optJSONObject("accounts")
+                    ?.optJSONObject(connectedAccount.accountId)
+                    ?.optJSONObject("accountCapabilities")
+                    ?.has(PUSH_CAPABILITY_EMAILPUSH) == true
+                server && account
+            } catch (e: Exception) {
+                Log.w(TAG, "supportsEmailPush failed: ${e.message}")
+                false
+            }
+            emailPushCapabilityCache[cacheKey] = supported
+            Log.d(TAG, "emailpush capability for ${connectedAccount.accountId}: $supported")
+            supported
+        }
+
+    /**
+     * The session resource as raw JSON, necessary because jmap-common 0.9.0 drops the
+     * unknown `urn:ietf:params:jmap:emailpush` capability when modelling it.
+     *
+     * The stored session URL can redirect (Stalwart redirects `/` to `/.well-known/jmap`).
+     * The redirect is resolved *without* credentials so nothing can leak to another host,
+     * then the final URL is fetched with Basic auth and redirects disabled.
+     */
+    private fun authenticatedSessionJson(connectedAccount: ConnectedAccount): JSONObject? {
+        val resolvedUrl = try {
+            val probe = Request.Builder().url(connectedAccount.sessionUrl).get().build()
+            AppHttp.client.newCall(probe).execute().use { it.request.url.toString() }
+        } catch (e: Exception) {
+            Log.w(TAG, "session resolve failed: ${e.message}")
+            return null
+        }
+        if (!isTrustedServerUrl(resolvedUrl, connectedAccount.sessionUrl)) {
+            Log.w(TAG, "session redirect left the server origin")
+            return null
+        }
+        val request = Request.Builder()
+            .url(resolvedUrl)
+            .header(
+                "Authorization",
+                Credentials.basic(connectedAccount.email, connectedAccount.password)
+            )
+            .get()
+            .build()
+        return AppHttp.noRedirects.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                Log.w(TAG, "supportsEmailPush: session HTTP ${response.code}")
+                null
+            } else {
+                JSONObject(response.body?.string() ?: "{}")
+            }
+        }
+    }
+
+    /**
      * Creates the server-side PushSubscription that makes new mail arrive without polling.
      * Returns the server-assigned id, or null on failure.
      *
@@ -1352,8 +1535,12 @@ class JMapClient(private val context: Context) {
      *
      * [types] is limited to EmailDelivery: without it the server subscribes to every data
      * type and wakes the app for sent mail, flag changes and mailbox edits too.
-     * [expires] is the maximum we want - Stalwart clamps it to 7 days, so it is refreshed
-     * on every launch (see PushSubscriptionManager).
+     * [emailPush], when the server supports it, additionally makes the push carry the
+     * delivered email ids. [expires] is the maximum we want - Stalwart clamps it to 7
+     * days, so it is refreshed on every launch (see PushSubscriptionManager).
+     *
+     * Uses a raw JMAP request because jmap-common 0.9.0's PushSubscription entity has no
+     * `emailPush` property and would silently drop it on the way out.
      */
     suspend fun registerPushSubscription(
         context: android.content.Context,
@@ -1361,51 +1548,68 @@ class JMapClient(private val context: Context) {
         pushEndpointUrl: String,
         deviceClientId: String,
         types: List<String> = listOf(PUSH_TYPE_EMAIL_DELIVERY),
-        lifetimeDays: Long = PUSH_SUBSCRIPTION_LIFETIME_DAYS
+        lifetimeDays: Long = PUSH_SUBSCRIPTION_LIFETIME_DAYS,
+        emailPush: EmailPushConfig? = null
     ): String? = withContext(Dispatchers.IO) {
         try {
             val keys = WebPushKeys.getOrCreate(context)
-            val client = newClient(connectedAccount)
-            client.use { jmapClient ->
-                val pushKeys = rs.ltt.jmap.common.entity.Keys.builder()
-                    .p256dh(keys.p256dh)
-                    .auth(keys.auth)
-                    .build()
+            val base = JSONObject()
+                .put("deviceClientId", deviceClientId)
+                .put("url", pushEndpointUrl)
+                .put("keys", JSONObject().put("p256dh", keys.p256dh).put("auth", keys.auth))
+                .put("expires", pushExpiry(lifetimeDays).toString())
 
-                // The requested types keep the push channel to delivered mail. A server that
-                // does not know EmailDelivery refuses the whole create, so retry once with the
-                // server default (= all types) rather than ending up with no push at all.
-                val attempts: List<List<String>?> =
-                    if (types.isEmpty()) listOf(types) else listOf(types, null)
-                attempts.forEachIndexed { index, wantedTypes ->
-                    val builder = rs.ltt.jmap.common.entity.PushSubscription.builder()
-                        .deviceClientId(deviceClientId)
-                        .url(pushEndpointUrl)
-                        .keys(pushKeys)
-                        .expires(pushExpiry(lifetimeDays))
-                    if (wantedTypes != null) builder.types(wantedTypes)
+            // The requested types keep the push channel to delivered mail. A server that
+            // does not know EmailDelivery refuses the whole create, so retry without `types`
+            // (= server default) rather than ending up with no push at all. The emailpush
+            // attempt degrades the same way for servers that advertise but refuse it.
+            val attempts = buildList {
+                if (emailPush != null) add(PushAttempt(types.takeIf { it.isNotEmpty() }, emailPush))
+                if (types.isNotEmpty()) add(PushAttempt(types, null))
+                add(PushAttempt(null, null))
+            }.distinct()
 
-                    // PushSubscription/set is a per-user (not per-account) method: RFC 8620
-                    // section 7.2.3 shows no accountId in its arguments, so the 0.9.x call
-                    // builder intentionally has no accountId setter.
-                    val methodCall = rs.ltt.jmap.common.method.call.core.SetPushSubscriptionMethodCall
-                        .builder()
-                        .create(mapOf("ps0" to builder.build()))
-                        .build()
-
-                    val response = jmapClient.call(methodCall).get(30, TimeUnit.SECONDS)
-                        .getMain(rs.ltt.jmap.common.method.response.core.SetPushSubscriptionMethodResponse::class.java)
-
-                    val created = response.created?.get("ps0")
-                    if (created?.id != null) {
-                        Log.d(TAG, "PushSubscription registered: id=${created.id} types=${wantedTypes ?: "all"}")
-                        return@withContext created.id
-                    }
-                    val error = response.notCreated?.get("ps0")
-                    Log.w(TAG, "PushSubscription not created (types=${wantedTypes ?: "all"}): ${error?.type} ${error?.description ?: ""}")
+            for (attempt in attempts) {
+                val create = JSONObject(base.toString())
+                if (attempt.types != null) create.put("types", JSONArray(attempt.types))
+                if (attempt.emailPush != null) {
+                    create.put("emailPush", attempt.emailPush.toJson())
                 }
-                null
+                val using = if (attempt.emailPush != null) {
+                    listOf(PUSH_CAPABILITY_CORE, PUSH_CAPABILITY_EMAILPUSH)
+                } else {
+                    listOf(PUSH_CAPABILITY_CORE)
+                }
+                val body = rawPushSubscriptionSet(
+                    connectedAccount = connectedAccount,
+                    using = using,
+                    arguments = JSONObject().put(
+                        "create",
+                        JSONObject().put("ps0", create)
+                    )
+                ) ?: continue
+
+                val createdId = body.optJSONObject("created")
+                    ?.optJSONObject("ps0")
+                    ?.optString("id")
+                    ?.takeIf { it.isNotBlank() }
+                if (createdId != null) {
+                    Log.d(
+                        TAG,
+                        "PushSubscription registered: id=$createdId types=${attempt.types ?: "all"} " +
+                            "emailPush=${attempt.emailPush != null}"
+                    )
+                    return@withContext createdId
+                }
+                val error = body.optJSONObject("notCreated")?.optJSONObject("ps0")
+                Log.w(
+                    TAG,
+                    "PushSubscription not created (types=${attempt.types ?: "all"}, " +
+                        "emailPush=${attempt.emailPush != null}): " +
+                        "${error?.optString("type")} ${error?.optString("description") ?: ""}"
+                )
             }
+            null
         } catch (e: Exception) {
             Log.e(TAG, "registerPushSubscription failed: ${e.message}")
             null
@@ -1413,32 +1617,55 @@ class JMapClient(private val context: Context) {
     }
 
     /**
-     * Pushes a subscription's expiry forward without touching url/keys (immutable).
+     * Pushes a subscription's expiry forward without touching url/keys (immutable), and
+     * keeps its `emailPush` config in sync when the server supports it (a subscription
+     * created by an older build would otherwise never start sending email ids).
      * Returns false when the server no longer knows the subscription (expired/revoked),
      * which tells the caller to create a fresh one.
      */
     suspend fun renewPushSubscription(
         connectedAccount: ConnectedAccount,
         subscriptionId: String,
-        lifetimeDays: Long = PUSH_SUBSCRIPTION_LIFETIME_DAYS
+        lifetimeDays: Long = PUSH_SUBSCRIPTION_LIFETIME_DAYS,
+        emailPush: EmailPushConfig? = null
     ): Boolean = withContext(Dispatchers.IO) {
         try {
-            val client = newClient(connectedAccount)
-            client.use { jmapClient ->
-                // UTCDate: seconds precision, no fractional part.
-                val expires = pushExpiry(lifetimeDays).toString()
-                val methodCall = rs.ltt.jmap.common.method.call.core.SetPushSubscriptionMethodCall
-                    .builder()
-                    .update(mapOf(subscriptionId to mapOf("expires" to expires)))
-                    .build()
-                val response = jmapClient.call(methodCall).get(30, TimeUnit.SECONDS)
-                    .getMain(rs.ltt.jmap.common.method.response.core.SetPushSubscriptionMethodResponse::class.java)
-                val updated = response.updated?.containsKey(subscriptionId) == true
-                if (!updated) {
-                    Log.w(TAG, "PushSubscription renew failed: ${response.notUpdated?.get(subscriptionId)?.type}")
-                }
-                updated
+            val patch = JSONObject().put("expires", pushExpiry(lifetimeDays).toString())
+            if (emailPush != null) patch.put("emailPush", emailPush.toJson())
+            val using = if (emailPush != null) {
+                listOf(PUSH_CAPABILITY_CORE, PUSH_CAPABILITY_EMAILPUSH)
+            } else {
+                listOf(PUSH_CAPABILITY_CORE)
             }
+            val body = rawPushSubscriptionSet(
+                connectedAccount = connectedAccount,
+                using = using,
+                arguments = JSONObject().put(
+                    "update",
+                    JSONObject().put(subscriptionId, patch)
+                )
+            ) ?: return@withContext false
+
+            val updated = body.optJSONObject("updated")?.has(subscriptionId) == true
+            if (updated) return@withContext true
+            val error = body.optJSONObject("notUpdated")?.optJSONObject(subscriptionId)
+            Log.w(
+                TAG,
+                "PushSubscription renew failed: ${error?.optString("type")} " +
+                    "${error?.optString("description") ?: ""}"
+            )
+            // A server that advertises emailpush but refuses the property on update must
+            // not turn into a create-every-launch loop: keep the subscription alive and
+            // merely stop refreshing the filter. A missing subscription is still reported.
+            if (emailPush != null && error?.optString("type") != "notFound") {
+                return@withContext renewPushSubscription(
+                    connectedAccount = connectedAccount,
+                    subscriptionId = subscriptionId,
+                    lifetimeDays = lifetimeDays,
+                    emailPush = null
+                )
+            }
+            false
         } catch (e: Exception) {
             Log.w(TAG, "renewPushSubscription failed: ${e.message}")
             false
@@ -1497,6 +1724,73 @@ class JMapClient(private val context: Context) {
         } catch (e: Exception) {
             Log.w(TAG, "destroyPushSubscription failed: ${e.message}")
             false
+        }
+    }
+
+    private data class PushAttempt(val types: List<String>?, val emailPush: EmailPushConfig?)
+
+    /**
+     * Raw PushSubscription/set round trip. Returns the method's response arguments (the
+     * object with `created`/`updated`/`notCreated`/...), or null on transport or
+     * method-level failure. The raw path is needed for the `emailPush` property, which
+     * jmap-common 0.9.0 does not model.
+     */
+    private fun rawPushSubscriptionSet(
+        connectedAccount: ConnectedAccount,
+        using: List<String>,
+        arguments: JSONObject
+    ): JSONObject? {
+        return try {
+            val apiUrl = newClient(connectedAccount).use { client ->
+                client.getSession().get(12, TimeUnit.SECONDS).apiUrl.toString()
+            }
+            if (!isTrustedServerUrl(apiUrl, connectedAccount.sessionUrl)) {
+                Log.w(TAG, "PushSubscription/set: refusing API URL outside session origin")
+                return null
+            }
+            val payload = JSONObject()
+                .put("using", JSONArray(using))
+                .put(
+                    "methodCalls",
+                    JSONArray().put(
+                        JSONArray()
+                            .put("PushSubscription/set")
+                            .put(arguments)
+                            .put("0")
+                    )
+                )
+            val request = Request.Builder()
+                .url(apiUrl)
+                .header(
+                    "Authorization",
+                    Credentials.basic(connectedAccount.email, connectedAccount.password)
+                )
+                .post(payload.toString().toRequestBody("application/json".toMediaType()))
+                .build()
+            AppHttp.noRedirects.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    Log.w(TAG, "PushSubscription/set HTTP ${response.code}")
+                    return null
+                }
+                val body = JSONObject(response.body?.string() ?: "{}")
+                val method = body.optJSONArray("methodResponses")?.optJSONArray(0)
+                if (method == null) {
+                    Log.w(TAG, "PushSubscription/set: missing method response")
+                    return null
+                }
+                if (method.optString(0) == "error") {
+                    Log.w(
+                        TAG,
+                        "PushSubscription/set error: " +
+                            (method.optJSONObject(1)?.optString("type") ?: "unknown")
+                    )
+                    return null
+                }
+                method.optJSONObject(1)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "PushSubscription/set failed: ${e.message}")
+            null
         }
     }
 
@@ -1634,6 +1928,15 @@ class JMapClient(private val context: Context) {
          */
         const val PUSH_TYPE_EMAIL_DELIVERY = "EmailDelivery"
 
+        /** JMAP core capability URI, the `using` entry every PushSubscription/set needs. */
+        const val PUSH_CAPABILITY_CORE = "urn:ietf:params:jmap:core"
+
+        /**
+         * draft-ietf-jmap-emailpush (Stalwart >= 0.16.16): the subscription can carry an
+         * `emailPush` filter and the server pushes the delivered email ids.
+         */
+        const val PUSH_CAPABILITY_EMAILPUSH = "urn:ietf:params:jmap:emailpush"
+
         /**
          * Lifetime we ask for. Stalwart clamps it to 7 days; other servers may honour it.
          * The subscription is renewed on every app launch, so what matters is that it
@@ -1644,6 +1947,11 @@ class JMapClient(private val context: Context) {
         // Shared session cache: avoids a session round-trip on every call without
         // sharing the JmapClient instance itself (which is not thread-safe).
         private val sessionCache = rs.ltt.jmap.client.session.InMemorySessionCache()
+
+        // draft-ietf-jmap-emailpush support is fixed for a server/account: one probe per
+        // process is enough (a server upgrade is picked up on the next launch).
+        private val emailPushCapabilityCache =
+            java.util.concurrent.ConcurrentHashMap<String, Boolean>()
 
         // Uploads/downloads ride the app-wide stack (see [AppHttp]); the
         // per-call variants below only extend the call timeout.

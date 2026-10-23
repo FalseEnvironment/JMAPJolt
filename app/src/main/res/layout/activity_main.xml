@@ -1519,6 +1519,16 @@
                                 android:textColor="?attr/colorOnSurfaceVariant"
                                 android:textSize="@dimen/text_xs" />
 
+                            <TextView
+                                android:id="@+id/settingsUnifiedPushStatus"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="6dp"
+                                android:paddingStart="4dp"
+                                android:textSize="@dimen/text_xs"
+                                android:textStyle="bold"
+                                android:visibility="gone" />
+
                             <View
                                 android:layout_width="match_parent"
                                 android:layout_height="10dp" />

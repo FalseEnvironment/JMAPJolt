@@ -50,6 +50,9 @@ class PushVerificationRetryWorker(context: Context, params: WorkerParameters) :
         }
         if (runAttemptCount + 1 >= MAX_ATTEMPTS) {
             Log.w(TAG, "PushSubscription $subscriptionId still unverified after $MAX_ATTEMPTS nudges")
+            // Keep the subscription (a later launch retries it) but stop pretending the
+            // push is active: Settings now explains that the server never confirmed it.
+            PushSubscriptionManager.markVerificationTimedOut(applicationContext, account.email)
             return Result.success()
         }
         return Result.retry()
@@ -58,8 +61,13 @@ class PushVerificationRetryWorker(context: Context, params: WorkerParameters) :
     companion object {
         private const val TAG = "PushVerifyRetry"
         private const val KEY_SUBSCRIPTION_ID = "subscription_id"
-        private const val MAX_ATTEMPTS = 6
-        private const val INITIAL_DELAY_SECONDS = 70L
+        /**
+         * Stalwart verifies one subscription per account per minute and queues new ones
+         * behind leftovers. A handful of nudges was not enough when another unverified
+         * record was ahead of ours, so keep trying for roughly three quarters of an hour.
+         */
+        private const val MAX_ATTEMPTS = 10
+        private const val INITIAL_DELAY_SECONDS = 75L
         private const val RETRY_DELAY_SECONDS = 60L
 
         fun schedule(context: Context, subscriptionId: String) {

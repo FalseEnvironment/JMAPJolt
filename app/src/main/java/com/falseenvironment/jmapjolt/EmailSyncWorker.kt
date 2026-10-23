@@ -31,6 +31,16 @@ class EmailSyncWorker(context: Context, params: WorkerParameters) : CoroutineWor
 
     override suspend fun doWork(): Result {
         return try {
+            val emailIds = inputData.getNullableStringArray(KEY_EMAIL_IDS)
+            if (!emailIds.isNullOrEmpty()) {
+                // emailpush payload: notify exactly the delivered ids, wherever they landed.
+                BackgroundEmailSyncReceiver.notifyForIds(
+                    context = applicationContext,
+                    emailIds = emailIds.filterNotNull(),
+                    jmapAccountId = inputData.getString(KEY_JMAP_ACCOUNT_ID)
+                )
+                return Result.success()
+            }
             val accountEmail = inputData.getString(KEY_ACCOUNT_EMAIL)
             if (accountEmail != null) {
                 val account = BackgroundEmailSyncReceiver.readAllAccounts(applicationContext)
@@ -62,6 +72,10 @@ class EmailSyncWorker(context: Context, params: WorkerParameters) : CoroutineWor
          * periodic jobs scheduled by older builds.
          */
         const val KEY_ACCOUNT_EMAIL = "account_email"
+        /** Email ids carried by an emailpush push (see UnifiedPushService.parseEmailPush). */
+        const val KEY_EMAIL_IDS = "email_ids"
+        /** JMAP primary account id the push was generated for. */
+        const val KEY_JMAP_ACCOUNT_ID = "jmap_account_id"
 
         /**
          * Kept after the 15-minute fallback was removed: WorkManager persists jobs

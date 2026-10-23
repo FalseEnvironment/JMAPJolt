@@ -28,6 +28,7 @@ class BackgroundEmailSyncReceiver {
         private const val PREFS_NAME = "mail_prefs"
         private const val KEY_LAST_EMAIL_IDS = "background_last_email_ids"   // legacy, migrated
         private const val KEY_SEEN_EMAIL_IDS = "background_seen_email_ids"
+        private const val KEY_LAST_NOTIFIED_AT = "background_last_notified_at"
         // Cap on remembered ids. Stored newest-first, so the oldest fall off. Well above
         // the inbox page size, otherwise an email moved out and back in after a long
         // absence would look new again.
@@ -39,31 +40,86 @@ class BackgroundEmailSyncReceiver {
             accounts.forEach { fetchAndNotify(context, it) }
         }
 
+        /**
+         * Fallback path for pushes that carry no email ids (servers without
+         * `urn:ietf:params:jmap:emailpush`): newest mail received after the last check in
+         * every mailbox except Sent/Drafts/Trash/Junk. The inbox-only diff this replaces
+         * silently missed mail a server-side filter filed into Archive or a custom folder.
+         */
         suspend fun fetchAndNotify(context: Context, account: JMapClient.ConnectedAccount) {
-            Log.d(TAG, "fetchAndNotify: fetching for ${account.email}")
-            val emails = JMapClient(context).fetchEmails(account)
+            val lastNotifiedAt = readLastNotifiedAt(context, account.email)
+            // receivedAt has seconds precision: query one second early and let the seen-id
+            // set below remove the overlap, instead of missing mail sharing a timestamp.
+            val queryAfter = if (lastNotifiedAt > 0L) {
+                (lastNotifiedAt - 1_000L).coerceAtLeast(0L)
+            } else {
+                0L
+            }
+            Log.d(TAG, "fetchAndNotify: fetching for ${account.email} (after=$queryAfter)")
+            val emails = JMapClient(context).fetchEmailsReceivedAfter(account, queryAfter)
             Log.d(TAG, "fetchAndNotify: got ${emails.size} emails for ${account.email}")
             if (emails.isEmpty()) return
-            val currentIds = emails.map { it.id }
 
             val seenIds = readSeenIds(context, account.email)
-            if (seenIds == null) {
-                Log.d(TAG, "fetchAndNotify: first run, saving baseline (${currentIds.size} ids)")
-                writeSeenIds(context, account.email, currentIds)
+            if (seenIds == null || lastNotifiedAt <= 0L) {
+                Log.d(TAG, "fetchAndNotify: first run, saving baseline (${emails.size} ids)")
+                writeSeenIds(context, account.email, emails.map { it.id })
+                writeLastNotifiedAt(context, account.email, newestReceivedAt(emails))
                 return
             }
 
-            // "New" means never observed before — not merely absent from the inbox last
-            // time. An email the user moved to Archive/Trash and later moved back keeps
-            // its id in the seen set, so it does not notify a second time.
-            val newEmails = emails.filter { it.id !in seenIds }
+            // "New" means never observed before — not merely absent from the folder last
+            // time. An email moved around keeps its id in the seen set and never re-notifies.
+            writeSeenIds(context, account.email, emails.map { it.id } + seenIds)
+            writeLastNotifiedAt(context, account.email, newestReceivedAt(emails))
+
+            val newEmails = emails.filter { it.id !in seenIds && !it.seen && !it.isJunk }
             Log.d(TAG, "fetchAndNotify: ${newEmails.size} new emails (seen=${seenIds.size})")
-            // Newest first so the cap in writeSeenIds drops the oldest ids, never these.
-            writeSeenIds(context, account.email, currentIds + seenIds)
             if (newEmails.isEmpty()) return
 
             Log.d(TAG, "fetchAndNotify: showing notification for ${newEmails.size} new email(s)")
-            showNewEmailNotification(context, newEmails)
+            showNewEmailNotification(context, newEmails.sortedBy { it.receivedAt })
+        }
+
+        /**
+         * emailpush path: the push says exactly which ids were delivered. Fetching by id is
+         * immune to folder filters and baselines, and works for mail delivered anywhere.
+         */
+        suspend fun notifyForIds(
+            context: Context,
+            emailIds: List<String>,
+            jmapAccountId: String?
+        ) {
+            if (emailIds.isEmpty()) return
+            val account = readAllAccounts(context)
+                .firstOrNull { it.accountId == jmapAccountId }
+                ?: readCurrentAccount(context)
+                ?: run {
+                    Log.w(TAG, "notifyForIds: no account for push")
+                    return
+                }
+
+            val seenIds = readSeenIds(context, account.email).orEmpty()
+            val fresh = emailIds.distinct().filter { it !in seenIds }
+            if (fresh.isEmpty()) {
+                Log.d(TAG, "notifyForIds: all ${emailIds.size} ids already seen")
+                return
+            }
+            val emails = runCatching {
+                JMapClient(context).fetchEmailsById(account, fresh, withBodies = false)
+            }.onFailure { Log.w(TAG, "notifyForIds: Email/get failed", it) }
+                .getOrDefault(emptyList())
+            if (emails.isEmpty()) return
+
+            // Record the ids even when they are not worth a notification (read, junk), so
+            // the fallback query cannot surface them later.
+            updateBaseline(context, account.email, emails.map { it.id }.toSet())
+            writeLastNotifiedAt(context, account.email, newestReceivedAt(emails))
+
+            val notifiable = emails.filter { !it.seen && !it.isJunk }
+            Log.d(TAG, "notifyForIds: ${notifiable.size}/${emails.size} notifiable")
+            if (notifiable.isEmpty()) return
+            showNewEmailNotification(context, notifiable.sortedBy { it.receivedAt })
         }
 
         /**
@@ -73,14 +129,43 @@ class BackgroundEmailSyncReceiver {
          * the new email it announced is not mistaken for pre-existing mail.
          */
         suspend fun seedBaselineIfMissing(context: Context, account: JMapClient.ConnectedAccount) {
-            if (readSeenIds(context, account.email) != null) return
+            if (readSeenIds(context, account.email) != null &&
+                readLastNotifiedAt(context, account.email) > 0L
+            ) {
+                return
+            }
             // Best effort: a slow server must not delay/abort the push registration.
             runCatching {
                 val emails = JMapClient(context).fetchEmails(account)
-                if (emails.isEmpty()) return@runCatching
-                Log.d(TAG, "seedBaseline: recording ${emails.size} existing ids for ${account.email}")
-                writeSeenIds(context, account.email, emails.map { it.id })
+                if (emails.isNotEmpty()) {
+                    Log.d(TAG, "seedBaseline: recording ${emails.size} existing ids for ${account.email}")
+                    writeSeenIds(context, account.email, emails.map { it.id })
+                }
+                // Even an empty inbox needs a starting point: the next delivered mail must
+                // be newer than this launch, not be mistaken for the initial baseline.
+                writeLastNotifiedAt(
+                    context,
+                    account.email,
+                    newestReceivedAt(emails).takeIf { it > 0L } ?: System.currentTimeMillis()
+                )
             }.onFailure { Log.w(TAG, "seedBaseline failed for ${account.email}", it) }
+        }
+
+        private fun newestReceivedAt(emails: List<JMapClient.EmailSummary>): Long =
+            emails.maxOfOrNull { it.receivedAt } ?: 0L
+
+        private fun readLastNotifiedAt(context: Context, accountEmail: String): Long =
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getLong("$KEY_LAST_NOTIFIED_AT:$accountEmail", 0L)
+
+        /** Never moves backwards: an older batch must not make the next query look further back. */
+        private fun writeLastNotifiedAt(context: Context, accountEmail: String, receivedAt: Long) {
+            if (accountEmail.isBlank() || receivedAt <= 0L) return
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val key = "$KEY_LAST_NOTIFIED_AT:$accountEmail"
+            if (receivedAt > prefs.getLong(key, 0L)) {
+                prefs.edit().putLong(key, receivedAt).apply()
+            }
         }
 
         // Ids already observed for this account, newest first, or null when this account

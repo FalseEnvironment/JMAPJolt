@@ -207,6 +207,7 @@ class MainActivity : AppCompatActivity() {
     internal lateinit var mailSwipeRefresh: SwipeRefreshLayout
     internal lateinit var unifiedPushSwitch: SwitchCompat
     internal lateinit var sseSwitch: SwitchCompat
+    internal lateinit var settingsUnifiedPushStatus: TextView
     internal lateinit var emptyStateView: TextView
     internal lateinit var status: TextView
     internal lateinit var customTopBar: LinearLayout
@@ -480,10 +481,13 @@ class MainActivity : AppCompatActivity() {
     private val pushMessageReceiver =
             object : BroadcastReceiver() {
                 override fun onReceive(context: Context?, intent: Intent?) {
-                    if (intent?.action == UnifiedPushService.ACTION_PUSH_MESSAGE_RECEIVED &&
-                                    connectedAccount != null
-                    ) {
-                        refreshInboxNow()
+                    when (intent?.action) {
+                        UnifiedPushService.ACTION_PUSH_MESSAGE_RECEIVED -> {
+                            if (connectedAccount != null) refreshInboxNow()
+                        }
+                        PushSubscriptionManager.ACTION_PUSH_STATE_CHANGED -> {
+                            updateUnifiedPushStatus()
+                        }
                     }
                 }
             }
@@ -612,6 +616,7 @@ class MainActivity : AppCompatActivity() {
         attachmentChipDivider = findViewById(R.id.attachmentChipDivider)
         unifiedPushSwitch = findViewById(R.id.unifiedPushSwitch)
         sseSwitch = findViewById(R.id.sseSwitch)
+        settingsUnifiedPushStatus = findViewById(R.id.settingsUnifiedPushStatus)
         val frameLayout =
                 FrameLayout(this).apply {
                     layoutParams =
@@ -923,7 +928,10 @@ class MainActivity : AppCompatActivity() {
         androidx.core.content.ContextCompat.registerReceiver(
                 this,
                 pushMessageReceiver,
-                IntentFilter(UnifiedPushService.ACTION_PUSH_MESSAGE_RECEIVED),
+                IntentFilter().apply {
+                    addAction(UnifiedPushService.ACTION_PUSH_MESSAGE_RECEIVED)
+                    addAction(PushSubscriptionManager.ACTION_PUSH_STATE_CHANGED)
+                },
                 androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
         )
         startForegroundSse()

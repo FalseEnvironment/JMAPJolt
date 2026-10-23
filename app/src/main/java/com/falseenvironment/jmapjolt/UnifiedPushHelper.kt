@@ -1,6 +1,8 @@
 package com.falseenvironment.jmapjolt
 
+import android.content.Context
 import android.util.Log
+import android.view.View
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -15,6 +17,57 @@ internal fun MainActivity.loadUnifiedPushPreferences() {
     val prefs = getSharedPreferences(MainActivity.PREFS_NAME, android.content.Context.MODE_PRIVATE)
     unifiedPushSwitch.isChecked = prefs.getBoolean(KEY_UP_ENABLED, false)
     sseSwitch.isChecked = JmapEventSourceService.isEnabled(this)
+    updateUnifiedPushStatus()
+}
+
+/**
+ * Renders the last JMAP PushSubscription outcome under the switch. The toggle alone used
+ * to say "on" even when the create had failed or the server never posted a verification,
+ * which is exactly the silent dead end the retry/subscription work removes.
+ */
+internal fun MainActivity.updateUnifiedPushStatus() {
+    if (!PushSubscriptionManager.isEnabled(this)) {
+        settingsUnifiedPushStatus.visibility = View.GONE
+        return
+    }
+    val statusEmail = PushSubscriptionManager.statusEmail(this)
+    val currentEmail = connectedAccount?.email
+    // A state recorded for a different account says nothing about the one on screen.
+    val status = if (statusEmail == null || currentEmail == null ||
+        statusEmail.equals(currentEmail, ignoreCase = true)
+    ) {
+        PushSubscriptionManager.status(this)
+    } else {
+        null
+    }
+
+    // Nothing to explain while everything works: the switch and its subtitle already say
+    // so, and a duplicated "active" line just adds noise.
+    if (status?.state == PushSubscriptionManager.PushState.ACTIVE) {
+        settingsUnifiedPushStatus.visibility = View.GONE
+        return
+    }
+
+    settingsUnifiedPushStatus.visibility = View.VISIBLE
+    settingsUnifiedPushStatus.setText(
+        when (status?.state) {
+            PushSubscriptionManager.PushState.ERROR -> when (status.detail) {
+                "create_failed" -> R.string.settings_unifiedpush_state_error_create
+                "verify_timeout" -> R.string.settings_unifiedpush_state_error_verify
+                "verify_rejected" -> R.string.settings_unifiedpush_state_error_rejected
+                else -> R.string.settings_unifiedpush_state_error
+            }
+
+            PushSubscriptionManager.PushState.PENDING -> when (status.detail) {
+                "no_endpoint" -> R.string.settings_unifiedpush_state_no_endpoint
+                "verifying" -> R.string.settings_unifiedpush_state_verifying
+                else -> R.string.settings_unifiedpush_state_pending
+            }
+
+            // Nothing attempted yet (or just switched on): the pass is about to run.
+            else -> R.string.settings_unifiedpush_state_pending
+        }
+    )
 }
 
 internal fun MainActivity.saveUnifiedPushEnabled(enabled: Boolean) {

@@ -117,6 +117,13 @@
     <string name="settings_sse_subtitle">Not recommended. Requires the run-in-background permission and shows a persistent notification</string>
     <string name="settings_sse_denied_background">Direct Server Push disabled</string>
     <string name="settings_unifiedpush_subtitle">Recommended. Instant push for new mail</string>
+    <string name="settings_unifiedpush_state_pending">Registering with the server…</string>
+    <string name="settings_unifiedpush_state_verifying">Waiting for server verification…</string>
+    <string name="settings_unifiedpush_state_no_endpoint">Waiting for the UnifiedPush distributor…</string>
+    <string name="settings_unifiedpush_state_error">Not active. Reopen the app to retry.</string>
+    <string name="settings_unifiedpush_state_error_create">Not active: registration failed. Reopen the app to retry.</string>
+    <string name="settings_unifiedpush_state_error_verify">Not active: the server did not confirm the subscription. Reopen the app to retry.</string>
+    <string name="settings_unifiedpush_state_error_rejected">Not active: the server rejected the verification. Reopen the app to retry.</string>
     <string name="sse_notification_text">Listening for new emails…</string>
     <string name="settings_unifiedpush_test_sending">Sending test notification…</string>
     <string name="settings_unifiedpush_test_sent">Test notification sent.</string>

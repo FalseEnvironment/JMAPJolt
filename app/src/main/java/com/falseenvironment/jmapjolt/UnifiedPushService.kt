@@ -5,6 +5,7 @@ import android.content.Context.MODE_PRIVATE
 import android.content.Intent
 import android.util.Log
 import androidx.work.Constraints
+import androidx.work.Data
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.OutOfQuotaPolicy
@@ -76,18 +77,42 @@ class UnifiedPushService : PushService() {
             // No keys yet: the subscription was never registered with encryption, so there is
             // nothing to authenticate against. Treat it as a bare wake-up — sync, show nothing.
             Log.w(TAG, "Push received before WebPush keys exist — syncing without rendering the payload")
+        } else {
+            // Any authenticated push proves the server accepted the subscription, even if
+            // the verification answer was missed while the app was not running.
+            receiverScope.launch { PushSubscriptionManager.notePushReceived(context) }
         }
 
-        // A decrypted payload is a JMAP StateChange, not user-facing text. The new-mail
-        // notification is raised by EmailSyncWorker once it knows what actually changed.
+        // draft-ietf-jmap-emailpush: the server pushes the ids of the delivered messages,
+        // so the worker notifies exactly those (in any mailbox) instead of diffing INBOX.
+        val emailPush = plaintext?.let { parseEmailPushPayload(it) }
+        if (emailPush != null) {
+            Log.d(TAG, "EmailPush received (${emailPush.emailIds.size} email(s))")
+        }
+
+        // A decrypted payload is a JMAP EmailPush/StateChange, not user-facing text. The
+        // new-mail notification is raised by EmailSyncWorker once it knows what changed.
         // Expedited: on Android 12+ this runs even in Doze (subject to quota) instead of
         // waiting for a maintenance window, which is what keeps the notification instant.
-        WorkManager.getInstance(context).enqueue(
-            OneTimeWorkRequestBuilder<EmailSyncWorker>()
-                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-                .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
-                .build()
-        )
+        val work = OneTimeWorkRequestBuilder<EmailSyncWorker>()
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+        if (emailPush != null) {
+            work.setInputData(
+                Data.Builder()
+                    .putStringArray(
+                        EmailSyncWorker.KEY_EMAIL_IDS,
+                        emailPush.emailIds.toTypedArray()
+                    )
+                    .apply {
+                        emailPush.accountId?.let {
+                            putString(EmailSyncWorker.KEY_JMAP_ACCOUNT_ID, it)
+                        }
+                    }
+                    .build()
+            )
+        }
+        WorkManager.getInstance(context).enqueue(work.build())
 
         context.sendBroadcast(Intent(ACTION_PUSH_MESSAGE_RECEIVED).setPackage(context.packageName))
     }
@@ -185,4 +210,40 @@ class UnifiedPushService : PushService() {
             null
         }
     }
+}
+
+internal data class EmailPushPayload(val accountId: String?, val emailIds: List<String>)
+
+/**
+ * draft-ietf-jmap-emailpush:
+ * {"@type":"EmailPush","accountId":"...","emails":[{"id":"..."}],"state":"..."}
+ * Only the ids are used: the worker fetches full summaries for exactly those.
+ */
+internal fun parseEmailPushPayload(payload: ByteArray): EmailPushPayload? = try {
+    val json = JSONObject(String(payload, Charsets.UTF_8))
+    if (json.optString("@type") != "EmailPush") {
+        null
+    } else {
+        val emails = json.optJSONArray("emails")
+        val ids = buildList {
+            if (emails != null) {
+                for (i in 0 until emails.length()) {
+                    emails.optJSONObject(i)
+                        ?.optString("id")
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let { add(it) }
+                }
+            }
+        }.distinct()
+        if (ids.isEmpty()) {
+            null
+        } else {
+            EmailPushPayload(
+                accountId = json.optString("accountId").takeIf { it.isNotBlank() },
+                emailIds = ids
+            )
+        }
+    }
+} catch (_: Exception) {
+    null
 }
