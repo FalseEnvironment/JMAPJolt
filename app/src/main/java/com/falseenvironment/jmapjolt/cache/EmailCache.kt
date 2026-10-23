@@ -38,15 +38,11 @@ interface CachedEmailDao {
     @Query("SELECT * FROM cached_emails WHERE bucket = :bucket ORDER BY received_at DESC")
     suspend fun loadBucket(bucket: String): List<CachedEmailRow>
 
-    /** Rows of [bucket] that already hold a downloaded body. */
-    @Query("SELECT * FROM cached_emails WHERE bucket = :bucket AND full_body != ''")
-    suspend fun loadWithBody(bucket: String): List<CachedEmailRow>
-
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(rows: List<CachedEmailRow>)
 
-    @Query("DELETE FROM cached_emails WHERE bucket = :bucket")
-    suspend fun clearBucket(bucket: String)
+    @Query("DELETE FROM cached_emails WHERE bucket = :bucket AND id IN (:ids)")
+    suspend fun deleteRows(bucket: String, ids: List<String>)
 }
 
 @Database(entities = [CachedEmailRow::class], version = 2, exportSchema = false)

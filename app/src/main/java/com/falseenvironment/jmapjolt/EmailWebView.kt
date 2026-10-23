@@ -24,7 +24,12 @@ import java.io.ByteArrayInputStream
 internal object EmailWebView {
     const val BASE_URL = "https://jmapjolt.invalid/email/"
 
-    fun harden(wv: WebView, loadImages: () -> Boolean, onLink: ((String) -> Unit)? = null) {
+    fun harden(
+        wv: WebView,
+        loadImages: () -> Boolean,
+        onLink: ((String) -> Unit)? = null,
+        onPageFinished: (() -> Unit)? = null,
+    ) {
         wv.settings.apply {
             // Only the trusted fit script runs: the sanitized HTML cannot carry a
             // script tag, and the CSP in each document allows just its own nonce.
@@ -49,7 +54,7 @@ internal object EmailWebView {
             cacheMode = WebSettings.LOAD_NO_CACHE
             blockNetworkImage = !loadImages()
         }
-        wv.webViewClient = GuardedClient(loadImages, onLink)
+        wv.webViewClient = GuardedClient(loadImages, onLink, onPageFinished)
         // A body WebView is laid out at its full content height inside a
         // NestedScrollView. If it takes focus on tap, Android scrolls both the
         // WebView and the outer ScrollView to reveal the focused link — the whole
@@ -66,8 +71,13 @@ internal object EmailWebView {
 
     private class GuardedClient(
         private val loadImages: () -> Boolean,
-        private val onLink: ((String) -> Unit)?
+        private val onLink: ((String) -> Unit)?,
+        private val onPageFinished: (() -> Unit)?,
     ) : WebViewClient() {
+
+        override fun onPageFinished(view: WebView, url: String?) {
+            onPageFinished?.invoke()
+        }
 
         override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
             val url = request.url

@@ -281,7 +281,11 @@ internal fun MainActivity.setupEmailDetailView() {
         settings.setSupportZoom(true)
         settings.builtInZoomControls = true
         settings.displayZoomControls = false
-        EmailWebView.harden(this, { EmailWebView.isImageLoadingEnabled(act) }, act::showLinkConfirmationDialog)
+        EmailWebView.harden(this, { EmailWebView.isImageLoadingEnabled(act) }, act::showLinkConfirmationDialog, onPageFinished = {
+            // Late layout changes (fonts, images) can leave a wrap_content measure stale;
+            // asking for one more pass after the page is done keeps the body tall enough.
+            post { requestLayout() }
+        })
     }
     detailBody.addView(detailWebView)
     // Weighted spacer: when the body is shorter than the viewport (fillViewport stretches
@@ -779,6 +783,11 @@ internal fun MainActivity.buildHtmlContent(rawBodyIn: String, subject: String = 
     val readingCss = """
         html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
         html,body{overflow-x:hidden}
+        /* Templates that pin body/#bodyTable to height:100% collapse the
+           root scroller to the viewport height when combined with a wrap_content WebView:
+           the document measures a few px tall and the body scrolls inside an invisible
+           box. Let the root grow with its content instead. */
+        html,body{height:auto!important}
         body{margin-left:auto!important;margin-right:auto!important;max-width:720px!important;padding:16px;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:14px;line-height:1.6;word-wrap:break-word;overflow-wrap:break-word}
         img:not([style*="max-width"]){max-width:100%!important}
         img[style*="max-width"]{max-width:100%}

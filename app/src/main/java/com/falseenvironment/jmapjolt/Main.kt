@@ -722,8 +722,8 @@ class MainActivity : AppCompatActivity() {
         }
         // Purge the WebView disk cache: detail views run with LOAD_NO_CACHE, but
         // caches accumulated before that (or by other WebView writes) linger forever.
-        // Instantiating a WebView starts Chromium (100-300 ms), so this runs once
-        // ever, and after the first frame rather than inline in onCreate.
+        // Instantiating a WebView costs 100-300 ms, so this runs once ever, and
+        // after the first frame rather than inline in onCreate.
         purgeWebViewCacheOnce()
         // One-time cleanup of the legacy flat JSON cache (replaced by the Room store), plus
         // the attachments staged for other apps, which are only needed while the share or

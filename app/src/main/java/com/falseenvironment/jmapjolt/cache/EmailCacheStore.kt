@@ -29,6 +29,10 @@ object EmailCacheStore {
     private const val KEY_PASSPHRASE = "db_passphrase_b64"
     private const val PASSPHRASE_BYTES = 32
 
+    // Deletions bind one SQLite variable per id; 500 stays far below the variable
+    // count of the oldest Android SQLite builds.
+    private const val DELETE_CHUNK_IDS = 500
+
     @Volatile private var db: EmailCacheDatabase? = null
 
     /**
@@ -96,10 +100,14 @@ object EmailCacheStore {
                 val dao = database.cachedEmailDao()
                 // Callers can hold a list fetched without bodies (sync, background warm-up)
                 // for a folder whose rows were never loaded into memory: keep what is on disk.
-                val stored = dao.loadWithBody(bucket).map { it.toDisplayEmail() }
-                val rows = emails.keepLocalBodies(stored).map { it.toRow(bucket) }
-                dao.clearBucket(bucket)
-                dao.upsert(rows)
+                val stored = dao.loadBucket(bucket)
+                val withBody = stored.filter { it.fullBody.isNotBlank() }.map { it.toDisplayEmail() }
+                val rows = emails.keepLocalBodies(withBody).map { it.toRow(bucket) }
+                // Only rows that appeared, changed or disappeared are written; identical
+                // ones stay untouched on disk instead of being deleted and re-encrypted.
+                val plan = planDifferentialWrite(stored, rows)
+                plan.deleteIds.chunked(DELETE_CHUNK_IDS).forEach { dao.deleteRows(bucket, it) }
+                dao.upsert(plan.upsertRows)
             }
         }
 
@@ -180,4 +188,26 @@ object EmailCacheStore {
             (0 until arr.length()).map { arr.getString(it) }
         }.getOrDefault(emptyList())
     }
+}
+
+/**
+ * The writes a folder save actually needs: rows identical to what is on disk are left
+ * untouched, so a star tap, a body fetch or a warm-up save does not delete and re-encrypt
+ * every row of the folder (full HTML bodies included — that used to be the cost of the
+ * whole-bucket rewrite).
+ */
+internal data class DifferentialCacheWrite(
+    val deleteIds: List<String>,
+    val upsertRows: List<CachedEmailRow>,
+)
+
+internal fun planDifferentialWrite(
+    stored: List<CachedEmailRow>,
+    fresh: List<CachedEmailRow>,
+): DifferentialCacheWrite {
+    val freshIds = fresh.mapTo(mutableSetOf()) { it.id }
+    val deletes = stored.filterNot { it.id in freshIds }.map { it.id }
+    val storedById = stored.associateBy { it.id }
+    val upserts = fresh.filter { storedById[it.id] != it }
+    return DifferentialCacheWrite(deletes, upserts)
 }
