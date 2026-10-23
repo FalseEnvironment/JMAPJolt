@@ -203,6 +203,10 @@ internal fun JMapClient.EmailSummary.toDisplayEmail(accountEmail: String) = Disp
 internal fun MainActivity.attachLabelDrag() {
     if (labelDragHelper != null) return
     val rv = navigationView.getChildAt(0) as? RecyclerView ?: return
+    // NavigationMenuPresenter notifies the whole item range on every menu rebuild. The
+    // default item animator cross-fades every row, which shows up as a one-frame flicker
+    // when a drag ends and the drawer is rebuilt; the drag itself uses view animations.
+    rv.itemAnimator = null
 
     fun itemIdOf(vh: RecyclerView.ViewHolder): Int? {
         val itemView = vh.itemView as? androidx.appcompat.view.menu.MenuView.ItemView ?: return null
@@ -224,9 +228,10 @@ internal fun MainActivity.attachLabelDrag() {
     var dragMinDY = -Float.MAX_VALUE
     var dragMaxDY = Float.MAX_VALUE
     var lastDragDY = 0f
-    // True while the drop animation is running. Starting another drag in that window
-    // would have the pending rebuild swap the menu under the new drag.
-    var dropAnimating = false
+    // True when the finger actually drags the row (swap or not): used to tell a real
+    // reorder from a long-press that is only meant to reveal the pencil.
+    var movedDuringDrag = false
+    val touchSlop = android.view.ViewConfiguration.get(this).scaledTouchSlop.toFloat()
 
     fun dataIndex(id: Int): Int {
         labelNavIds[id]?.let { keyword -> return labels.indexOfFirst { it.keyword == keyword } }
@@ -263,7 +268,6 @@ internal fun MainActivity.attachLabelDrag() {
             recyclerView: RecyclerView,
             viewHolder: RecyclerView.ViewHolder
         ): Int {
-            if (dropAnimating) return 0
             val id = itemIdOf(viewHolder) ?: return 0
             return if (labelNavIds.containsKey(id) || subfolderNavIds.containsKey(id))
                 makeMovementFlags(ItemTouchHelper.UP or ItemTouchHelper.DOWN, 0)
@@ -315,6 +319,7 @@ internal fun MainActivity.attachLabelDrag() {
             } else {
                 subfolderDisplayOrder.add(to, subfolderDisplayOrder.removeAt(from))
             }
+            movedDuringDrag = true
             reflowSection()
             return true
         }
@@ -325,15 +330,16 @@ internal fun MainActivity.attachLabelDrag() {
             viewHolder.itemView.performHapticFeedback(
                 android.view.HapticFeedbackConstants.LONG_PRESS
             )
-            viewHolder.itemView.alpha = 0.7f
             draggedView = viewHolder.itemView
             lastDragDY = 0f
+            movedDuringDrag = false
             dragMinDY = -Float.MAX_VALUE
             dragMaxDY = Float.MAX_VALUE
 
             val id = itemIdOf(viewHolder)
             val rows = mutableListOf<Pair<View, Int>>()
             if (id != null) {
+                showDrawerEditPencil(id)
                 for (i in 0 until rv.childCount) {
                     val child = rv.getChildAt(i)
                     val childId = itemIdOf(rv.getChildViewHolder(child)) ?: continue
@@ -355,7 +361,7 @@ internal fun MainActivity.attachLabelDrag() {
 
         override fun clearView(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder) {
             super.clearView(recyclerView, viewHolder)
-            viewHolder.itemView.alpha = 1f
+            drawerDragEndedAt = android.os.SystemClock.uptimeMillis()
             dragMinDY = -Float.MAX_VALUE
             dragMaxDY = Float.MAX_VALUE
             saveLabels()
@@ -364,50 +370,50 @@ internal fun MainActivity.attachLabelDrag() {
             val id = itemIdOf(viewHolder)
             val start = startIndices[viewHolder.itemView]
             val data = id?.let { dataIndex(it) } ?: -1
-            val finalOffset = if (start != null && data >= 0)
-                (data - start) * viewHolder.itemView.height.toFloat() else 0f
-            // ItemTouchHelper's recovery is zero-length, so it has already snapped the
-            // row back to its layout slot: put it back under the finger, then animate it
-            // into the slot its data order now owns before rebuilding the menu there.
-            viewHolder.itemView.translationY = lastDragDY
+            // A drag that ends where it started leaves the menu order untouched: only
+            // the pencil has to be (re)attached, avoiding a full-drawer rebuild.
+            val orderUnchanged = start != null && data >= 0 && start == data
+
+            // Drop is instantaneous: no post-release animation. Rows keep their layout
+            // slots during a drag, so the dragged row is the only thing still offset;
+            // snapping it straight into its data-order slot and repainting
+            // synchronously leaves no frame where a stale row position can show.
             val rows = sectionRows
             draggedView = null
             sectionRows = emptyList()
             startIndices = emptyMap()
-            dropAnimating = true
-
-            fun finishDrop() {
-                viewHolder.itemView.animate().setListener(null)
-                rows.forEach { (view, _) ->
-                    view.animate().cancel()
-                    view.translationY = 0f
-                }
-                viewHolder.itemView.translationY = 0f
-                dropAnimating = false
-                rebuildDrawerMenu()
+            rows.forEach { (view, _) ->
+                view.animate().cancel()
+                view.translationY = 0f
             }
-
-            if (kotlin.math.abs(lastDragDY - finalOffset) < 0.5f) {
-                finishDrop()
+            if (orderUnchanged) {
+                if (drawerEditPencil?.parent == null && movedDuringDrag) {
+                    // The user reordered and came back: no pencil, so releasing does
+                    // not relayout the row either.
+                    hideDrawerEditPencil()
+                } else {
+                    attachDrawerEditPencilNow(viewHolder, recyclerView)
+                }
             } else {
-                viewHolder.itemView.animate()
-                    .translationY(finalOffset)
-                    .setDuration(180)
-                    // onAnimationEnd also runs on cancel, so the rebuild (and clearing
-                    // dropAnimating) can never be skipped and leave drag disabled.
-                    .setListener(object : android.animation.AnimatorListenerAdapter() {
-                        override fun onAnimationEnd(animation: android.animation.Animator) {
-                            finishDrop()
-                        }
-                    })
-                    .start()
+                // Rebind the menu and clear the drag offsets in the same UI-thread
+                // pass. notifyDataSetChanged only marks the rows invalid: until the
+                // RecyclerView layout runs, a draw would still paint the old content,
+                // i.e. the dragged row flashing in its original slot. Force the rebind
+                // through a synchronous measure+layout on the menu list so the next
+                // draw already shows the new order.
+                rebuildDrawerMenu()
+                recyclerView.measure(
+                    View.MeasureSpec.makeMeasureSpec(rv.width, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(rv.height, View.MeasureSpec.EXACTLY)
+                )
+                recyclerView.layout(rv.left, rv.top, rv.right, rv.bottom)
             }
         }
 
         override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {}
 
-        // No drop "recovery" slide back to the pre-drag slot; clearView animates into
-        // the new one instead.
+        // No drop "recovery" slide back to the pre-drag slot; clearView snaps straight
+        // to the new one.
         override fun getAnimationDuration(
             recyclerView: RecyclerView,
             animationType: Int,
@@ -454,7 +460,12 @@ internal fun MainActivity.attachLabelDrag() {
             isCurrentlyActive: Boolean
         ) {
             val clampedDY = if (actionState == ItemTouchHelper.ACTION_STATE_DRAG) {
-                dY.coerceIn(dragMinDY, dragMaxDY).also { if (isCurrentlyActive) lastDragDY = it }
+                dY.coerceIn(dragMinDY, dragMaxDY).also {
+                    if (isCurrentlyActive) {
+                        lastDragDY = it
+                        if (kotlin.math.abs(it) > touchSlop) movedDuringDrag = true
+                    }
+                }
             } else dY
             super.onChildDraw(c, recyclerView, viewHolder, dX, clampedDY, actionState, isCurrentlyActive)
         }

@@ -376,6 +376,13 @@ class MainActivity : AppCompatActivity() {
     internal fun debugTs(): String =
         java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
     internal var labelDragHelper: ItemTouchHelper? = null
+    /** Pencil shown after long-pressing a drawer label/folder, and the nav id it edits. */
+    internal var drawerEditPencil: ImageView? = null
+    internal var drawerEditPencilNavId = 0
+    /** Uptime of the last drawer drag end, used to swallow the click the release generates. */
+    internal var drawerDragEndedAt = 0L
+    /** Theme+accent of the item background currently applied to the drawer. */
+    internal var drawerItemBackgroundKey: String? = null
     /** mailboxIds in user-defined display order for the Folders section of the drawer. */
     internal var subfolderDisplayOrder: MutableList<String> = mutableListOf()
 
@@ -889,6 +896,7 @@ class MainActivity : AppCompatActivity() {
         }
         drawerLayout.addDrawerListener(object : androidx.drawerlayout.widget.DrawerLayout.SimpleDrawerListener() {
             override fun onDrawerClosed(drawerView: View) {
+                hideDrawerEditPencil()
                 drawerAccountsList.visibility = View.GONE
                 drawerAccountArrow.rotation = 0f
             }

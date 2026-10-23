@@ -206,6 +206,11 @@ internal fun MainActivity.showAddAccountDialog() {
 
 internal fun MainActivity.bindDrawerNavigation() {
     navigationView.setNavigationItemSelectedListener { item ->
+        val sinceDrag = android.os.SystemClock.uptimeMillis() - drawerDragEndedAt
+        // A long-press drag that is released without moving still reaches the row's click
+        // listener; it must not navigate away and take the freshly shown pencil with it.
+        if (sinceDrag in 0..500) return@setNavigationItemSelectedListener true
+        hideDrawerEditPencil()
         // Calendar, Contacts and Settings live in the bottom navigation bar; the drawer
         // only lists mail destinations.
         if (composeContainer.visibility == View.VISIBLE) hideCompose()
@@ -394,8 +399,86 @@ internal fun MainActivity.registerUnifiedPushAuto(manualDistributor: String) {
 
 internal fun MainActivity.rebuildDrawerMenuPublic() = rebuildDrawerMenu()
 
+private fun MainActivity.drawerEditPencilView(): ImageView =
+    drawerEditPencil ?: ImageView(this).apply {
+        val dp = resources.displayMetrics.density
+        val p = (8 * dp).toInt()
+        setImageResource(R.drawable.ic_lucide_pencil)
+        imageTintList = ColorStateList.valueOf(currentAccentColor.toColorInt())
+        scaleType = ImageView.ScaleType.FIT_CENTER
+        setPadding(p, p, p, p)
+        isClickable = true
+        isFocusable = true
+        background = ContextCompat.getDrawable(
+            this@drawerEditPencilView,
+            android.util.TypedValue().also {
+                theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, it, true)
+            }.resourceId
+        )
+        setOnClickListener { openDrawerEditDialog() }
+    }.also { drawerEditPencil = it }
+
+/** Records which drawer label/folder the pencil edits; the next menu rebuild attaches it. */
+internal fun MainActivity.showDrawerEditPencil(navId: Int) {
+    if (!labelNavIds.containsKey(navId) && !subfolderNavIds.containsKey(navId)) return
+    if (drawerEditPencilNavId != navId) {
+        // Moving the pencil to another entry: drop the old MenuItem's reference too, or a
+        // later rebind of that row would bring the deleted view back.
+        navigationView.menu.findItem(drawerEditPencilNavId)?.actionView = null
+        drawerEditPencil?.let { pencil -> (pencil.parent as? ViewGroup)?.removeView(pencil) }
+    }
+    drawerEditPencilNavId = navId
+    drawerEditPencilView().contentDescription =
+        if (labelNavIds.containsKey(navId)) "Edit label" else "Edit folder"
+}
+
+/** Binds the pencil to the row that just finished a drag without rebuilding the menu. */
+internal fun MainActivity.attachDrawerEditPencilNow(
+    viewHolder: RecyclerView.ViewHolder,
+    recyclerView: RecyclerView
+) {
+    val navId = drawerEditPencilNavId
+    if (navId == 0) return
+    val item = navigationView.menu.findItem(navId) ?: return
+    val pencil = drawerEditPencilView()
+    // Already on this row (e.g. a second drag of the same entry): rebinding it would only
+    // repaint the row for nothing.
+    if (pencil.parent != null && item.actionView === pencil) return
+    (pencil.parent as? ViewGroup)?.removeView(pencil)
+    item.actionView = pencil
+    val position = viewHolder.bindingAdapterPosition
+    if (position != RecyclerView.NO_POSITION) recyclerView.adapter?.notifyItemChanged(position)
+}
+
+internal fun MainActivity.hideDrawerEditPencil() {
+    val navId = drawerEditPencilNavId
+    drawerEditPencilNavId = 0
+    // Do not let a recycled row re-attach the view through its old MenuItem.
+    navigationView.menu.findItem(navId)?.actionView = null
+    drawerEditPencil?.let { pencil -> (pencil.parent as? ViewGroup)?.removeView(pencil) }
+}
+
+private fun MainActivity.openDrawerEditDialog() {
+    val navId = drawerEditPencilNavId
+    hideDrawerEditPencil()
+    if (navId == 0) return
+    val label = labelNavIds[navId]?.let { keyword -> labels.find { it.keyword == keyword } }
+    if (label != null) {
+        showEditLabelDialog(label) {}
+        return
+    }
+    val mailboxId = subfolderNavIds[navId] ?: return
+    val mbox = mailboxCache?.find { it.id == mailboxId } ?: return
+    val meta = folderMetaFor(mailboxId)
+        ?: FolderMeta(mailboxId, null, "#8A8A8A").also { folderMeta.add(it) }
+    showEditFolderDialog(mbox, meta) {}
+}
+
 internal fun MainActivity.rebuildDrawerMenu() {
     val menu = navigationView.menu
+    // Take the pencil off its current row before rows are rebound so it can't be left
+    // behind on a recycled view; the item re-attaches it via its action view below.
+    drawerEditPencil?.let { pencil -> (pencil.parent as? ViewGroup)?.removeView(pencil) }
     menu.clear()
     // Per-item icon colors (labels): disable the global tint and tint manually.
     navigationView.itemIconTintList = null
@@ -450,6 +533,7 @@ internal fun MainActivity.rebuildDrawerMenu() {
         item.setIcon(R.drawable.ic_lucide_tag)
         item.icon?.mutate()?.setTint(label.colorHex.toColorInt())
         item.isCheckable = true
+        if (navId == drawerEditPencilNavId) drawerEditPencil?.let { item.actionView = it }
     }
 
     // User-created folders (mailboxes without a JMAP role, sorted in tree order)
@@ -492,7 +576,11 @@ internal fun MainActivity.rebuildDrawerMenu() {
             item.setIcon(R.drawable.ic_lucide_folder)
             item.icon?.mutate()?.setTint(folderIconColor(mbox.id, defaultIconTint))
             item.isCheckable = true
+            if (navId == drawerEditPencilNavId) drawerEditPencil?.let { item.actionView = it }
         }
+    }
+    if (drawerEditPencilNavId != 0 && menu.findItem(drawerEditPencilNavId) == null) {
+        drawerEditPencilNavId = 0
     }
 
     // Outside the mailbox (calendar, contacts, settings) no folder is highlighted: the
@@ -503,30 +591,36 @@ internal fun MainActivity.rebuildDrawerMenu() {
     if (inMailbox) menu.findItem(selectedFolder)?.isChecked = true
     attachLabelDrag()
 
-    val dp = resources.displayMetrics.density
-    val softAccent = tokens.accentSoft(currentAccentColor.toColorInt())
-    val cornerR = 999 * dp
-    // M3-style floating pill: rounded on all corners, inset from both edges so it
-    // reads as a distinct selected chip rather than a full-bleed tab/arrow bar.
-    val sideInset = (12 * dp).toInt()
-    fun accentShape(alpha: Int): android.graphics.drawable.Drawable {
-        val shape = android.graphics.drawable.GradientDrawable().apply {
-            this.shape = android.graphics.drawable.GradientDrawable.RECTANGLE
-            setColor(softAccent)
-            this.alpha = alpha
-            cornerRadius = cornerR
+    // setItemBackground() notifies every row (notifyItemChanged), which the item
+    // animator turns into a full-list cross-fade; only reapply it when it changed.
+    val backgroundKey = "$currentTheme|$currentAccentColor"
+    if (drawerItemBackgroundKey != backgroundKey) {
+        drawerItemBackgroundKey = backgroundKey
+        val dp = resources.displayMetrics.density
+        val softAccent = tokens.accentSoft(currentAccentColor.toColorInt())
+        val cornerR = 999 * dp
+        // M3-style floating pill: rounded on all corners, inset from both edges so it
+        // reads as a distinct selected chip rather than a full-bleed tab/arrow bar.
+        val sideInset = (12 * dp).toInt()
+        fun accentShape(alpha: Int): android.graphics.drawable.Drawable {
+            val shape = android.graphics.drawable.GradientDrawable().apply {
+                this.shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                setColor(softAccent)
+                this.alpha = alpha
+                cornerRadius = cornerR
+            }
+            return android.graphics.drawable.InsetDrawable(shape, sideInset, 0, sideInset, 0)
         }
-        return android.graphics.drawable.InsetDrawable(shape, sideInset, 0, sideInset, 0)
+        val stateList = android.graphics.drawable.StateListDrawable().apply {
+            // Tinted pill, not a solid accent block: the label turns accent on top of it
+            // (see applyTheme's itemTextColor), which keeps it readable on every accent.
+            addState(intArrayOf(android.R.attr.state_checked), accentShape(255))
+            addState(intArrayOf(android.R.attr.state_activated), accentShape(255))
+            addState(intArrayOf(android.R.attr.state_pressed), accentShape(140))
+            addState(intArrayOf(), android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+        }
+        navigationView.post { navigationView.itemBackground = stateList }
     }
-    val stateList = android.graphics.drawable.StateListDrawable().apply {
-        // Tinted pill, not a solid accent block: the label turns accent on top of it
-        // (see applyTheme's itemTextColor), which keeps it readable on every accent.
-        addState(intArrayOf(android.R.attr.state_checked), accentShape(255))
-        addState(intArrayOf(android.R.attr.state_activated), accentShape(255))
-        addState(intArrayOf(android.R.attr.state_pressed), accentShape(140))
-        addState(intArrayOf(), android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
-    }
-    navigationView.post { navigationView.itemBackground = stateList }
     navigationView.post { applyDrawerScrollbarStyle() }
 }
 
