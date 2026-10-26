@@ -347,6 +347,81 @@ internal fun MainActivity.handleMailtoIntent(intent: android.content.Intent?) {
     intent.data = null
 }
 
+/**
+ * Opens compose from a share-sheet hand-off (ACTION_SEND / ACTION_SEND_MULTIPLE).
+ * Unlike mailto:, these intents can carry files, which is how apps such as Arcticons
+ * send an icon request with its zip attached alongside the subject and body.
+ */
+internal fun MainActivity.handleSendIntent(intent: android.content.Intent?) {
+    val action = intent?.action ?: return
+    if (action != android.content.Intent.ACTION_SEND &&
+        action != android.content.Intent.ACTION_SEND_MULTIPLE) return
+    if (savedAccounts.isEmpty()) return
+
+    val to = intent.intentAddresses(android.content.Intent.EXTRA_EMAIL)
+    val cc = intent.intentAddresses(android.content.Intent.EXTRA_CC)
+    val bcc = intent.intentAddresses(android.content.Intent.EXTRA_BCC)
+    val subject = intent.getCharSequenceExtra(android.content.Intent.EXTRA_SUBJECT)?.toString().orEmpty()
+    val plainText = intent.getCharSequenceExtra(android.content.Intent.EXTRA_TEXT)
+    val htmlText = intent.getCharSequenceExtra(android.content.Intent.EXTRA_HTML_TEXT)
+    val streams = intent.sharedStreamUris()
+
+    showComposeView()
+    to.forEach { addRecipientChip(it, category = 0) }
+    cc.forEach { addRecipientChip(it, category = 1) }
+    bcc.forEach { addRecipientChip(it, category = 2) }
+    if (subject.isNotBlank()) composeSubjectInput.setText(subject)
+    when {
+        !plainText.isNullOrBlank() -> composeBodyInput.setText(plainText)
+        !htmlText.isNullOrBlank() ->
+            composeBodyInput.setText(Html.fromHtml(htmlText.toString(), Html.FROM_HTML_MODE_LEGACY))
+    }
+    streams.forEach { addAttachment(it, fallbackMimeType = intent.type) }
+    if (to.isNotEmpty()) composeBodyInput.requestFocus()
+
+    // Consume so a config change does not repopulate (and duplicate) the draft.
+    intent.action = null
+    intent.data = null
+}
+
+/** Address extras are normally String[], but some senders use one comma-separated String. */
+@Suppress("DEPRECATION")
+private fun android.content.Intent.intentAddresses(name: String): List<String> =
+    parseIntentAddresses(extras?.get(name))
+
+internal fun parseIntentAddresses(raw: Any?): List<String> {
+    val values = when (raw) {
+        is Array<*> -> raw.filterIsInstance<String>()
+        is Iterable<*> -> raw.filterIsInstance<String>()
+        is CharSequence -> listOf(raw.toString())
+        else -> return emptyList()
+    }
+    return values
+        .flatMap { it.split(',', ';') }
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .distinct()
+}
+
+/** Files shared through EXTRA_STREAM or ClipData, deduplicated by URI. */
+@Suppress("DEPRECATION")
+private fun android.content.Intent.sharedStreamUris(): List<Uri> {
+    val uris = mutableListOf<Uri>()
+    when (action) {
+        android.content.Intent.ACTION_SEND -> (extras?.get(android.content.Intent.EXTRA_STREAM) as? Uri)
+            ?.let { uris += it }
+        android.content.Intent.ACTION_SEND_MULTIPLE -> when (val raw = extras?.get(android.content.Intent.EXTRA_STREAM)) {
+            is Uri -> uris += raw
+            is Iterable<*> -> uris += raw.filterIsInstance<Uri>()
+            is Array<*> -> uris += raw.filterIsInstance<Uri>()
+        }
+    }
+    clipData?.let { clip ->
+        for (i in 0 until clip.itemCount) clip.getItemAt(i).uri?.let { uris += it }
+    }
+    return uris.distinctBy { it.toString() }
+}
+
 internal fun MainActivity.showComposeView() {
     editingDraftId = null
     carriedAttachments.clear()
@@ -863,15 +938,16 @@ internal fun MainActivity.pickFile() {
     pickFileLauncher.launch(arrayOf("*/*"))
 }
 
-internal fun MainActivity.addAttachment(uri: Uri) {
+internal fun MainActivity.addAttachment(uri: Uri, fallbackMimeType: String? = null) {
     val name = contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)
         ?.use { cursor ->
-            cursor.moveToFirst()
-            cursor.getString(0) ?: uri.lastPathSegment ?: "file"
+            if (cursor.moveToFirst()) cursor.getString(0) ?: uri.lastPathSegment ?: "file" else null
         } ?: (uri.lastPathSegment ?: "file")
     val size = contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)
-        ?.use { it.moveToFirst(); if (it.columnCount > 0) it.getLong(0) else 0L } ?: 0L
-    val mime = contentResolver.getType(uri) ?: "application/octet-stream"
+        ?.use { if (it.moveToFirst() && it.columnCount > 0) it.getLong(0) else 0L } ?: 0L
+    val mime = contentResolver.getType(uri)
+        ?: fallbackMimeType?.takeIf { it != "*/*" }
+        ?: "application/octet-stream"
     pendingAttachments.add(MainActivity.AttachmentData(uri, name, mime, size))
     refreshAttachmentChips()
 }

@@ -794,7 +794,6 @@ class MainActivity : AppCompatActivity() {
         loadAccounts()
         ensurePushSubscription(register = true)
         applyTheme()
-        handleMailtoIntent(intent)
         handleWidgetIntent(intent)
         handleCalendarIntent(intent)
 
@@ -921,6 +920,10 @@ class MainActivity : AppCompatActivity() {
         // After the session restore decided the initial screen, honor a pending calendar
         // widget tap so it lands on the calendar (WEEK) instead of the inbox.
         applyPendingCalendarIntent()
+        // Compose hand-offs run last so the mailbox restore cannot repaint the top bar
+        // over the draft opened from a mailto: link or a share-sheet attachment.
+        handleMailtoIntent(intent)
+        handleSendIntent(intent)
         emailInput.addTextChangedListener(simpleWatcher)
         passwordInput.addTextChangedListener(simpleWatcher)
         serverUrlInput.addTextChangedListener(simpleWatcher)
@@ -2369,6 +2372,7 @@ class MainActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleMailtoIntent(intent)
+        handleSendIntent(intent)
         handleWidgetIntent(intent)
         handleCalendarIntent(intent)
         applyPendingCalendarIntent()
