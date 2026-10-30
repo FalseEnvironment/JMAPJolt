@@ -114,7 +114,8 @@ internal fun MainActivity.refreshAttachmentChips() {
     val carriedAccount = savedAccounts.find { it.email == selectedFromEmail }?.let {
         JMapClient.ConnectedAccount(
             email = it.email, password = it.password,
-            sessionUrl = it.sessionUrl, apiUrl = it.apiUrl, accountId = it.accountId
+            sessionUrl = it.sessionUrl, apiUrl = it.apiUrl, accountId = it.accountId,
+            authType = it.authType
         )
     }
     carriedAttachments.forEachIndexed { index, att ->

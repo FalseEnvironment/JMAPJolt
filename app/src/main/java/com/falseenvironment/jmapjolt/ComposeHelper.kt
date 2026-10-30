@@ -144,7 +144,8 @@ internal fun MainActivity.performSend() {
             password = it.password,
             sessionUrl = it.sessionUrl,
             apiUrl = it.apiUrl,
-            accountId = it.accountId
+            accountId = it.accountId,
+            authType = it.authType
         )
     } ?: connectedAccount
 
@@ -870,7 +871,8 @@ internal fun MainActivity.saveDraftFromCompose() {
             password = it.password,
             sessionUrl = it.sessionUrl,
             apiUrl = it.apiUrl,
-            accountId = it.accountId
+            accountId = it.accountId,
+            authType = it.authType
         )
     } ?: connectedAccount
 

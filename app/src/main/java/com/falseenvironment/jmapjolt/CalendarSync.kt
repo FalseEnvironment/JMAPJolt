@@ -30,7 +30,7 @@ object CalendarSync {
     suspend fun sync(
         context: Context,
         account: JMapClient.ConnectedAccount,
-        client: CalendarJmapClient = CalendarJmapClient()
+        client: CalendarJmapClient = CalendarJmapClient(context)
     ): Result = withContext(Dispatchers.IO) {
         runCatching {
             val calAccountId = client.calendarAccountId(account)

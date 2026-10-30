@@ -423,6 +423,15 @@
                     android:enabled="false"
                     android:text="@string/login_button" />
 
+                <Button
+                    android:id="@+id/oauthLoginButton"
+                    style="?attr/borderlessButtonStyle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:enabled="false"
+                    android:text="@string/login_oauth_button" />
+
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="0dp"

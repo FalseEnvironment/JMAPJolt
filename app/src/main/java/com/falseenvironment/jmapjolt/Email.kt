@@ -6,10 +6,12 @@ data class AccountEntry(
     val serverUrl: String,
     val sessionUrl: String,
     val apiUrl: String,
-    val accountId: String
+    val accountId: String,
+    /** BASIC stores [password]; OAUTH keeps tokens in OAuthTokenStore instead. */
+    val authType: AuthType = AuthType.BASIC
 ) {
     override fun toString() =
-        "AccountEntry(email=<redacted>, serverUrl=$serverUrl, accountId=$accountId)"
+        "AccountEntry(email=<redacted>, serverUrl=$serverUrl, accountId=$accountId, authType=$authType)"
 }
 
 data class EmailAttachmentInfo(

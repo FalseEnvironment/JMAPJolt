@@ -33,11 +33,14 @@ object AuthError {
         .filterIsInstance<ErrorResponseException>()
         .firstNotNullOfOrNull { it.errorResponse?.status }
 
-    /** True when the server refused the credentials rather than failing for another reason. */
-    fun isAuthFailure(error: Throwable): Boolean {
+    /** True when the server rejected the credentials rather than failing for another reason. */
+    fun isAuthFailure(error: Throwable): Boolean =
+        isUnauthorized(error) || statusOf(error) == 403
+
+    /** True when the access token itself was refused (401), not merely a forbidden operation. */
+    fun isUnauthorized(error: Throwable): Boolean {
         if (causes(error).any { it is UnauthorizedException }) return true
-        val status = statusOf(error)
-        return status == 401 || status == 403
+        return statusOf(error) == 401
     }
 
     /**

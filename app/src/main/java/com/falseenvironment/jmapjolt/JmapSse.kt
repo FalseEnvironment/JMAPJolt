@@ -1,6 +1,6 @@
 package com.falseenvironment.jmapjolt
 
-import android.util.Base64
+import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -24,9 +24,12 @@ object JmapSse {
     private const val SESSION_TIMEOUT_SECONDS = 10L
     private const val MAX_SESSION_REDIRECTS = 3
 
-    suspend fun resolveEventSourceUrl(account: JMapClient.ConnectedAccount): String? =
+    suspend fun resolveEventSourceUrl(
+        context: Context,
+        account: JMapClient.ConnectedAccount
+    ): String? =
         withContext(Dispatchers.IO) {
-            // The session fetch carries Basic auth, so it runs on the no-redirect
+            // The session fetch carries the account's credentials, so it runs on the no-redirect
             // client: a 30x must not replay the credentials somewhere else. The
             // redirect is followed by hand below, only towards the same origin.
             val http = AppHttp.noRedirects.newBuilder()
@@ -37,7 +40,7 @@ object JmapSse {
             // GET on it answers with the site root, not the session object. Probe the
             // usual session paths instead of giving up on the first non-session body.
             for (candidate in sessionProbeUrls(account.sessionUrl)) {
-                val session = fetchSessionJson(http, account, candidate) ?: continue
+                val session = fetchSessionJson(context, http, account, candidate) ?: continue
                 val template = session.optString("eventSourceUrl").takeIf { it.isNotBlank() }
                 if (template == null) {
                     Log.w(TAG, "Session at ${LogRedact.host(candidate)} carries no eventSourceUrl")
@@ -71,7 +74,8 @@ object JmapSse {
      * redirects by hand. Returns null — with the reason logged — when the candidate
      * is not a JMAP session.
      */
-    private fun fetchSessionJson(
+    private suspend fun fetchSessionJson(
+        context: Context,
         http: OkHttpClient,
         account: JMapClient.ConnectedAccount,
         url: String
@@ -81,7 +85,7 @@ object JmapSse {
         while (hops <= MAX_SESSION_REDIRECTS) {
             val request = Request.Builder()
                 .url(current)
-                .header("Authorization", basicAuth(account))
+                .header("Authorization", account.authorizationHeader(context))
                 .header("Accept", "application/json")
                 .get()
                 .build()
@@ -140,6 +144,7 @@ object JmapSse {
      * caller owns the reconnect/backoff loop.
      */
     suspend fun connectAndListen(
+        context: Context,
         account: JMapClient.ConnectedAccount,
         url: String,
         onEvent: (type: String, data: String) -> Unit
@@ -154,7 +159,7 @@ object JmapSse {
             .build()
         val request = Request.Builder()
             .url(url)
-            .header("Authorization", basicAuth(account))
+            .header("Authorization", account.authorizationHeader(context))
             .header("Accept", "text/event-stream")
             .header("Cache-Control", "no-cache")
             .header("Accept-Encoding", "identity")
@@ -201,10 +206,5 @@ object JmapSse {
         } catch (_: Exception) {
             false
         }
-    }
-
-    fun basicAuth(account: JMapClient.ConnectedAccount): String {
-        val credentials = "${account.email}:${account.password}"
-        return "Basic " + Base64.encodeToString(credentials.toByteArray(), Base64.NO_WRAP)
     }
 }

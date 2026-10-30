@@ -115,7 +115,8 @@ internal fun MainActivity.persistConnectedAccount(account: JMapClient.ConnectedA
                     serverUrl = serverUrl,
                     sessionUrl = account.sessionUrl,
                     apiUrl = account.apiUrl,
-                    accountId = account.accountId
+                    accountId = account.accountId,
+                    authType = account.authType
             )
     if (existingIndex >= 0) savedAccounts[existingIndex] = entry else savedAccounts.add(entry)
     currentAccountEmail = account.email
@@ -139,7 +140,8 @@ internal fun MainActivity.loadAccounts() {
                         serverUrl = item.optString("serverUrl"),
                         sessionUrl = item.optString("sessionUrl"),
                         apiUrl = item.optString("apiUrl"),
-                        accountId = item.optString("accountId")
+                        accountId = item.optString("accountId"),
+                        authType = if (item.optString("authType") == "OAUTH") AuthType.OAUTH else AuthType.BASIC
                 )
         )
     }
@@ -159,6 +161,7 @@ internal fun MainActivity.saveAccounts() {
                         .put("sessionUrl", it.sessionUrl)
                         .put("apiUrl", it.apiUrl)
                         .put("accountId", it.accountId)
+                        .put("authType", it.authType.name)
         )
     }
     val root = JSONObject().put("accounts", accounts).put("current", currentAccountEmail ?: "")
@@ -722,6 +725,9 @@ internal fun MainActivity.showEditProfileDialog(email: String) {
 }
 
 private fun MainActivity.deleteAccount(account: AccountEntry) {
+    if (account.authType == AuthType.OAUTH) {
+        lifecycleScope.launch { OAuthClient.revoke(this@deleteAccount, account.email) }
+    }
     savedAccounts.removeAll { it.email.equals(account.email, ignoreCase = true) }
     saveAccounts()
     if (account.email == currentAccountEmail) {
@@ -762,7 +768,8 @@ internal fun MainActivity.resolveAccountFor(email: DisplayEmail): JMapClient.Con
         password = entry.password,
         sessionUrl = entry.sessionUrl,
         apiUrl = entry.apiUrl,
-        accountId = entry.accountId
+        accountId = entry.accountId,
+        authType = entry.authType
     )
 }
 
@@ -781,7 +788,8 @@ internal fun MainActivity.switchToSavedAccount(account: AccountEntry, forceInbox
         password = account.password,
         sessionUrl = account.sessionUrl,
         apiUrl = account.apiUrl,
-        accountId = account.accountId
+        accountId = account.accountId,
+        authType = account.authType
     )
     currentAccountEmail = account.email
     loadLabels()

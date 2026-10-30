@@ -13,8 +13,8 @@ import java.util.concurrent.TimeUnit
  *
  * Callers that need different limits derive one with [OkHttpClient.newBuilder]
  * — that shares the pool rather than starting a second stack. Redirects follow
- * OkHttp's default (on); every call that carries Basic auth turns them off
- * itself, so credentials are never replayed to another host on a 30x.
+ * OkHttp's default (on); every call that carries an Authorization header turns
+ * them off itself, so credentials are never replayed to another host on a 30x.
  */
 internal object AppHttp {
 

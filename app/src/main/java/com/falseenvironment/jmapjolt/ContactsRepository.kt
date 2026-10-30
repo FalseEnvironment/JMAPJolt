@@ -12,7 +12,7 @@ import kotlinx.coroutines.withContext
  */
 class ContactsRepository(private val context: Context) {
 
-    private val jmap = ContactsJmapClient()
+    private val jmap = ContactsJmapClient(context)
 
     /** Cached per instance: resolving it costs a session round-trip. */
     private var cachedAccountId: String? = null

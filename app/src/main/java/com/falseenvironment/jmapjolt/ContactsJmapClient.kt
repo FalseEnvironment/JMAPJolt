@@ -1,8 +1,8 @@
 package com.falseenvironment.jmapjolt
 
+import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.Credentials
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit
  * over the same authenticated endpoint used for mail, mapping JSContact (RFC 9553) Card objects
  * to [Contact].
  */
-class ContactsJmapClient {
+class ContactsJmapClient(private val context: Context) {
 
     // Stalwart rejects a charset parameter on the content type with notRequest; use bare json.
     private val json = "application/json".toMediaType()
@@ -46,7 +46,7 @@ class ContactsJmapClient {
             runCatching {
                 val req = Request.Builder()
                     .url(account.sessionUrl)
-                    .header("Authorization", Credentials.basic(account.email, account.password))
+                    .header("Authorization", account.authorizationHeader(context))
                     .get()
                     .build()
                 httpFollow.newCall(req).execute().use { resp ->
@@ -69,7 +69,7 @@ class ContactsJmapClient {
         return null
     }
 
-    private fun post(account: JMapClient.ConnectedAccount, methodCalls: JSONArray): JSONObject {
+    private suspend fun post(account: JMapClient.ConnectedAccount, methodCalls: JSONArray): JSONObject {
         val payload = JSONObject().apply {
             put("using", JSONArray(listOf(CAP_CORE, CAP_CONTACTS)))
             put("methodCalls", methodCalls)
@@ -79,7 +79,7 @@ class ContactsJmapClient {
         val body = payload.toString().replace("\\/", "/")
         val req = Request.Builder()
             .url(sessionApiUrl ?: account.apiUrl)
-            .header("Authorization", Credentials.basic(account.email, account.password))
+            .header("Authorization", account.authorizationHeader(context))
             .post(body.toRequestBody(json))
             .build()
         http.newCall(req).execute().use { resp ->

@@ -119,7 +119,7 @@ class JmapEventSourceService : Service() {
         try {
             while (true) {
                 try {
-                    val sseUrl = JmapSse.resolveEventSourceUrl(account)
+                    val sseUrl = JmapSse.resolveEventSourceUrl(this@JmapEventSourceService, account)
                     if (sseUrl == null) {
                         // A session that never yields an eventSourceUrl is just as fatal to push
                         // as a dropped stream, so it counts towards the retry backoff:
@@ -132,7 +132,7 @@ class JmapEventSourceService : Service() {
                     }
                     backoffMs = BACKOFF_INITIAL_MS
                     Log.d(TAG, "Connecting SSE for ${LogRedact.email(account.email)} (host=${LogRedact.host(sseUrl)})")
-                    JmapSse.connectAndListen(account, sseUrl) { type, data ->
+                    JmapSse.connectAndListen(this@JmapEventSourceService, account, sseUrl) { type, data ->
                         handleEvent(type, data, account)
                     }
                     backoffMs = BACKOFF_INITIAL_MS

@@ -4,7 +4,6 @@ import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.Credentials
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -13,6 +12,8 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import rs.ltt.jmap.client.JmapClient
+import rs.ltt.jmap.client.http.BasicAuthHttpAuthentication
+import rs.ltt.jmap.client.http.BearerAuthHttpAuthentication
 import rs.ltt.jmap.common.entity.capability.CoreCapability
 import rs.ltt.jmap.common.entity.capability.MailAccountCapability
 import rs.ltt.jmap.common.util.Mapper
@@ -38,7 +39,9 @@ class JMapClient(private val context: Context) {
         val password: String,
         val sessionUrl: String,
         val apiUrl: String,
-        val accountId: String
+        val accountId: String,
+        /** BASIC keeps the stored password/app password; OAUTH uses Bearer + refresh tokens. */
+        val authType: AuthType = AuthType.BASIC
     )
 
     data class EmailSummary(
@@ -151,6 +154,76 @@ class JMapClient(private val context: Context) {
                     lastError = error
                     // The server answered and refused these credentials: other candidate endpoints
                     // of the same server will refuse them too.
+                    if (AuthError.isAuthFailure(error)) break
+                }
+            }
+
+            ConnectResult(
+                success = false,
+                errorMessage = lastError?.let { AuthError.describe(context, it) }
+                    ?: context.getString(R.string.error_no_session_endpoint),
+                attemptedEndpoints = normalizedCandidates,
+                authFailed = lastError?.let { AuthError.isAuthFailure(it) } ?: false
+            )
+        }
+    }
+
+    /**
+     * Resolves the JMAP session for an account authenticated with a Bearer token
+     * obtained through OAuth. Mirrors [connect], including the cheap API call that
+     * proves the token is actually accepted rather than merely letting the session
+     * resource through.
+     */
+    suspend fun connectOAuth(
+        email: String,
+        serverInput: String,
+        accessToken: String
+    ): ConnectResult {
+        return withContext(Dispatchers.IO) {
+            val normalizedCandidates = buildSessionCandidates(serverInput)
+            if (normalizedCandidates.isEmpty()) {
+                return@withContext ConnectResult(
+                    success = false,
+                    errorMessage = "Invalid server URL"
+                )
+            }
+
+            var lastError: Throwable? = null
+            for (sessionUrl in normalizedCandidates) {
+                val httpUrl = sessionUrl.toHttpUrlOrNull() ?: continue
+                try {
+                    JmapClient(BearerAuthHttpAuthentication(email, accessToken), httpUrl)
+                        .use { client ->
+                            val session = client.getSession().get(12, TimeUnit.SECONDS)
+                            val apiUrl = session.getApiUrl().toString()
+                            val accountId = session.getPrimaryAccount(MailAccountCapability::class.java)
+                                ?: throw IllegalStateException("No mail account found on JMAP session")
+
+                            client.call(
+                                rs.ltt.jmap.common.method.call.email.GetEmailMethodCall.builder()
+                                    .accountId(accountId)
+                                    .ids(emptyArray())
+                                    .properties(arrayOf("id"))
+                                    .build()
+                            ).get(12, TimeUnit.SECONDS)
+
+                            return@withContext ConnectResult(
+                                success = true,
+                                resolvedSessionUrl = sessionUrl,
+                                connectedAccount = ConnectedAccount(
+                                    email = email,
+                                    password = "",
+                                    sessionUrl = sessionUrl,
+                                    apiUrl = apiUrl,
+                                    accountId = accountId,
+                                    authType = AuthType.OAUTH
+                                ),
+                                attemptedEndpoints = normalizedCandidates
+                            )
+                        }
+                } catch (error: Throwable) {
+                    if (error is kotlinx.coroutines.CancellationException) throw error
+                    lastError = error
                     if (AuthError.isAuthFailure(error)) break
                 }
             }
@@ -1039,7 +1112,7 @@ class JMapClient(private val context: Context) {
         }
     }
 
-    private fun uploadBlob(
+    private suspend fun uploadBlob(
         connectedAccount: ConnectedAccount,
         attachment: Attachment,
         uploadUrlTemplate: String,
@@ -1059,7 +1132,7 @@ class JMapClient(private val context: Context) {
                 ?: attachment.data.toRequestBody(mediaType)
             val request = Request.Builder()
                 .url(uploadUrl)
-                .header("Authorization", Credentials.basic(connectedAccount.email, connectedAccount.password))
+                .header("Authorization", connectedAccount.authorizationHeader(context))
                 .post(body)
                 .build()
             http.newCall(request).execute().use { response ->
@@ -1421,7 +1494,7 @@ class JMapClient(private val context: Context) {
                 )
             val request = Request.Builder()
                 .url(apiUrl)
-                .header("Authorization", Credentials.basic(connectedAccount.email, connectedAccount.password))
+                .header("Authorization", connectedAccount.authorizationHeader(context))
                 .post(payload.toString().toRequestBody("application/json".toMediaType()))
                 .build()
             AppHttp.noRedirects.newCall(request).execute().use { response ->
@@ -1493,9 +1566,9 @@ class JMapClient(private val context: Context) {
      *
      * The stored session URL can redirect (Stalwart redirects `/` to `/.well-known/jmap`).
      * The redirect is resolved *without* credentials so nothing can leak to another host,
-     * then the final URL is fetched with Basic auth and redirects disabled.
+     * then the final URL is fetched with the account's auth header and redirects disabled.
      */
-    private fun authenticatedSessionJson(connectedAccount: ConnectedAccount): JSONObject? {
+    private suspend fun authenticatedSessionJson(connectedAccount: ConnectedAccount): JSONObject? {
         val resolvedUrl = try {
             val probe = Request.Builder().url(connectedAccount.sessionUrl).get().build()
             AppHttp.client.newCall(probe).execute().use { it.request.url.toString() }
@@ -1511,7 +1584,7 @@ class JMapClient(private val context: Context) {
             .url(resolvedUrl)
             .header(
                 "Authorization",
-                Credentials.basic(connectedAccount.email, connectedAccount.password)
+                connectedAccount.authorizationHeader(context)
             )
             .get()
             .build()
@@ -1735,7 +1808,7 @@ class JMapClient(private val context: Context) {
      * method-level failure. The raw path is needed for the `emailPush` property, which
      * jmap-common 0.9.0 does not model.
      */
-    private fun rawPushSubscriptionSet(
+    private suspend fun rawPushSubscriptionSet(
         connectedAccount: ConnectedAccount,
         using: List<String>,
         arguments: JSONObject
@@ -1763,7 +1836,7 @@ class JMapClient(private val context: Context) {
                 .url(apiUrl)
                 .header(
                     "Authorization",
-                    Credentials.basic(connectedAccount.email, connectedAccount.password)
+                    connectedAccount.authorizationHeader(context)
                 )
                 .post(payload.toString().toRequestBody("application/json".toMediaType()))
                 .build()
@@ -1820,7 +1893,7 @@ class JMapClient(private val context: Context) {
                 val http = sharedHttp.newBuilder().callTimeout(60, TimeUnit.SECONDS).build()
                 val req = Request.Builder()
                     .url(downloadUrl)
-                    .header("Authorization", Credentials.basic(connectedAccount.email, connectedAccount.password))
+                    .header("Authorization", connectedAccount.authorizationHeader(context))
                     .get()
                     .build()
                 http.newCall(req).execute().use { resp ->
@@ -1869,7 +1942,7 @@ class JMapClient(private val context: Context) {
                     .build()
                 val req = Request.Builder()
                     .url(downloadUrl)
-                    .header("Authorization", Credentials.basic(connectedAccount.email, connectedAccount.password))
+                    .header("Authorization", connectedAccount.authorizationHeader(context))
                     .get()
                     .build()
                 // Write to a private temp name, then rename: a crash mid-copy must not leave
@@ -1908,11 +1981,17 @@ class JMapClient(private val context: Context) {
      * per-call session round trip. The library invalidates the cached session itself
      * when a response carries a new sessionState.
      */
-    private fun newClient(account: ConnectedAccount): JmapClient {
+    private suspend fun newClient(account: ConnectedAccount): JmapClient {
         val url = account.sessionUrl.toHttpUrlOrNull()
             ?: throw IllegalStateException("Invalid session URL")
-        return JmapClient(account.email, account.password, url)
-            .apply { setSessionCache(sessionCache) }
+        val auth = when (account.authType) {
+            AuthType.BASIC -> BasicAuthHttpAuthentication(account.email, account.password)
+            AuthType.OAUTH -> BearerAuthHttpAuthentication(
+                account.email,
+                OAuthClient.accessToken(context, account.email)
+            )
+        }
+        return JmapClient(auth, url).apply { setSessionCache(sessionCache) }
     }
 
     companion object {
@@ -1967,9 +2046,9 @@ class JMapClient(private val context: Context) {
             val input = rawInput.trim()
             if (input.isBlank()) return emptyList()
 
-            // Credentials travel as Basic auth: never allow cleartext, so the scheme is
-            // dropped here and https re-applied below. Anything that is not http(s) is
-            // not a server address the app can use.
+            // Credentials travel in an Authorization header: never allow cleartext, so the
+            // scheme is dropped here and https re-applied below. Anything that is not
+            // http(s) is not a server address the app can use.
             val scheme = SCHEME_PREFIX.find(input)
             val schemeName = scheme?.groupValues?.get(1)?.lowercase()
             if (schemeName != null && schemeName != "http" && schemeName != "https") return emptyList()
@@ -1991,8 +2070,8 @@ class JMapClient(private val context: Context) {
         }
 
         /**
-         * Server-provided URLs (upload/download/eventSource templates) receive Basic auth
-         * credentials, so they must be HTTPS and on the same host as the session URL.
+         * Server-provided URLs (upload/download/eventSource templates) receive the account's
+         * Authorization header, so they must be HTTPS and on the same host as the session URL.
          */
         internal fun isTrustedServerUrl(url: String, sessionUrl: String): Boolean {
             val u = url.toHttpUrlOrNull() ?: return false

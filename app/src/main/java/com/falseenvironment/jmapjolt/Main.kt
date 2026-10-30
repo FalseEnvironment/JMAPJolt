@@ -178,6 +178,7 @@ class MainActivity : AppCompatActivity() {
     internal lateinit var passwordInputLayout: com.google.android.material.textfield.TextInputLayout
     internal lateinit var serverUrlInputLayout: com.google.android.material.textfield.TextInputLayout
     internal lateinit var loginButton: Button
+    internal lateinit var oauthLoginButton: Button
     internal lateinit var mailboxContainer: FrameLayout
     internal lateinit var emailsRecyclerView: RecyclerView
     internal lateinit var emailDetailContainer: EmailDetailContainer
@@ -424,7 +425,7 @@ class MainActivity : AppCompatActivity() {
     internal var selectedFolder: Int = R.id.nav_inbox
     internal var prevUpdateFolder: Int = -1
     internal val folderCache = FolderCache()
-    private var syncJob: Job? = null
+    internal var syncJob: Job? = null
 
     /** Completion of the current sync job's first fetch, used by pull-to-refresh. */
     private var syncFirstResultCallback: (() -> Unit)? = null
@@ -596,6 +597,7 @@ class MainActivity : AppCompatActivity() {
         passwordInputLayout = findViewById(R.id.passwordInputLayout)
         serverUrlInputLayout = findViewById(R.id.serverUrlInputLayout)
         loginButton = findViewById(R.id.loginButton)
+        oauthLoginButton = findViewById(R.id.oauthLoginButton)
         mailboxContainer = findViewById(R.id.mailboxContainer)
         emailsRecyclerView = findViewById(R.id.emailsRecyclerView)
         mailSwipeRefresh = findViewById(R.id.mailSwipeRefresh)
@@ -923,7 +925,10 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
-        if (!restoreLastAccountSession()) {
+        // An OAuth redirect may have launched this process from scratch: finish that
+        // sign-in instead of restoring the previous (or no) session.
+        val oauthRedirectHandled = handleOAuthRedirect(intent)
+        if (!oauthRedirectHandled && !restoreLastAccountSession()) {
             if (getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getBoolean(KEY_WELCOME_SHOWN, false)) {
                 showLoginScreen()
             } else {
@@ -945,6 +950,7 @@ class MainActivity : AppCompatActivity() {
         passwordInput.addTextChangedListener(simpleWatcher)
         serverUrlInput.addTextChangedListener(simpleWatcher)
         loginButton.setOnClickListener { connectAndOpenMailbox() }
+        oauthLoginButton.setOnClickListener { beginOAuthLogin() }
         androidx.core.content.ContextCompat.registerReceiver(
                 this,
                 pushMessageReceiver,
@@ -2220,6 +2226,7 @@ class MainActivity : AppCompatActivity() {
                             return@launch
                         } catch (e: Throwable) {
                             Log.e(TAG, "Sync failed", e)
+                            if (handleOAuthReauth(e)) return@launch
                             status.text =
                                     getString(
                                             R.string.status_sync_failed,
@@ -2300,14 +2307,14 @@ class MainActivity : AppCompatActivity() {
         var backoffMs = SSE_BACKOFF_INITIAL_MS
         while (true) {
             try {
-                val url = JmapSse.resolveEventSourceUrl(account)
+                val url = JmapSse.resolveEventSourceUrl(this@MainActivity, account)
                 if (url == null) {
                     delay(backoffMs)
                     backoffMs = minOf(backoffMs * 2, SSE_BACKOFF_MAX_MS)
                     continue
                 }
                 backoffMs = SSE_BACKOFF_INITIAL_MS
-                JmapSse.connectAndListen(account, url) { _, data ->
+                JmapSse.connectAndListen(this@MainActivity, account, url) { _, data ->
                     if (JmapSse.isRelevantStateChange(data)) onSseStateChange()
                 }
             } catch (e: CancellationException) {
@@ -2427,6 +2434,7 @@ class MainActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        if (handleOAuthRedirect(intent)) return
         handleMailtoIntent(intent)
         handleSendIntent(intent)
         handleWidgetIntent(intent)

@@ -41,7 +41,8 @@ object SecureStorage {
                     password = it.optString("password"),
                     sessionUrl = it.optString("sessionUrl"),
                     apiUrl = it.optString("apiUrl"),
-                    accountId = it.optString("accountId")
+                    accountId = it.optString("accountId"),
+                    authType = if (it.optString("authType") == "OAUTH") AuthType.OAUTH else AuthType.BASIC
                 )
             }
         }

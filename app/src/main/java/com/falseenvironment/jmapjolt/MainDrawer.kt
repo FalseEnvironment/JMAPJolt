@@ -153,8 +153,58 @@ internal fun MainActivity.showAddAccountDialog() {
         setPadding((16 * dp).toInt(), (10 * dp).toInt(), (4 * dp).toInt(), (10 * dp).toInt())
         isClickable = true; isFocusable = true
     }
+    // Second account with real 2FA: no password field, the server's own page collects
+    // the password and TOTP code.
+    val oauthBtn = TextView(this).apply {
+        text = getString(R.string.login_oauth_button_short)
+        textSize = 14f
+        setTextColor(accentInt)
+        setPadding((16 * dp).toInt(), (10 * dp).toInt(), (4 * dp).toInt(), (10 * dp).toInt())
+        isClickable = true; isFocusable = true
+    }
     btnRow.addView(cancelBtn)
+    btnRow.addView(oauthBtn)
     btnRow.addView(loginBtn)
+
+    oauthBtn.setOnClickListener {
+        val email = dialogEmail.text.toString().trim()
+        val url = dialogServerUrl.text.toString().trim()
+        if (email.isBlank() || url.isBlank()) {
+            android.widget.Toast.makeText(
+                this,
+                "Please fill in all fields",
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
+            return@setOnClickListener
+        }
+        lifecycleScope.launch {
+            val authUrl = runCatching {
+                withContext(Dispatchers.IO) {
+                    OAuthClient.beginAuthorization(this@showAddAccountDialog, email, url)
+                }
+            }.getOrNull()
+            if (authUrl == null) {
+                android.widget.Toast.makeText(
+                    this@showAddAccountDialog,
+                    getString(R.string.oauth_error_start),
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+                return@launch
+            }
+            val opened = runCatching {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(authUrl)))
+            }.isSuccess
+            if (opened) {
+                dialog.dismiss()
+            } else {
+                android.widget.Toast.makeText(
+                    this@showAddAccountDialog,
+                    getString(R.string.oauth_error_no_browser),
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
 
     loginBtn.setOnClickListener {
         val email = dialogEmail.text.toString()
@@ -177,7 +227,8 @@ internal fun MainActivity.showAddAccountDialog() {
                     serverUrl = url,
                     sessionUrl = newAccount.sessionUrl,
                     apiUrl = newAccount.apiUrl,
-                    accountId = newAccount.accountId
+                    accountId = newAccount.accountId,
+                    authType = newAccount.authType
                 )
                 val idx = savedAccounts.indexOfFirst { it.email.equals(newAccount.email, ignoreCase = true) }
                 if (idx >= 0) savedAccounts[idx] = entry else savedAccounts.add(entry)
