@@ -251,6 +251,7 @@ internal fun MainActivity.bindPullToRefresh() {
         (MainActivity.PULL_TO_REFRESH_TRIGGER_DP * resources.displayMetrics.density).toInt()
     )
     mailSwipeRefresh.setOnRefreshListener {
+        connectionUi.manualRefreshPending = true
         status.text = getString(R.string.mailbox_refreshing, debugTs())
         refreshInboxNow { mailSwipeRefresh.isRefreshing = false }
     }
@@ -346,14 +347,15 @@ internal fun MainActivity.refreshInboxNow(onDone: (() -> Unit)? = null) {
     val account = connectedAccount
     if (account == null) {
         Log.w(MainActivity.TAG,"refreshInboxNow: no connected account")
+        connectionUi.manualRefreshPending = false
         status.text = getString(R.string.status_sync_not_connected, debugTs())
         onDone?.invoke()
         return
     }
     Log.d(MainActivity.TAG,"refreshInboxNow: starting fetch")
-    startPeriodicSync()
-    mailSwipeRefresh.isRefreshing = false
-    onDone?.invoke()
+    // The spinner (when pull-to-refresh started it) stays up until the first
+    // fetch lands or fails; startPeriodicSync reports that back here.
+    startPeriodicSync(onFirstResult = onDone)
 }
 
 internal fun MainActivity.registerUnifiedPushAuto(manualDistributor: String) {

@@ -9,6 +9,7 @@ import android.view.View
 internal fun MainActivity.emptyStateMessage(): String = when {
     isSearchActive ->
         getString(R.string.empty_search) + "\n" + getString(R.string.empty_search_hint)
+    connectionUi.problem != null -> getString(R.string.empty_offline)
     selectedFolder == R.id.nav_archive   -> getString(R.string.empty_archive)
     selectedFolder == R.id.nav_trash     -> getString(R.string.empty_trash)
     selectedFolder == R.id.nav_spam      -> getString(R.string.empty_spam)

@@ -165,6 +165,7 @@ internal fun MainActivity.loadNextEmailPage() {
             throw e
         } catch (e: Throwable) {
             Log.w(MainActivity.TAG, "Page fetch failed at position $position", e)
+            notifySyncFailure(e, userInitiated = true)
             isLoadingMore = false
             return@launch
         }

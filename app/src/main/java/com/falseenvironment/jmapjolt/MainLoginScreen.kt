@@ -21,6 +21,12 @@ internal fun MainActivity.showLoginScreen() {
     loginBackBtn.setOnClickListener { showOnboarding() }
     mailboxContainer.visibility = View.GONE
     settingsContainer.visibility = View.GONE
+    connectionUi.problem = null
+    connectionUi.lastProblem = null
+    connectionUi.lastNoticeAt = 0L
+    connectionUi.manualRefreshPending = false
+    connectionUi.log.clear()
+    connectionBanner.visibility = View.GONE
     // The status bar is the debug timestamp/sync-state readout, not general login
     // feedback — it must follow the "Debug mode" setting like everywhere else,
     // not force itself on and leak into a fresh install with the setting off.
@@ -89,9 +95,8 @@ internal fun MainActivity.connectAndOpenMailbox() {
             // (ntfy, Sunup, …) is installed, otherwise JMAP eventsource. Once the
             // decision is recorded, the Settings switches are never overridden.
             applyDefaultNotificationMode()
-            refreshInboxNow {
-                fetchAllFoldersBackground()
-            }
+            refreshInboxNow()
+            fetchAllFoldersBackground()
             if (unifiedPushSwitch.isChecked) {
                 registerUnifiedPushAuto("")
             }

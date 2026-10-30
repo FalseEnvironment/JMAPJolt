@@ -17,7 +17,7 @@ object AuthError {
     private const val MAX_CAUSE_DEPTH = 8
 
     /** Walks the cause chain: futures wrap the real failure in ExecutionException. */
-    private fun causes(error: Throwable): Sequence<Throwable> = sequence {
+    internal fun causes(error: Throwable): Sequence<Throwable> = sequence {
         var current: Throwable? = error
         var depth = 0
         while (current != null && depth < MAX_CAUSE_DEPTH) {
@@ -29,7 +29,7 @@ object AuthError {
     }
 
     /** HTTP status reported by the server, when the failure carries one. */
-    private fun statusOf(error: Throwable): Int? = causes(error)
+    internal fun statusOf(error: Throwable): Int? = causes(error)
         .filterIsInstance<ErrorResponseException>()
         .firstNotNullOfOrNull { it.errorResponse?.status }
 

@@ -26,6 +26,7 @@ internal fun MainActivity.showOnboarding(page: Int = 0) {
     loginBackBtn.visibility = View.GONE
     mailboxContainer.visibility = View.GONE
     settingsContainer.visibility = View.GONE
+    connectionBanner.visibility = View.GONE
     emailDetailContainer.visibility = View.GONE
     fabCompose.visibility = View.GONE
     customTopBar.visibility = View.GONE

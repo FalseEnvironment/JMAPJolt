@@ -248,6 +248,13 @@ internal fun MainActivity.applyAccentColor() {
     drawerToggle.drawerArrowDrawable.color = barContent
     applyNavIconTint(barContent)
     topBarAccentArea.setBackgroundColor(t.background)
+    // The connection banner is themed here too: changing the accent must repaint its
+    // Retry/Details actions immediately, not only on the next failure or app restart.
+    styleConnectionBanner()
+    // Pull-to-refresh spinner follows the palette instead of the stock blue/white:
+    // accent arrow on the theme's card surface.
+    mailSwipeRefresh.setColorSchemeColors(t.accentOnGround(accentInt))
+    mailSwipeRefresh.setProgressBackgroundColorSchemeColor(t.surfaceCard)
     // Update settings chevrons and icons immediately
     settingsGeneralChevron.imageTintList = accentTint
     settingsLabelsChevron.imageTintList = accentTint

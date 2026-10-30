@@ -205,6 +205,13 @@ class MainActivity : AppCompatActivity() {
     internal var detailPreviewWebView: android.webkit.WebView? = null
     internal var detailPreviewKey: String? = null
     internal lateinit var mailSwipeRefresh: SwipeRefreshLayout
+    internal lateinit var connectionBanner: LinearLayout
+    internal lateinit var connectionBannerIcon: ImageView
+    internal lateinit var connectionBannerText: TextView
+    internal lateinit var connectionBannerRetry: TextView
+    internal lateinit var connectionBannerDetail: TextView
+    internal val connectionUi = ConnectionUiState()
+    internal var networkCallback: android.net.ConnectivityManager.NetworkCallback? = null
     internal lateinit var unifiedPushSwitch: SwitchCompat
     internal lateinit var sseSwitch: SwitchCompat
     internal lateinit var settingsUnifiedPushStatus: TextView
@@ -419,6 +426,9 @@ class MainActivity : AppCompatActivity() {
     internal val folderCache = FolderCache()
     private var syncJob: Job? = null
 
+    /** Completion of the current sync job's first fetch, used by pull-to-refresh. */
+    private var syncFirstResultCallback: (() -> Unit)? = null
+
     /** True while the periodic sync loop for the selected folder is running. */
     internal val isPeriodicSyncActive: Boolean get() = syncJob?.isActive == true
     internal var cacheSaveJob: Job? = null
@@ -589,6 +599,13 @@ class MainActivity : AppCompatActivity() {
         mailboxContainer = findViewById(R.id.mailboxContainer)
         emailsRecyclerView = findViewById(R.id.emailsRecyclerView)
         mailSwipeRefresh = findViewById(R.id.mailSwipeRefresh)
+        connectionBanner = findViewById(R.id.connectionBanner)
+        connectionBannerIcon = findViewById(R.id.connectionBannerIcon)
+        connectionBannerText = findViewById(R.id.connectionBannerText)
+        connectionBannerRetry = findViewById(R.id.connectionBannerRetry)
+        connectionBannerDetail = findViewById(R.id.connectionBannerDetail)
+        connectionBannerRetry.setOnClickListener { retryConnection() }
+        connectionBannerDetail.setOnClickListener { showConnectionLogDialog() }
         fabCompose = findViewById(R.id.fabCompose)
         composeContainer = findViewById(R.id.composeContainer)
         composeSendButton = findViewById(R.id.composeSendButton)
@@ -1080,6 +1097,8 @@ class MainActivity : AppCompatActivity() {
         fabCompose.animateFabIn()
         settingsContainer.visibility = View.GONE
         customTopBar.visibility = View.VISIBLE
+        connectionBanner.visibility =
+            if (connectionUi.problem != null) View.VISIBLE else View.GONE
         isShowingEmailDetail = false
         currentSettingsSection = SettingsSection.ROOT
         invalidateOptionsMenu()
@@ -1971,16 +1990,26 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    internal fun startPeriodicSync() {
+    internal fun startPeriodicSync(onFirstResult: (() -> Unit)? = null) {
         syncJob?.cancel()
-        if (DemoInbox.isEnabled(this)) return
+        // A superseded refresh (e.g. the user switches folder mid-pull) must not
+        // leave the spinner up forever: close it out before starting the new job.
+        syncFirstResultCallback?.invoke()
+        syncFirstResultCallback = null
+        if (DemoInbox.isEnabled(this)) {
+            onFirstResult?.invoke()
+            return
+        }
         // No battery-optimization prompt here: this loop only polls while the app is
         // open (Doze doesn't throttle foreground network access), and with UnifiedPush
         // the distributor keeps its own push connection alive in the background.
         // The only exemption requests are user-initiated: the onboarding
         // "Background activity" row (SSE mode without a distributor) and the SSE
         // switch in Settings when it is turned on.
-        val account = connectedAccount ?: return
+        val account = connectedAccount ?: run {
+            onFirstResult?.invoke()
+            return
+        }
         val currentFolderId = selectedFolder
         val role = getFolderRole(selectedFolder)
         val isFav = selectedFolder == R.id.nav_favourite
@@ -1990,8 +2019,18 @@ class MainActivity : AppCompatActivity() {
         val subfolderMailboxId = subfolderNavIds[selectedFolder]
         val folderTitle = getCurrentMailboxTitle()
 
+        syncFirstResultCallback = onFirstResult
         syncJob =
                 lifecycleScope.launch {
+                    var firstResultReported = false
+                    fun reportFirstResult() {
+                        if (firstResultReported) return
+                        firstResultReported = true
+                        if (syncFirstResultCallback === onFirstResult) {
+                            syncFirstResultCallback = null
+                        }
+                        onFirstResult?.invoke()
+                    }
                     // Refresh mailbox list each sync cycle so new/deleted folders appear promptly.
                     // Compare by id set, not list equality: the server may return mailboxes
                     // in a different order each call, and a list-equality check would then
@@ -2022,10 +2061,13 @@ class MainActivity : AppCompatActivity() {
                                 if (folderCache[currentFolderId] != null &&
                                             emailStatesUnchanged(allAccounts, freshStates, lastEmailStates)
                                 ) {
+                                    notifySyncSuccess()
+                                    reportFirstResult()
                                     delay(SYNC_POLL_INTERVAL_MS)
                                     continue
                                 }
                                 lastEmailStates.putAll(freshStates)
+                                val failures = mutableListOf<Throwable>()
                                 val merged = allAccounts.flatMap { acc ->
                                     try {
                                         val base = jmapClient.fetchEmails(acc, limit = emailLimit).map { e ->
@@ -2063,18 +2105,26 @@ class MainActivity : AppCompatActivity() {
                                         base + extra
                                     } catch (e: kotlinx.coroutines.CancellationException) {
                                         throw e
-                                    } catch (_: Exception) {
+                                    } catch (e: Exception) {
+                                        failures += e
                                         emptyList()
                                     }
                                 }.sortedByDescending { it.receivedAt }
                                     .let { withLocalBodies(currentFolderId, it) }
                                     .let { PendingMutations.apply(it, currentFolderId) }
+                                // An all-account outage used to look like an empty inbox:
+                                // surface it so the banner and the retry path can react.
+                                if (failures.isNotEmpty() && failures.size == allAccounts.size) {
+                                    throw failures.first()
+                                }
                                 folderCache[currentFolderId] = merged
                                 updateEmailsList(merged)
                                 persistOfflineCache(currentFolderId, merged)
                                 status.text = if (merged.isEmpty())
                                     getString(R.string.status_sync_ok_empty, folderTitle, debugTs())
                                 else getString(R.string.status_sync_ok, merged.size, debugTs(), folderTitle)
+                                notifySyncSuccess()
+                                reportFirstResult()
                                 delay(SYNC_POLL_INTERVAL_MS)
                                 continue
                             }
@@ -2083,6 +2133,8 @@ class MainActivity : AppCompatActivity() {
                             if (folderCache[currentFolderId] != null &&
                                         emailStatesUnchanged(listOf(account), freshStates, lastEmailStates)
                             ) {
+                                notifySyncSuccess()
+                                reportFirstResult()
                                 delay(SYNC_POLL_INTERVAL_MS)
                                 continue
                             }
@@ -2162,6 +2214,8 @@ class MainActivity : AppCompatActivity() {
                                     if (fresh.isEmpty())
                                             getString(R.string.status_sync_ok_empty, folderTitle, debugTs())
                                     else getString(R.string.status_sync_ok, fresh.size, debugTs(), folderTitle)
+                            notifySyncSuccess()
+                            reportFirstResult()
                         } catch (_: CancellationException) {
                             return@launch
                         } catch (e: Throwable) {
@@ -2172,6 +2226,8 @@ class MainActivity : AppCompatActivity() {
                                             AuthError.describe(this@MainActivity, e),
                                             debugTs()
                                     )
+                            notifySyncFailure(e)
+                            reportFirstResult()
                             if (pendingMailboxShow) {
                                 pendingMailboxShow = false
                                 showMailboxScreen(skipRefresh = true)
@@ -2378,6 +2434,11 @@ class MainActivity : AppCompatActivity() {
         applyPendingCalendarIntent()
     }
 
+    override fun onStart() {
+        super.onStart()
+        registerNetworkCallback()
+    }
+
     override fun onResume() {
         super.onResume()
         onboardingPermRefresh?.invoke()
@@ -2394,6 +2455,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onStop() {
+        unregisterNetworkCallback()
         super.onStop()
         saveEmailCache(immediate = true)
     }
