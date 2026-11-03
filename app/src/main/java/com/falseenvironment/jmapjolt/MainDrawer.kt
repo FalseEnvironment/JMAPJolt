@@ -283,6 +283,8 @@ internal fun MainActivity.updateTopBarState() {
                 MainActivity.SettingsSection.SWIPE -> getString(R.string.settings_swipe_actions)
                 MainActivity.SettingsSection.UNIFIED_PUSH -> getString(R.string.settings_unifiedpush)
                 MainActivity.SettingsSection.THEME -> getString(R.string.settings_theme)
+                MainActivity.SettingsSection.CALENDAR -> getString(R.string.settings_calendar)
+                MainActivity.SettingsSection.CONTACTS -> getString(R.string.settings_contacts)
                 MainActivity.SettingsSection.ROOT -> getString(R.string.settings_title)
             }
         inMailbox -> getCurrentMailboxTitle()

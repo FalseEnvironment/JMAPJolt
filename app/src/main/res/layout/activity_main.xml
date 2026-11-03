@@ -904,12 +904,17 @@
                 android:scrollbars="none"
                 android:visibility="gone">
 
-                <LinearLayout
+                <FrameLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
                     android:paddingTop="8dp"
                     android:paddingBottom="24dp">
+
+                    <LinearLayout
+                        android:id="@+id/settingsRootPage"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
 
                     <!-- Ghost container kept for backward-compat code references -->
                     <LinearLayout
@@ -1038,1023 +1043,276 @@
                         </LinearLayout>
                     </LinearLayout>
 
-                    <!-- Appearance group -->
+                    <!-- Display entry: opens its own settings page -->
                     <LinearLayout
-                        android:id="@+id/settingsThemeContainer"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="16dp"
-                        android:layout_marginEnd="16dp"
-                        android:layout_marginTop="8dp"
-                        android:orientation="vertical"
-                        android:background="@drawable/bg_settings_card"
-                        android:paddingTop="4dp"
-                        android:paddingBottom="4dp">
-
-                        <LinearLayout
-                            android:id="@+id/settingsThemeHeader"
-                            android:layout_width="match_parent"
-                            android:layout_height="44dp"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal"
-                            android:paddingStart="20dp"
-                            android:paddingEnd="20dp">
-
-                            <TextView
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:text="@string/settings_theme"
-                                android:textSize="@dimen/text_sm"
-                                android:textAllCaps="true"
-                                android:letterSpacing="0.04"
-                                android:textColor="?attr/colorOnSurfaceVariant"
-                                android:textStyle="bold" />
-
-                            <ImageView
-                                android:id="@+id/settingsThemeChevron"
-                                android:layout_width="20dp"
-                                android:layout_height="20dp"
-                                android:src="@drawable/ic_lucide_chevron_down"
-                                android:scaleType="fitCenter"
-                                android:contentDescription="@null"
-                                android:visibility="gone" />
-
-                        </LinearLayout>
-
-                        <LinearLayout
-                            android:id="@+id/settingsThemeContent"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="vertical"
-                            android:paddingStart="20dp"
-                            android:paddingEnd="20dp"
-                            android:paddingBottom="8dp"
-                            android:visibility="visible">
-
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="48dp"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal">
-
-                                <TextView
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:text="@string/settings_main_theme"
-                                    android:textSize="@dimen/text_md" />
-
-                                <LinearLayout
-                                    android:id="@+id/themeDropdown"
-                                    android:layout_width="wrap_content"
-                                    android:minWidth="130dp"
-                                    android:layout_height="40dp"
-                                    android:gravity="center_vertical"
-                                    android:paddingStart="14dp"
-                                    android:paddingEnd="10dp"
-                                    android:orientation="horizontal"
-                                    android:clickable="true"
-                                    android:focusable="true"
-                                    android:background="?attr/selectableItemBackground">
-                                    <TextView
-                                        android:id="@+id/themeDropdownText"
-                                        android:layout_width="0dp"
-                                        android:layout_height="wrap_content"
-                                        android:layout_weight="1"
-                                        android:gravity="center"
-                                        android:textSize="@dimen/text_sm" />
-                                    <ImageView
-                                        android:layout_width="14dp"
-                                        android:layout_height="14dp"
-                                        android:layout_marginStart="6dp"
-                                        android:src="@drawable/ic_lucide_chevron_down"
-                                        android:contentDescription="@null"
-                                        android:scaleType="fitCenter" />
-                                </LinearLayout>
-                            </LinearLayout>
-
-                            <View
-                                android:layout_width="match_parent"
-                                android:layout_height="10dp" />
-
-                            <LinearLayout
-                                android:id="@+id/accentColorRow"
-                                android:layout_width="match_parent"
-                                android:layout_height="48dp"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal"
-                                android:clickable="true"
-                                android:focusable="true"
-                                android:background="?attr/selectableItemBackground">
-
-                                <TextView
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:text="@string/settings_accent_color"
-                                    android:textSize="@dimen/text_md" />
-
-                                <View
-                                    android:id="@+id/accentColorPreview"
-                                    android:layout_width="28dp"
-                                    android:layout_height="28dp" />
-
-                            </LinearLayout>
-
-                        </LinearLayout>
-                    </LinearLayout>
-
-                    <!-- General group -->
-                    <LinearLayout
-                        android:id="@+id/settingsGeneralContainer"
+                        android:id="@+id/settingsDisplayEntry"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="16dp"
                         android:layout_marginEnd="16dp"
                         android:layout_marginTop="12dp"
-                        android:orientation="vertical"
                         android:background="@drawable/bg_settings_card"
-                        android:paddingTop="4dp"
-                        android:paddingBottom="4dp">
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:foreground="?attr/selectableItemBackground">
 
                         <LinearLayout
-                            android:id="@+id/settingsGeneralHeader"
                             android:layout_width="match_parent"
-                            android:layout_height="44dp"
+                            android:layout_height="64dp"
                             android:gravity="center_vertical"
                             android:orientation="horizontal"
-                            android:paddingStart="20dp"
-                            android:paddingEnd="20dp">
+                            android:paddingStart="16dp"
+                            android:paddingEnd="16dp">
 
-                            <TextView
+                            <FrameLayout
+                                android:id="@+id/settingsDisplayIconBubble"
+                                android:layout_width="34dp"
+                                android:layout_height="34dp">
+
+                                <ImageView
+                                    android:id="@+id/settingsDisplayIcon"
+                                    android:layout_width="18dp"
+                                    android:layout_height="18dp"
+                                    android:layout_gravity="center"
+                                    android:contentDescription="@null"
+                                    android:scaleType="fitCenter"
+                                    android:src="@drawable/ic_lucide_image" />
+                            </FrameLayout>
+
+                            <LinearLayout
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
+                                android:layout_marginStart="14dp"
                                 android:layout_weight="1"
-                                android:text="@string/settings_general"
-                                android:textSize="@dimen/text_sm"
-                                android:textAllCaps="true"
-                                android:letterSpacing="0.04"
-                                android:textColor="?attr/colorOnSurfaceVariant"
-                                android:textStyle="bold" />
-
-                            <ImageView
-                                android:id="@+id/settingsGeneralChevron"
-                                android:layout_width="20dp"
-                                android:layout_height="20dp"
-                                android:src="@drawable/ic_lucide_chevron_down"
-                                android:scaleType="fitCenter"
-                                android:contentDescription="@null"
-                                android:visibility="gone" />
-
-                        </LinearLayout>
-
-                        <LinearLayout
-                            android:id="@+id/settingsGeneralContent"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="vertical"
-                            android:paddingStart="20dp"
-                            android:paddingEnd="20dp"
-                            android:paddingBottom="8dp"
-                            android:visibility="visible">
-
-                            <androidx.appcompat.widget.SwitchCompat
-                                android:id="@+id/loadImagesSwitch"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="4dp"
-                                android:text="@string/settings_load_images"
-                                android:textOn=""
-                                android:textOff=""
-                                android:textSize="@dimen/text_md" />
-
-                            <View
-                                android:layout_width="match_parent"
-                                android:layout_height="10dp" />
-
-                            <androidx.appcompat.widget.SwitchCompat
-                                android:id="@+id/loadFaviconsSwitch"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:text="@string/settings_load_favicons"
-                                android:textOn=""
-                                android:textOff=""
-                                android:textSize="@dimen/text_md" />
-
-                            <TextView
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="2dp"
-                                android:paddingStart="4dp"
-                                android:text="@string/settings_favicons_subtitle"
-                                android:textColor="?attr/colorOnSurfaceVariant"
-                                android:textSize="@dimen/text_xs" />
-
-                            <View
-                                android:layout_width="match_parent"
-                                android:layout_height="10dp" />
-
-                            <androidx.appcompat.widget.SwitchCompat
-                                android:id="@+id/threadConversationsSwitch"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:text="@string/settings_thread_conversations"
-                                android:textOn=""
-                                android:textOff=""
-                                android:textSize="@dimen/text_md" />
-
-                            <View
-                                android:layout_width="match_parent"
-                                android:layout_height="10dp" />
-
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="48dp"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal">
-
-                                <TextView
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:text="@string/settings_mark_read_delay"
-                                    android:textSize="@dimen/text_md" />
-
-                                <LinearLayout
-                                    android:id="@+id/markReadDelayDropdown"
-                                    android:layout_width="wrap_content"
-                                    android:minWidth="130dp"
-                                    android:layout_height="40dp"
-                                    android:gravity="center_vertical"
-                                    android:paddingStart="14dp"
-                                    android:paddingEnd="10dp"
-                                    android:orientation="horizontal"
-                                    android:clickable="true"
-                                    android:focusable="true"
-                                    android:background="?attr/selectableItemBackground">
-                                    <TextView
-                                        android:id="@+id/markReadDelayDropdownText"
-                                        android:layout_width="0dp"
-                                        android:layout_height="wrap_content"
-                                        android:layout_weight="1"
-                                        android:gravity="center"
-                                        android:textSize="@dimen/text_sm" />
-                                    <ImageView
-                                        android:layout_width="14dp"
-                                        android:layout_height="14dp"
-                                        android:layout_marginStart="6dp"
-                                        android:src="@drawable/ic_lucide_chevron_down"
-                                        android:contentDescription="@null"
-                                        android:scaleType="fitCenter" />
-                                </LinearLayout>
-                            </LinearLayout>
-
-                            <View
-                                android:layout_width="match_parent"
-                                android:layout_height="10dp" />
-
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="48dp"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal">
-
-                                <TextView
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:text="@string/settings_swipe_left"
-                                    android:textSize="@dimen/text_md" />
-
-                                <LinearLayout
-                                    android:id="@+id/swipeLeftDropdown"
-                                    android:layout_width="wrap_content"
-                                    android:minWidth="130dp"
-                                    android:layout_height="40dp"
-                                    android:gravity="center_vertical"
-                                    android:paddingStart="14dp"
-                                    android:paddingEnd="10dp"
-                                    android:orientation="horizontal"
-                                    android:clickable="true"
-                                    android:focusable="true"
-                                    android:background="?attr/selectableItemBackground">
-                                    <TextView
-                                        android:id="@+id/swipeLeftDropdownText"
-                                        android:layout_width="0dp"
-                                        android:layout_height="wrap_content"
-                                        android:layout_weight="1"
-                                        android:gravity="center"
-                                        android:textSize="@dimen/text_sm" />
-                                    <ImageView
-                                        android:layout_width="14dp"
-                                        android:layout_height="14dp"
-                                        android:layout_marginStart="6dp"
-                                        android:src="@drawable/ic_lucide_chevron_down"
-                                        android:contentDescription="@null"
-                                        android:scaleType="fitCenter" />
-                                </LinearLayout>
-                            </LinearLayout>
-
-                            <View
-                                android:layout_width="match_parent"
-                                android:layout_height="10dp" />
-
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="48dp"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal">
-
-                                <TextView
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:text="@string/settings_swipe_right"
-                                    android:textSize="@dimen/text_md" />
-
-                                <LinearLayout
-                                    android:id="@+id/swipeRightDropdown"
-                                    android:layout_width="wrap_content"
-                                    android:minWidth="130dp"
-                                    android:layout_height="40dp"
-                                    android:gravity="center_vertical"
-                                    android:paddingStart="14dp"
-                                    android:paddingEnd="10dp"
-                                    android:orientation="horizontal"
-                                    android:clickable="true"
-                                    android:focusable="true"
-                                    android:background="?attr/selectableItemBackground">
-                                    <TextView
-                                        android:id="@+id/swipeRightDropdownText"
-                                        android:layout_width="0dp"
-                                        android:layout_height="wrap_content"
-                                        android:layout_weight="1"
-                                        android:gravity="center"
-                                        android:textSize="@dimen/text_sm" />
-                                    <ImageView
-                                        android:layout_width="14dp"
-                                        android:layout_height="14dp"
-                                        android:layout_marginStart="6dp"
-                                        android:src="@drawable/ic_lucide_chevron_down"
-                                        android:contentDescription="@null"
-                                        android:scaleType="fitCenter" />
-                                </LinearLayout>
-                            </LinearLayout>
-
-                        </LinearLayout>
-
-                    </LinearLayout>
-
-                    <!-- Labels & folders group -->
-                    <LinearLayout
-                        android:id="@+id/settingsLabelsContainer"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="16dp"
-                        android:layout_marginEnd="16dp"
-                        android:layout_marginTop="12dp"
-                        android:orientation="vertical"
-                        android:background="@drawable/bg_settings_card"
-                        android:paddingTop="4dp"
-                        android:paddingBottom="4dp">
-
-                        <LinearLayout
-                            android:id="@+id/settingsLabelsHeader"
-                            android:layout_width="match_parent"
-                            android:layout_height="44dp"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal"
-                            android:paddingStart="20dp"
-                            android:paddingEnd="20dp">
-
-                            <TextView
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:text="@string/settings_labels"
-                                android:textSize="@dimen/text_sm"
-                                android:textAllCaps="true"
-                                android:letterSpacing="0.04"
-                                android:textColor="?attr/colorOnSurfaceVariant"
-                                android:textStyle="bold" />
-
-                            <ImageView
-                                android:id="@+id/settingsLabelsChevron"
-                                android:layout_width="20dp"
-                                android:layout_height="20dp"
-                                android:src="@drawable/ic_lucide_chevron_down"
-                                android:scaleType="fitCenter"
-                                android:contentDescription="@null"
-                                android:visibility="gone" />
-
-                        </LinearLayout>
-
-                        <LinearLayout
-                            android:id="@+id/settingsLabelsContent"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="vertical"
-                            android:paddingStart="20dp"
-                            android:paddingEnd="20dp"
-                            android:paddingBottom="8dp"
-                            android:visibility="visible">
-
-                            <LinearLayout
-                                android:id="@+id/settingsEditLabelsRow"
-                                android:layout_width="match_parent"
-                                android:layout_height="48dp"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal"
-                                android:clickable="true"
-                                android:focusable="true"
-                                android:background="?attr/selectableItemBackground">
-
-                                <TextView
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:text="@string/settings_edit_labels"
-                                    android:textSize="@dimen/text_md" />
-
-                                <TextView
-                                    android:id="@+id/settingsEditLabelsButton"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/settings_edit_labels_button"
-                                    android:textSize="@dimen/text_body"
-                                    android:paddingStart="12dp" />
-                            </LinearLayout>
-
-                            <View
-                                android:layout_width="match_parent"
-                                android:layout_height="10dp" />
-
-                            <LinearLayout
-                                android:id="@+id/settingsEditFoldersRow"
-                                android:layout_width="match_parent"
-                                android:layout_height="48dp"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal"
-                                android:clickable="true"
-                                android:focusable="true"
-                                android:background="?attr/selectableItemBackground">
-
-                                <TextView
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:text="@string/settings_edit_folders"
-                                    android:textSize="@dimen/text_md" />
-
-                                <TextView
-                                    android:id="@+id/settingsEditFoldersButton"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/settings_edit_folders_button"
-                                    android:textSize="@dimen/text_body"
-                                    android:paddingStart="12dp" />
-                            </LinearLayout>
-
-                        </LinearLayout>
-
-                    </LinearLayout>
-
-                    <!-- UnifiedPush / push notifications group -->
-                    <LinearLayout
-                        android:id="@+id/settingsUnifiedPushContainer"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="16dp"
-                        android:layout_marginEnd="16dp"
-                        android:layout_marginTop="12dp"
-                        android:orientation="vertical"
-                        android:background="@drawable/bg_settings_card"
-                        android:paddingTop="4dp"
-                        android:paddingBottom="4dp">
-
-                        <LinearLayout
-                            android:id="@+id/settingsUnifiedPushHeader"
-                            android:layout_width="match_parent"
-                            android:layout_height="44dp"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal"
-                            android:paddingStart="20dp"
-                            android:paddingEnd="20dp">
-
-                            <TextView
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:text="@string/settings_unifiedpush"
-                                android:textSize="@dimen/text_sm"
-                                android:textAllCaps="true"
-                                android:letterSpacing="0.04"
-                                android:textColor="?attr/colorOnSurfaceVariant"
-                                android:textStyle="bold" />
-
-                            <ImageView
-                                android:id="@+id/settingsUnifiedPushChevron"
-                                android:layout_width="20dp"
-                                android:layout_height="20dp"
-                                android:src="@drawable/ic_lucide_chevron_down"
-                                android:scaleType="fitCenter"
-                                android:contentDescription="@null"
-                                android:visibility="gone" />
-
-                        </LinearLayout>
-
-                        <LinearLayout
-                            android:id="@+id/settingsUnifiedPushContent"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="vertical"
-                            android:paddingStart="20dp"
-                            android:paddingEnd="20dp"
-                            android:paddingBottom="8dp"
-                            android:visibility="visible">
-
-                            <androidx.appcompat.widget.SwitchCompat
-                                android:id="@+id/unifiedPushSwitch"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:text="@string/settings_unifiedpush_toggle"
-                                android:textOn=""
-                                android:textOff=""
-                                android:textSize="@dimen/text_md" />
-
-                            <TextView
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="2dp"
-                                android:paddingStart="4dp"
-                                android:text="@string/settings_unifiedpush_subtitle"
-                                android:textColor="?attr/colorOnSurfaceVariant"
-                                android:textSize="@dimen/text_xs" />
-
-                            <TextView
-                                android:id="@+id/settingsUnifiedPushStatus"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="6dp"
-                                android:paddingStart="4dp"
-                                android:textSize="@dimen/text_xs"
-                                android:textStyle="bold"
-                                android:visibility="gone" />
-
-                            <View
-                                android:layout_width="match_parent"
-                                android:layout_height="10dp" />
-
-                            <androidx.appcompat.widget.SwitchCompat
-                                android:id="@+id/sseSwitch"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="4dp"
-                                android:text="@string/settings_sse_toggle"
-                                android:textOn=""
-                                android:textOff=""
-                                android:textSize="@dimen/text_md" />
-
-                            <TextView
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="2dp"
-                                android:paddingStart="4dp"
-                                android:text="@string/settings_sse_subtitle"
-                                android:textColor="?attr/colorOnSurfaceVariant"
-                                android:textSize="@dimen/text_xs" />
-                        </LinearLayout>
-                    </LinearLayout>
-
-                    <!-- Calendar group (CalDAV + ICS import/export) -->
-                    <LinearLayout
-                        android:id="@+id/settingsCalendarContainer"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="16dp"
-                        android:layout_marginEnd="16dp"
-                        android:layout_marginTop="12dp"
-                        android:orientation="vertical"
-                        android:background="@drawable/bg_settings_card"
-                        android:paddingTop="4dp"
-                        android:paddingBottom="4dp">
-
-                        <LinearLayout
-                            android:id="@+id/settingsCalendarHeader"
-                            android:layout_width="match_parent"
-                            android:layout_height="44dp"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal"
-                            android:paddingStart="20dp"
-                            android:paddingEnd="20dp">
-
-                            <TextView
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:text="@string/settings_calendar"
-                                android:textSize="@dimen/text_sm"
-                                android:textAllCaps="true"
-                                android:letterSpacing="0.04"
-                                android:textColor="?attr/colorOnSurfaceVariant"
-                                android:textStyle="bold" />
-
-                            <ImageView
-                                android:id="@+id/settingsCalendarChevron"
-                                android:layout_width="20dp"
-                                android:layout_height="20dp"
-                                android:src="@drawable/ic_lucide_chevron_down"
-                                android:scaleType="fitCenter"
-                                android:contentDescription="@null"
-                                android:visibility="gone" />
-
-                        </LinearLayout>
-
-                        <LinearLayout
-                            android:id="@+id/settingsCalendarContent"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="vertical"
-                            android:paddingStart="20dp"
-                            android:paddingEnd="20dp"
-                            android:paddingBottom="8dp"
-                            android:visibility="visible">
-
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="52dp"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal">
-
-                                <TextView
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:text="@string/settings_cal_enable"
-                                    android:textSize="@dimen/text_md" />
-
-                                <androidx.appcompat.widget.SwitchCompat
-                                    android:id="@+id/calendarEnabledSwitch"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content" />
-
-                            </LinearLayout>
-
-                            <LinearLayout
-                                android:id="@+id/settingsCalOptions"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
                                 android:orientation="vertical">
 
-                            <View
-                                android:layout_width="match_parent"
-                                android:layout_height="10dp" />
-
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="48dp"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal">
+                                <TextView
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:text="@string/settings_general"
+                                    android:textSize="@dimen/text_lg" />
 
                                 <TextView
-                                    android:layout_width="0dp"
+                                    android:id="@+id/settingsDisplaySummary"
+                                    android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:text="@string/settings_cal_provider"
-                                    android:textSize="@dimen/text_md" />
-
-                                <LinearLayout
-                                    android:id="@+id/settingsCalProviderDropdown"
-                                    android:layout_width="wrap_content"
-                                    android:minWidth="150dp"
-                                    android:layout_height="40dp"
-                                    android:gravity="center_vertical"
-                                    android:paddingStart="14dp"
-                                    android:paddingEnd="10dp"
-                                    android:orientation="horizontal"
-                                    android:clickable="true"
-                                    android:focusable="true"
-                                    android:background="?attr/selectableItemBackground">
-                                    <TextView
-                                        android:id="@+id/settingsCalProviderText"
-                                        android:layout_width="0dp"
-                                        android:layout_height="wrap_content"
-                                        android:layout_weight="1"
-                                        android:gravity="center"
-                                        android:textSize="@dimen/text_sm" />
-                                    <ImageView
-                                        android:layout_width="14dp"
-                                        android:layout_height="14dp"
-                                        android:layout_marginStart="6dp"
-                                        android:src="@drawable/ic_lucide_chevron_down"
-                                        android:contentDescription="@null"
-                                        android:scaleType="fitCenter" />
-                                </LinearLayout>
-
+                                    android:tag="token:textSecondary"
+                                    android:text="@string/settings_display_summary"
+                                    android:textSize="@dimen/text_xs" />
                             </LinearLayout>
 
-                            <TextView
-                                android:id="@+id/settingsCalProviderAccount"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:paddingTop="4dp"
-                                android:paddingBottom="8dp"
-                                android:textSize="@dimen/text_md"
-                                android:visibility="gone" />
-
-                            <TextView
-                                android:id="@+id/settingsCalAddProviderRow"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="@string/settings_cal_add_davx5"
-                                android:textSize="@dimen/text_body"
-                                android:clickable="true"
-                                android:focusable="true"
-                                android:visibility="gone" />
-
-                            <View
-                                android:layout_width="match_parent"
-                                android:layout_height="10dp" />
-
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="48dp"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal">
-
-                                <TextView
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:text="@string/settings_cal_time_format"
-                                    android:textSize="@dimen/text_md" />
-
-                                <LinearLayout
-                                    android:id="@+id/settingsCalTimeFormatDropdown"
-                                    android:layout_width="wrap_content"
-                                    android:minWidth="150dp"
-                                    android:layout_height="40dp"
-                                    android:gravity="center_vertical"
-                                    android:paddingStart="14dp"
-                                    android:paddingEnd="10dp"
-                                    android:orientation="horizontal"
-                                    android:clickable="true"
-                                    android:focusable="true"
-                                    android:background="?attr/selectableItemBackground">
-                                    <TextView
-                                        android:id="@+id/settingsCalTimeFormatText"
-                                        android:layout_width="0dp"
-                                        android:layout_height="wrap_content"
-                                        android:layout_weight="1"
-                                        android:gravity="center"
-                                        android:textSize="@dimen/text_sm" />
-                                    <ImageView
-                                        android:layout_width="14dp"
-                                        android:layout_height="14dp"
-                                        android:layout_marginStart="6dp"
-                                        android:src="@drawable/ic_lucide_chevron_down"
-                                        android:contentDescription="@null"
-                                        android:scaleType="fitCenter" />
-                                </LinearLayout>
-
-                            </LinearLayout>
-
-                            <View
-                                android:layout_width="match_parent"
-                                android:layout_height="10dp" />
-
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="48dp"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal">
-
-                                <TextView
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:text="@string/settings_cal_timezone"
-                                    android:textSize="@dimen/text_md" />
-
-                                <LinearLayout
-                                    android:id="@+id/settingsCalTimeZoneDropdown"
-                                    android:layout_width="wrap_content"
-                                    android:minWidth="150dp"
-                                    android:layout_height="40dp"
-                                    android:gravity="center_vertical"
-                                    android:paddingStart="14dp"
-                                    android:paddingEnd="10dp"
-                                    android:orientation="horizontal"
-                                    android:clickable="true"
-                                    android:focusable="true"
-                                    android:background="?attr/selectableItemBackground">
-                                    <TextView
-                                        android:id="@+id/settingsCalTimeZoneText"
-                                        android:layout_width="0dp"
-                                        android:layout_height="wrap_content"
-                                        android:layout_weight="1"
-                                        android:gravity="center"
-                                        android:maxLines="1"
-                                        android:ellipsize="end"
-                                        android:textSize="@dimen/text_sm" />
-                                    <ImageView
-                                        android:layout_width="14dp"
-                                        android:layout_height="14dp"
-                                        android:layout_marginStart="6dp"
-                                        android:src="@drawable/ic_lucide_chevron_down"
-                                        android:contentDescription="@null"
-                                        android:scaleType="fitCenter" />
-                                </LinearLayout>
-
-                            </LinearLayout>
-
-                            <View
-                                android:layout_width="match_parent"
-                                android:layout_height="10dp" />
-
-                            <TextView
-                                android:id="@+id/settingsImportIcsRow"
-                                android:layout_width="match_parent"
-                                android:layout_height="48dp"
-                                android:gravity="center_vertical"
-                                android:text="@string/settings_import_ics"
-                                android:textSize="@dimen/text_md"
-                                android:drawableEnd="@drawable/ic_lucide_chevron_right"
-                                android:clickable="true"
-                                android:focusable="true"
-                                android:background="?attr/selectableItemBackground" />
-
-                            <View
-                                android:layout_width="match_parent"
-                                android:layout_height="10dp" />
-
-                            <TextView
-                                android:id="@+id/settingsExportIcsRow"
-                                android:layout_width="match_parent"
-                                android:layout_height="48dp"
-                                android:gravity="center_vertical"
-                                android:text="@string/settings_export_ics"
-                                android:textSize="@dimen/text_md"
-                                android:drawableEnd="@drawable/ic_lucide_chevron_right"
-                                android:clickable="true"
-                                android:focusable="true"
-                                android:background="?attr/selectableItemBackground" />
-
-                            </LinearLayout>
+                            <ImageView
+                                android:id="@+id/settingsDisplayChevron"
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:layout_marginStart="8dp"
+                                android:contentDescription="@null"
+                                android:scaleType="fitCenter"
+                                android:src="@drawable/ic_lucide_chevron_right" />
                         </LinearLayout>
                     </LinearLayout>
 
-                    <!-- Contacts group (address book + vCard import/export) -->
+                    <!-- Notifications entry: opens its own settings page -->
                     <LinearLayout
-                        android:id="@+id/settingsContactsContainer"
+                        android:id="@+id/settingsNotificationsEntry"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="16dp"
                         android:layout_marginEnd="16dp"
                         android:layout_marginTop="12dp"
-                        android:orientation="vertical"
                         android:background="@drawable/bg_settings_card"
-                        android:paddingTop="4dp"
-                        android:paddingBottom="4dp">
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:foreground="?attr/selectableItemBackground">
 
                         <LinearLayout
                             android:layout_width="match_parent"
-                            android:layout_height="44dp"
+                            android:layout_height="64dp"
                             android:gravity="center_vertical"
                             android:orientation="horizontal"
-                            android:paddingStart="20dp"
-                            android:paddingEnd="20dp">
+                            android:paddingStart="16dp"
+                            android:paddingEnd="16dp">
 
-                            <TextView
+                            <FrameLayout
+                                android:id="@+id/settingsNotificationsIconBubble"
+                                android:layout_width="34dp"
+                                android:layout_height="34dp">
+
+                                <ImageView
+                                    android:id="@+id/settingsNotificationsIcon"
+                                    android:layout_width="18dp"
+                                    android:layout_height="18dp"
+                                    android:layout_gravity="center"
+                                    android:contentDescription="@null"
+                                    android:scaleType="fitCenter"
+                                    android:src="@drawable/ic_notifications_bell" />
+                            </FrameLayout>
+
+                            <LinearLayout
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
+                                android:layout_marginStart="14dp"
                                 android:layout_weight="1"
-                                android:text="@string/settings_contacts"
-                                android:textSize="@dimen/text_sm"
-                                android:textAllCaps="true"
-                                android:letterSpacing="0.04"
-                                android:textColor="?attr/colorOnSurfaceVariant"
-                                android:textStyle="bold" />
+                                android:orientation="vertical">
 
+                                <TextView
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:text="@string/settings_unifiedpush"
+                                    android:textSize="@dimen/text_lg" />
+
+                                <TextView
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:tag="token:textSecondary"
+                                    android:text="@string/settings_notifications_summary"
+                                    android:textSize="@dimen/text_xs" />
+                            </LinearLayout>
+
+                            <ImageView
+                                android:id="@+id/settingsNotificationsChevron"
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:layout_marginStart="8dp"
+                                android:contentDescription="@null"
+                                android:scaleType="fitCenter"
+                                android:src="@drawable/ic_lucide_chevron_right" />
                         </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- Calendar entry: opens its own settings page -->
+                    <LinearLayout
+                        android:id="@+id/settingsCalendarEntry"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:layout_marginEnd="16dp"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/bg_settings_card"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:foreground="?attr/selectableItemBackground">
 
                         <LinearLayout
                             android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="vertical"
-                            android:paddingStart="20dp"
-                            android:paddingEnd="20dp"
-                            android:paddingBottom="8dp">
+                            android:layout_height="64dp"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingStart="16dp"
+                            android:paddingEnd="16dp">
+
+                            <FrameLayout
+                                android:id="@+id/settingsCalendarIconBubble"
+                                android:layout_width="34dp"
+                                android:layout_height="34dp">
+
+                                <ImageView
+                                    android:id="@+id/settingsCalendarIcon"
+                                    android:layout_width="18dp"
+                                    android:layout_height="18dp"
+                                    android:layout_gravity="center"
+                                    android:contentDescription="@null"
+                                    android:scaleType="fitCenter"
+                                    android:src="@drawable/ic_lucide_calendar" />
+                            </FrameLayout>
 
                             <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="52dp"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal">
-
-                                <TextView
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:text="@string/settings_contacts_enable"
-                                    android:textSize="@dimen/text_md" />
-
-                                <androidx.appcompat.widget.SwitchCompat
-                                    android:id="@+id/contactsEnabledSwitch"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content" />
-
-                            </LinearLayout>
-
-                            <LinearLayout
-                                android:id="@+id/settingsContactsOptions"
-                                android:layout_width="match_parent"
+                                android:layout_width="0dp"
                                 android:layout_height="wrap_content"
+                                android:layout_marginStart="14dp"
+                                android:layout_weight="1"
                                 android:orientation="vertical">
 
-                                <View
+                                <TextView
                                     android:layout_width="match_parent"
-                                    android:layout_height="10dp" />
-
-                                <LinearLayout
-                                    android:layout_width="match_parent"
-                                    android:layout_height="48dp"
-                                    android:gravity="center_vertical"
-                                    android:orientation="horizontal">
-
-                                    <TextView
-                                        android:layout_width="0dp"
-                                        android:layout_height="wrap_content"
-                                        android:layout_weight="1"
-                                        android:text="@string/settings_contacts_show"
-                                        android:textSize="@dimen/text_md" />
-
-                                    <LinearLayout
-                                        android:id="@+id/settingsContactsShowDropdown"
-                                        android:layout_width="wrap_content"
-                                        android:minWidth="150dp"
-                                        android:layout_height="40dp"
-                                        android:gravity="center_vertical"
-                                        android:paddingStart="14dp"
-                                        android:paddingEnd="10dp"
-                                        android:orientation="horizontal"
-                                        android:clickable="true"
-                                        android:focusable="true"
-                                        android:background="?attr/selectableItemBackground">
-                                        <TextView
-                                            android:id="@+id/settingsContactsShowText"
-                                            android:layout_width="0dp"
-                                            android:layout_height="wrap_content"
-                                            android:layout_weight="1"
-                                            android:gravity="center"
-                                            android:maxLines="1"
-                                            android:ellipsize="end"
-                                            android:textSize="@dimen/text_sm" />
-                                        <ImageView
-                                            android:layout_width="14dp"
-                                            android:layout_height="14dp"
-                                            android:layout_marginStart="6dp"
-                                            android:src="@drawable/ic_lucide_chevron_down"
-                                            android:contentDescription="@null"
-                                            android:scaleType="fitCenter" />
-                                    </LinearLayout>
-
-                                </LinearLayout>
-
-                                <View
-                                    android:layout_width="match_parent"
-                                    android:layout_height="10dp" />
+                                    android:layout_height="wrap_content"
+                                    android:text="@string/settings_calendar"
+                                    android:textSize="@dimen/text_lg" />
 
                                 <TextView
-                                    android:id="@+id/settingsImportVcfRow"
                                     android:layout_width="match_parent"
-                                    android:layout_height="48dp"
-                                    android:gravity="center_vertical"
-                                    android:text="@string/settings_import_vcf"
-                                    android:textSize="@dimen/text_md"
-                                    android:drawableEnd="@drawable/ic_lucide_chevron_right"
-                                    android:clickable="true"
-                                    android:focusable="true"
-                                    android:background="?attr/selectableItemBackground" />
-
-                                <View
-                                    android:layout_width="match_parent"
-                                    android:layout_height="10dp" />
-
-                                <TextView
-                                    android:id="@+id/settingsExportVcfRow"
-                                    android:layout_width="match_parent"
-                                    android:layout_height="48dp"
-                                    android:gravity="center_vertical"
-                                    android:text="@string/settings_export_vcf"
-                                    android:textSize="@dimen/text_md"
-                                    android:drawableEnd="@drawable/ic_lucide_chevron_right"
-                                    android:clickable="true"
-                                    android:focusable="true"
-                                    android:background="?attr/selectableItemBackground" />
-
+                                    android:layout_height="wrap_content"
+                                    android:tag="token:textSecondary"
+                                    android:text="@string/settings_calendar_summary"
+                                    android:textSize="@dimen/text_xs" />
                             </LinearLayout>
+
+                            <ImageView
+                                android:id="@+id/settingsCalendarEntryChevron"
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:layout_marginStart="8dp"
+                                android:contentDescription="@null"
+                                android:scaleType="fitCenter"
+                                android:src="@drawable/ic_lucide_chevron_right" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- Contacts entry: opens its own settings page -->
+                    <LinearLayout
+                        android:id="@+id/settingsContactsEntry"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:layout_marginEnd="16dp"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/bg_settings_card"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:foreground="?attr/selectableItemBackground">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="64dp"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingStart="16dp"
+                            android:paddingEnd="16dp">
+
+                            <FrameLayout
+                                android:id="@+id/settingsContactsIconBubble"
+                                android:layout_width="34dp"
+                                android:layout_height="34dp">
+
+                                <ImageView
+                                    android:id="@+id/settingsContactsIcon"
+                                    android:layout_width="18dp"
+                                    android:layout_height="18dp"
+                                    android:layout_gravity="center"
+                                    android:contentDescription="@null"
+                                    android:scaleType="fitCenter"
+                                    android:src="@drawable/ic_lucide_user" />
+                            </FrameLayout>
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="14dp"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:text="@string/settings_contacts"
+                                    android:textSize="@dimen/text_lg" />
+
+                                <TextView
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:tag="token:textSecondary"
+                                    android:text="@string/settings_contacts_summary"
+                                    android:textSize="@dimen/text_xs" />
+                            </LinearLayout>
+
+                            <ImageView
+                                android:id="@+id/settingsContactsEntryChevron"
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:layout_marginStart="8dp"
+                                android:contentDescription="@null"
+                                android:scaleType="fitCenter"
+                                android:src="@drawable/ic_lucide_chevron_right" />
                         </LinearLayout>
                     </LinearLayout>
 
@@ -2101,7 +1359,28 @@
 
                     </LinearLayout>
 
-                </LinearLayout>
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/settingsDetailPage"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <include layout="@layout/settings_display_page" />
+
+                        <include layout="@layout/settings_notifications_page" />
+
+                        <include layout="@layout/settings_calendar_page" />
+
+                        <include layout="@layout/settings_contacts_page" />
+
+                    </LinearLayout>
+
+                </FrameLayout>
             </ScrollView>
 
         </FrameLayout>

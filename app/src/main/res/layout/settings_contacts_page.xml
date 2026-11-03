@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/settingsContactsPage"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="16dp"
+    android:paddingEnd="16dp"
+    android:paddingTop="4dp"
+    android:paddingBottom="32dp"
+    android:visibility="gone">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="4dp"
+        android:paddingTop="6dp"
+        android:paddingEnd="4dp"
+        android:paddingBottom="18dp"
+        android:tag="token:textSecondary"
+        android:text="@string/settings_contacts_intro"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:textSize="@dimen/text_sm" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="4dp"
+        android:paddingBottom="8dp"
+        android:letterSpacing="0.06"
+        android:tag="token:textSecondary"
+        android:text="@string/settings_contacts"
+        android:textAllCaps="true"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:textSize="@dimen/text_xs"
+        android:textStyle="bold" />
+
+    <LinearLayout
+        android:id="@+id/settingsContactsContainer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_settings_card"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="12dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings_contacts_enable"
+                android:textSize="@dimen/text_lg" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/contactsEnabledSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textOff=""
+                android:textOn="" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/settingsContactsOptions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginStart="16dp"
+                android:tag="token:divider" />
+
+            <LinearLayout
+                android:id="@+id/settingsContactsShowDropdown"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/settings_contacts_show"
+                    android:textSize="@dimen/text_lg" />
+
+                <TextView
+                    android:id="@+id/settingsContactsShowText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:maxLines="1"
+                    android:textSize="@dimen/text_md" />
+
+                <ImageView
+                    android:id="@+id/settingsContactsShowChevron"
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:layout_marginStart="6dp"
+                    android:contentDescription="@null"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_lucide_chevron_down" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="4dp"
+        android:paddingTop="22dp"
+        android:paddingBottom="8dp"
+        android:letterSpacing="0.06"
+        android:tag="token:textSecondary"
+        android:text="@string/settings_section_import_export"
+        android:textAllCaps="true"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:textSize="@dimen/text_xs"
+        android:textStyle="bold" />
+
+    <LinearLayout
+        android:id="@+id/settingsVcfCard"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_settings_card"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/settingsImportVcfRow"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:drawableEnd="@drawable/ic_lucide_chevron_right"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:text="@string/settings_import_vcf"
+            android:textSize="@dimen/text_lg" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="16dp"
+            android:tag="token:divider" />
+
+        <TextView
+            android:id="@+id/settingsExportVcfRow"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:drawableEnd="@drawable/ic_lucide_chevron_right"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:text="@string/settings_export_vcf"
+            android:textSize="@dimen/text_lg" />
+    </LinearLayout>
+
+</LinearLayout>

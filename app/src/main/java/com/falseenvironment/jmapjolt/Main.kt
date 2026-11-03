@@ -111,7 +111,9 @@ class MainActivity : AppCompatActivity() {
         GENERAL,
         SWIPE,
         UNIFIED_PUSH,
-        THEME
+        THEME,
+        CALENDAR,
+        CONTACTS
     }
 
     internal lateinit var drawerLayout: DrawerLayout
@@ -130,27 +132,16 @@ class MainActivity : AppCompatActivity() {
     internal lateinit var loginBackBtn: ImageView
     internal lateinit var loadingOverlay: FrameLayout
     internal lateinit var settingsContainer: ScrollView
+    internal lateinit var settingsRootPage: LinearLayout
+    internal lateinit var settingsDetailPage: LinearLayout
+    internal var settingsRootScrollY: Int = 0
     internal lateinit var settingsMenuContainer: LinearLayout
-    internal lateinit var settingsGeneralContainer: LinearLayout
-    internal lateinit var settingsGeneralHeader: LinearLayout
-    internal lateinit var settingsGeneralContent: LinearLayout
-    internal lateinit var settingsGeneralChevron: ImageView
     internal lateinit var settingsLabelsContainer: LinearLayout
-    internal lateinit var settingsLabelsHeader: LinearLayout
-    internal lateinit var settingsLabelsContent: LinearLayout
-    internal lateinit var settingsLabelsChevron: ImageView
     internal lateinit var settingsSwipeContainer: LinearLayout
     internal lateinit var settingsUnifiedPushContainer: LinearLayout
-    internal lateinit var settingsUnifiedPushHeader: LinearLayout
-    internal lateinit var settingsUnifiedPushContent: LinearLayout
-    internal lateinit var settingsUnifiedPushChevron: ImageView
 
     internal lateinit var settingsThemeContainer: LinearLayout
-    internal lateinit var settingsThemeHeader: LinearLayout
-    internal lateinit var settingsThemeContent: LinearLayout
-    internal lateinit var settingsThemeChevron: ImageView
     internal lateinit var settingsCalendarContainer: LinearLayout
-    internal lateinit var settingsCalendarChevron: ImageView
     internal lateinit var settingsImportIcsRow: TextView
     internal lateinit var settingsExportIcsRow: TextView
     internal lateinit var settingsContactsContainer: LinearLayout
@@ -562,25 +553,14 @@ class MainActivity : AppCompatActivity() {
         loginBackBtn = findViewById(R.id.loginBackBtn)
         loadingOverlay = findViewById(R.id.loadingOverlay)
         settingsContainer = findViewById(R.id.settingsContainer)
+        settingsRootPage = findViewById(R.id.settingsRootPage)
+        settingsDetailPage = findViewById(R.id.settingsDetailPage)
         settingsMenuContainer = findViewById(R.id.settingsMenuContainer)
-        settingsGeneralContainer = findViewById(R.id.settingsGeneralContainer)
-        settingsGeneralHeader = findViewById(R.id.settingsGeneralHeader)
-        settingsGeneralContent = findViewById(R.id.settingsGeneralContent)
-        settingsGeneralChevron = findViewById(R.id.settingsGeneralChevron)
         settingsLabelsContainer = findViewById(R.id.settingsLabelsContainer)
-        settingsLabelsHeader = findViewById(R.id.settingsLabelsHeader)
-        settingsLabelsContent = findViewById(R.id.settingsLabelsContent)
-        settingsLabelsChevron = findViewById(R.id.settingsLabelsChevron)
         settingsSwipeContainer = findViewById(R.id.settingsSwipeContainer)
         settingsUnifiedPushContainer = findViewById(R.id.settingsUnifiedPushContainer)
-        settingsUnifiedPushHeader = findViewById(R.id.settingsUnifiedPushHeader)
-        settingsUnifiedPushContent = findViewById(R.id.settingsUnifiedPushContent)
-        settingsUnifiedPushChevron = findViewById(R.id.settingsUnifiedPushChevron)
 
         settingsThemeContainer = findViewById(R.id.settingsThemeContainer)
-        settingsThemeHeader = findViewById(R.id.settingsThemeHeader)
-        settingsThemeContent = findViewById(R.id.settingsThemeContent)
-        settingsThemeChevron = findViewById(R.id.settingsThemeChevron)
         settingsCalendarContainer = findViewById(R.id.settingsCalendarContainer)
         settingsInfoRow = findViewById(R.id.settingsInfoRow)
         settingsInfoIcon = findViewById(R.id.settingsInfoIcon)

@@ -123,18 +123,23 @@ internal fun MainActivity.applyTheme() {
     } }
     listOf(
         settingsAccountContainer,
-        settingsThemeContainer, settingsGeneralContainer, settingsLabelsContainer,
+        settingsThemeContainer, settingsLabelsContainer,
         settingsUnifiedPushContainer, settingsCalendarContainer,
-        settingsContactsContainer, settingsInfoRow
+        settingsContactsContainer, settingsInfoRow,
+        findViewById<LinearLayout>(R.id.settingsDisplayEntry),
+        findViewById<LinearLayout>(R.id.settingsNotificationsEntry),
+        findViewById<LinearLayout>(R.id.settingsCalendarEntry),
+        findViewById<LinearLayout>(R.id.settingsContactsEntry),
+        findViewById<LinearLayout>(R.id.settingsImagesCard),
+        findViewById<LinearLayout>(R.id.settingsReadingCard),
+        findViewById<LinearLayout>(R.id.settingsSwipeCard),
+        findViewById<LinearLayout>(R.id.settingsIcsCard),
+        findViewById<LinearLayout>(R.id.settingsVcfCard)
     ).forEach { it.background = cardDrawable() }
+    settingsDetailPage.setBackgroundColor(bgInt)
 
     // Tint settings chevrons and info row icons with accent color
     val accentTint = ColorStateList.valueOf(currentAccentColor.toColorInt())
-    settingsGeneralChevron.imageTintList = accentTint
-    settingsLabelsChevron.imageTintList = accentTint
-    settingsThemeChevron.imageTintList = accentTint
-    settingsUnifiedPushChevron.imageTintList = accentTint
-    settingsCalendarChevron.imageTintList = accentTint
     settingsAccountAddRow.compoundDrawableTintList = accentTint
     // The pencil affordance on the profile row follows the accent like other chevrons.
     findViewById<ImageView>(R.id.settingsAccountEditIcon)?.imageTintList = accentTint
@@ -255,12 +260,25 @@ internal fun MainActivity.applyAccentColor() {
     // accent arrow on the theme's card surface.
     mailSwipeRefresh.setColorSchemeColors(t.accentOnGround(accentInt))
     mailSwipeRefresh.setProgressBackgroundColorSchemeColor(t.surfaceCard)
-    // Update settings chevrons and icons immediately
-    settingsGeneralChevron.imageTintList = accentTint
-    settingsLabelsChevron.imageTintList = accentTint
-    settingsThemeChevron.imageTintList = accentTint
-    settingsUnifiedPushChevron.imageTintList = accentTint
-    settingsCalendarChevron.imageTintList = accentTint
+    // Update settings entry icons and chevrons immediately
+    val entryVisuals = listOf(
+        intArrayOf(R.id.settingsDisplayIconBubble, R.id.settingsDisplayIcon, R.id.settingsDisplayChevron),
+        intArrayOf(R.id.settingsNotificationsIconBubble, R.id.settingsNotificationsIcon, R.id.settingsNotificationsChevron),
+        intArrayOf(R.id.settingsCalendarIconBubble, R.id.settingsCalendarIcon, R.id.settingsCalendarEntryChevron),
+        intArrayOf(R.id.settingsContactsIconBubble, R.id.settingsContactsIcon, R.id.settingsContactsEntryChevron)
+    )
+    val bubbleRadius = 10 * resources.displayMetrics.density
+    val bubbleColor = t.accentSoft(accentInt)
+    val bubbleIconTint = ColorStateList.valueOf(t.accentOnGround(accentInt))
+    for (ids in entryVisuals) {
+        findViewById<android.widget.FrameLayout>(ids[0])?.background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = bubbleRadius
+            setColor(bubbleColor)
+        }
+        findViewById<ImageView>(ids[1])?.imageTintList = bubbleIconTint
+        findViewById<ImageView>(ids[2])?.imageTintList = accentTint
+    }
     settingsImportIcsRow.compoundDrawableTintList = accentTint
     settingsExportIcsRow.compoundDrawableTintList = accentTint
     settingsImportVcfRow.compoundDrawableTintList = accentTint
@@ -330,27 +348,23 @@ internal fun MainActivity.applyAccentColor() {
     selectionCountText.setTextColor(barContent)
     // Top-bar send button (shown during compose): the one primary action in the bar.
     topBarSendButton.imageTintList = ColorStateList.valueOf(t.accentOnGround(accentInt))
-    // Settings dropdown triggers: outlined and neutral, the chevron carries the accent.
+    // Settings value rows: plain rows with a secondary value and chevron on the
+    // trailing edge; the whole row is the tap target.
+    val valueTexts = listOf(
+        themeDropdownText, settingsCalProviderText, settingsCalTimeFormatText,
+        settingsCalTimeZoneText, settingsContactsShowText,
+        markReadDelayDropdownText, swipeLeftDropdownText, swipeRightDropdownText)
+    valueTexts.forEach { it.setTextColor(t.textSecondary) }
+    val valueChevronTint = ColorStateList.valueOf(t.textSecondary)
+    listOf(
+        R.id.themeChevron, R.id.settingsCalProviderChevron,
+        R.id.settingsCalTimeFormatChevron, R.id.settingsCalTimeZoneChevron,
+        R.id.settingsContactsShowChevron, R.id.markReadDelayChevron,
+        R.id.swipeLeftChevron, R.id.swipeRightChevron
+    ).forEach { findViewById<ImageView>(it)?.imageTintList = valueChevronTint }
     val dropdownBg = Color.TRANSPARENT
     val dropdownStroke = t.inputStroke
     val dropdownText = t.textPrimary
-    val dropdownChevron = t.accentOnGround(accentInt)
-    for (dropdown in listOf(swipeLeftDropdown, swipeRightDropdown, themeDropdown,
-                            settingsCalProviderDropdown, settingsCalTimeFormatDropdown,
-                            settingsCalTimeZoneDropdown, settingsContactsShowDropdown,
-                            markReadDelayDropdown)) {
-        dropdown.background = GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = 999 * d
-            setColor(dropdownBg)
-            setStroke(d.toInt(), dropdownStroke)
-        }
-        for (i in 0 until dropdown.childCount) {
-            val child = dropdown.getChildAt(i)
-            if (child is ImageView) child.imageTintList = ColorStateList.valueOf(dropdownChevron)
-            if (child is TextView) child.setTextColor(dropdownText)
-        }
-    }
     settingsEditLabelsButton.background = GradientDrawable().apply {
         shape = GradientDrawable.RECTANGLE
         cornerRadius = 999 * d

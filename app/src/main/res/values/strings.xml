@@ -197,6 +197,17 @@
     <string name="settings_theme_oled">Dark OLED</string>
     <string name="settings_theme_violet">Iris</string>
     <string name="settings_general">Display</string>
+    <string name="settings_display_intro">Choose how messages load, how they are grouped and what swiping does.</string>
+    <string name="settings_display_summary">Images, conversations and swipes</string>
+    <string name="settings_section_images">Images</string>
+    <string name="settings_section_reading">Reading</string>
+    <string name="settings_section_import_export">Import &amp; Export</string>
+    <string name="settings_notifications_intro">Choose how new mail reaches this device.</string>
+    <string name="settings_calendar_intro">Choose where events come from and how times are shown.</string>
+    <string name="settings_contacts_intro">Choose what the address book shows and how it moves in and out.</string>
+    <string name="settings_notifications_summary">Push and server delivery</string>
+    <string name="settings_calendar_summary">Provider, time format and time zone</string>
+    <string name="settings_contacts_summary">Visibility and import/export</string>
     <string name="settings_mark_read_delay">Mark as read after</string>
     <string name="mark_read_delay_instant">Instant</string>
     <string name="mark_read_delay_custom">Custom…</string>

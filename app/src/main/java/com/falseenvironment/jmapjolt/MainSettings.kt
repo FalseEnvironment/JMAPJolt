@@ -112,7 +112,7 @@ internal fun MainActivity.showSettingsScreen() {
     drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED)
     drawerToggle.syncState()
     updateTopBarState()
-    showSettingsMenuRoot()
+    showSettingsMenuRoot(animate = false)
     refreshSettingsAccountRow()
     loadUnifiedPushPreferences()
     navigationView.post { rebuildDrawerMenu() }
@@ -121,6 +121,22 @@ internal fun MainActivity.showSettingsScreen() {
 
 internal fun MainActivity.bindSettingsMenuNavigation() {
         val activity = this
+    findViewById<LinearLayout>(R.id.settingsDisplayEntry).setOnClickListener { row ->
+        row.hapticConfirm()
+        showSettingsSection(MainActivity.SettingsSection.GENERAL)
+    }
+    findViewById<LinearLayout>(R.id.settingsNotificationsEntry).setOnClickListener { row ->
+        row.hapticConfirm()
+        showSettingsSection(MainActivity.SettingsSection.UNIFIED_PUSH)
+    }
+    findViewById<LinearLayout>(R.id.settingsCalendarEntry).setOnClickListener { row ->
+        row.hapticConfirm()
+        showSettingsSection(MainActivity.SettingsSection.CALENDAR)
+    }
+    findViewById<LinearLayout>(R.id.settingsContactsEntry).setOnClickListener { row ->
+        row.hapticConfirm()
+        showSettingsSection(MainActivity.SettingsSection.CONTACTS)
+    }
     loadImagesSwitch.setOnCheckedChangeListener { _, isChecked ->
         saveGeneralPreferences()
         if (isShowingEmailDetail) {
@@ -168,9 +184,8 @@ internal fun MainActivity.bindSettingsMenuNavigation() {
         }
     }
 
-    // Sections are always-expanded M3 grouped-list cards now; headers are static
-    // labels (no more accordion expand/collapse).
-    settingsCalendarChevron = findViewById(R.id.settingsCalendarChevron)
+    // Value pickers and action rows now live on their own pages; bind the rows
+    // that are still on the settings root (calendar import/export moved with the page).
     settingsImportIcsRow = findViewById(R.id.settingsImportIcsRow)
     settingsExportIcsRow = findViewById(R.id.settingsExportIcsRow)
     settingsCalProviderDropdown.setOnClickListener {
@@ -681,13 +696,66 @@ internal fun MainActivity.saveGeneralPreferences() {
         .apply()
 }
 
-internal fun MainActivity.showSettingsMenuRoot() {
+/**
+ * Opens one settings category as its own page. Each page keeps the same layout
+ * grammar: a short intro, grouped cards and trailing controls.
+ */
+internal fun MainActivity.showSettingsSection(section: MainActivity.SettingsSection) {
+    val pageId = when (section) {
+        MainActivity.SettingsSection.GENERAL -> R.id.settingsDisplayPage
+        MainActivity.SettingsSection.UNIFIED_PUSH -> R.id.settingsNotificationsPage
+        MainActivity.SettingsSection.CALENDAR -> R.id.settingsCalendarPage
+        MainActivity.SettingsSection.CONTACTS -> R.id.settingsContactsPage
+        else -> return
+    }
+    if (currentSettingsSection == section && settingsDetailPage.visibility == View.VISIBLE) return
+    val page = findViewById<View>(pageId)
+    settingsRootScrollY = settingsContainer.scrollY
+    currentSettingsSection = section
+    settingsRootPage.visibility = View.GONE
+    listOf(
+        R.id.settingsDisplayPage,
+        R.id.settingsNotificationsPage,
+        R.id.settingsCalendarPage,
+        R.id.settingsContactsPage
+    ).forEach { findViewById<View>(it).visibility = View.GONE }
+    page.visibility = View.VISIBLE
+    settingsDetailPage.setBackgroundColor(getThemeBackgroundColor())
+    // Cover the viewport while the root sits behind the page during the push-in.
+    settingsDetailPage.minimumHeight = settingsContainer.height
+    settingsDetailPage.visibility = View.VISIBLE
+    settingsDetailPage.alpha = 0f
+    settingsContainer.scrollTo(0, 0)
+    setDrawerIndicator(false)
+    supportActionBar?.setDisplayHomeAsUpEnabled(true)
+    drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED)
+    drawerToggle.syncState()
+    applyNavIconTint(topBarContentColor())
+    invalidateOptionsMenu()
+    updateTopBarState()
+    settingsDetailPage.post { settingsDetailPage.animateScreenIn() }
+}
+
+internal fun MainActivity.showSettingsMenuRoot(animate: Boolean = true) {
     settingsMenuContainer.visibility = View.VISIBLE
-    settingsGeneralContainer.visibility = View.VISIBLE
     settingsSwipeContainer.visibility = View.GONE
     settingsUnifiedPushContainer.visibility = View.VISIBLE
     settingsThemeContainer.visibility = View.VISIBLE
     currentSettingsSection = MainActivity.SettingsSection.ROOT
+    settingsRootPage.visibility = View.VISIBLE
+    if (settingsDetailPage.visibility == View.VISIBLE) {
+        if (animate) {
+            // Root is already visible behind the page: slide the page back out along
+            // the same path it entered, then restore the root scroll position.
+            settingsDetailPage.animateScreenOutBack {
+                settingsDetailPage.visibility = View.GONE
+                settingsContainer.post { settingsContainer.scrollTo(0, settingsRootScrollY) }
+            }
+        } else {
+            settingsDetailPage.visibility = View.GONE
+            settingsContainer.post { settingsContainer.scrollTo(0, settingsRootScrollY) }
+        }
+    }
     setDrawerIndicator(true)
     supportActionBar?.setDisplayHomeAsUpEnabled(true)
     drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED)
@@ -1039,7 +1107,15 @@ internal fun MainActivity.showSettingsDropdown(
         isOutsideTouchable = true
     }
     popupRef = pw
-    pw.showAsDropDown(anchor, 0, (4 * dp).toInt())
+    // Drop below the row and align to its trailing edge, so the menu hangs off the
+    // value/chevron instead of the left text. Keep it inside the screen on the right.
+    val popupWidth = container.measuredWidth
+    val screenWidth = resources.displayMetrics.widthPixels
+    val anchorOnScreen = IntArray(2).also { anchor.getLocationOnScreen(it) }
+    val edgeMargin = (8 * dp).toInt()
+    val rightAlignedX = (anchor.width - popupWidth - anchor.paddingEnd).coerceAtLeast(0)
+    val maxX = (screenWidth - anchorOnScreen[0] - popupWidth - edgeMargin).coerceAtLeast(0)
+    pw.showAsDropDown(anchor, rightAlignedX.coerceAtMost(maxX), (4 * dp).toInt())
     // Open on the current choice instead of the top of a long list.
     if (popupHeight != android.view.ViewGroup.LayoutParams.WRAP_CONTENT) {
         scroller.post {

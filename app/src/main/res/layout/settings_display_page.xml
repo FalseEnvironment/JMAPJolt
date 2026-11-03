@@ -1,0 +1,489 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Display settings page: appearance, mail loading/reading, swipe behavior and
+    label/folder management. Rows are grouped in cards with hairline separators,
+    iOS-settings style: label/value on the left, control on the right.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/settingsDisplayPage"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="16dp"
+    android:paddingEnd="16dp"
+    android:paddingTop="4dp"
+    android:paddingBottom="32dp"
+    android:visibility="gone">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="4dp"
+        android:paddingTop="6dp"
+        android:paddingEnd="4dp"
+        android:paddingBottom="18dp"
+        android:tag="token:textSecondary"
+        android:text="@string/settings_display_intro"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:textSize="@dimen/text_sm" />
+
+    <!-- Theme -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="4dp"
+        android:paddingBottom="8dp"
+        android:letterSpacing="0.06"
+        android:tag="token:textSecondary"
+        android:text="@string/settings_theme"
+        android:textAllCaps="true"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:textSize="@dimen/text_xs"
+        android:textStyle="bold" />
+
+    <LinearLayout
+        android:id="@+id/settingsThemeContainer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_settings_card"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:id="@+id/themeDropdown"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings_main_theme"
+                android:textSize="@dimen/text_lg" />
+
+            <TextView
+                android:id="@+id/themeDropdownText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:maxLines="1"
+                android:textSize="@dimen/text_md" />
+
+            <ImageView
+                android:id="@+id/themeChevron"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_marginStart="6dp"
+                android:contentDescription="@null"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_lucide_chevron_down" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="16dp"
+            android:tag="token:divider" />
+
+        <LinearLayout
+            android:id="@+id/accentColorRow"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings_accent_color"
+                android:textSize="@dimen/text_lg" />
+
+            <View
+                android:id="@+id/accentColorPreview"
+                android:layout_width="28dp"
+                android:layout_height="28dp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Images -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="4dp"
+        android:paddingTop="22dp"
+        android:paddingBottom="8dp"
+        android:letterSpacing="0.06"
+        android:tag="token:textSecondary"
+        android:text="@string/settings_section_images"
+        android:textAllCaps="true"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:textSize="@dimen/text_xs"
+        android:textStyle="bold" />
+
+    <LinearLayout
+        android:id="@+id/settingsImagesCard"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_settings_card"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="12dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings_load_images"
+                android:textSize="@dimen/text_lg" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/loadImagesSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textOff=""
+                android:textOn="" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="16dp"
+            android:tag="token:divider" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="64dp"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_load_favicons"
+                    android:textSize="@dimen/text_lg" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:tag="token:textSecondary"
+                    android:text="@string/settings_favicons_subtitle"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:textSize="@dimen/text_xs" />
+            </LinearLayout>
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/loadFaviconsSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:textOff=""
+                android:textOn="" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Reading -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="4dp"
+        android:paddingTop="22dp"
+        android:paddingBottom="8dp"
+        android:letterSpacing="0.06"
+        android:tag="token:textSecondary"
+        android:text="@string/settings_section_reading"
+        android:textAllCaps="true"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:textSize="@dimen/text_xs"
+        android:textStyle="bold" />
+
+    <LinearLayout
+        android:id="@+id/settingsReadingCard"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_settings_card"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="56dp"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings_thread_conversations"
+                android:textSize="@dimen/text_lg" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/threadConversationsSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:textOff=""
+                android:textOn="" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="16dp"
+            android:tag="token:divider" />
+
+        <LinearLayout
+            android:id="@+id/markReadDelayDropdown"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings_mark_read_delay"
+                android:textSize="@dimen/text_lg" />
+
+            <TextView
+                android:id="@+id/markReadDelayDropdownText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:maxLines="1"
+                android:textSize="@dimen/text_md" />
+
+            <ImageView
+                android:id="@+id/markReadDelayChevron"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_marginStart="6dp"
+                android:contentDescription="@null"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_lucide_chevron_down" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Swipe behavior -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="4dp"
+        android:paddingTop="22dp"
+        android:paddingBottom="8dp"
+        android:letterSpacing="0.06"
+        android:tag="token:textSecondary"
+        android:text="@string/settings_swipe_actions"
+        android:textAllCaps="true"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:textSize="@dimen/text_xs"
+        android:textStyle="bold" />
+
+    <LinearLayout
+        android:id="@+id/settingsSwipeCard"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_settings_card"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:id="@+id/swipeLeftDropdown"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings_swipe_left"
+                android:textSize="@dimen/text_lg" />
+
+            <TextView
+                android:id="@+id/swipeLeftDropdownText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:maxLines="1"
+                android:textSize="@dimen/text_md" />
+
+            <ImageView
+                android:id="@+id/swipeLeftChevron"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_marginStart="6dp"
+                android:contentDescription="@null"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_lucide_chevron_down" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="16dp"
+            android:tag="token:divider" />
+
+        <LinearLayout
+            android:id="@+id/swipeRightDropdown"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings_swipe_right"
+                android:textSize="@dimen/text_lg" />
+
+            <TextView
+                android:id="@+id/swipeRightDropdownText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:maxLines="1"
+                android:textSize="@dimen/text_md" />
+
+            <ImageView
+                android:id="@+id/swipeRightChevron"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_marginStart="6dp"
+                android:contentDescription="@null"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_lucide_chevron_down" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Labels & folders -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="4dp"
+        android:paddingTop="22dp"
+        android:paddingBottom="8dp"
+        android:letterSpacing="0.06"
+        android:tag="token:textSecondary"
+        android:text="@string/settings_labels"
+        android:textAllCaps="true"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:textSize="@dimen/text_xs"
+        android:textStyle="bold" />
+
+    <LinearLayout
+        android:id="@+id/settingsLabelsContainer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_settings_card"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:id="@+id/settingsEditLabelsRow"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings_edit_labels"
+                android:textSize="@dimen/text_lg" />
+
+            <TextView
+                android:id="@+id/settingsEditLabelsButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/settings_edit_labels_button"
+                android:textSize="@dimen/text_body" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="16dp"
+            android:tag="token:divider" />
+
+        <LinearLayout
+            android:id="@+id/settingsEditFoldersRow"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings_edit_folders"
+                android:textSize="@dimen/text_lg" />
+
+            <TextView
+                android:id="@+id/settingsEditFoldersButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/settings_edit_folders_button"
+                android:textSize="@dimen/text_body" />
+        </LinearLayout>
+    </LinearLayout>
+
+</LinearLayout>
