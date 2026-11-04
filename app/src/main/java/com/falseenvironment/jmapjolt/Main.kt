@@ -155,8 +155,11 @@ class MainActivity : AppCompatActivity() {
     internal lateinit var loadImagesSwitch: SwitchCompat
     internal lateinit var loadFaviconsSwitch: SwitchCompat
     internal lateinit var threadConversationsSwitch: SwitchCompat
+    internal lateinit var showCategoryCountsSwitch: SwitchCompat
     /** Whether reply/forward chains are collapsed into chat-style conversations. */
     @Volatile internal var threadConversationsEnabled: Boolean = true
+    /** Whether the drawer shows an unread/total count next to each category. */
+    @Volatile internal var showCategoryCounts: Boolean = true
     // Guards the favicon switch listener against re-entry while we toggle it programmatically.
     internal var suppressFaviconToggle = false
     internal var themeIdx: Int = 0
@@ -568,6 +571,7 @@ class MainActivity : AppCompatActivity() {
         loadImagesSwitch = findViewById(R.id.loadImagesSwitch)
         loadFaviconsSwitch = findViewById(R.id.loadFaviconsSwitch)
         threadConversationsSwitch = findViewById(R.id.threadConversationsSwitch)
+        showCategoryCountsSwitch = findViewById(R.id.showCategoryCountsSwitch)
         themeDropdown = findViewById(R.id.themeDropdown)
         themeDropdownText = findViewById(R.id.themeDropdownText)
         emailInput = findViewById(R.id.emailInput)
@@ -898,6 +902,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
         drawerLayout.addDrawerListener(object : androidx.drawerlayout.widget.DrawerLayout.SimpleDrawerListener() {
+            override fun onDrawerOpened(drawerView: View) {
+                // The category counts can be stale after local read/unread changes: rebuild on
+                // open so the drawer always reflects the current state without a sync round-trip.
+                if (showCategoryCounts) rebuildDrawerMenu()
+            }
+
             override fun onDrawerClosed(drawerView: View) {
                 hideDrawerEditPencil()
                 drawerAccountsList.visibility = View.GONE
@@ -2024,8 +2034,14 @@ class MainActivity : AppCompatActivity() {
                     // reorder (subfolderDisplayOrder) with a visible flicker/reset.
                     runCatching {
                         val fresh = jmapClient.fetchMailboxes(account)
-                        val freshIds = fresh.map { it.id to it.name to it.parentId to it.role }.toSet()
-                        val cachedIds = mailboxCache?.map { it.id to it.name to it.parentId to it.role }?.toSet()
+                        // Counts are part of the identity comparison: the drawer shows them,
+                        // so a seen-state change on the server must rebuild the menu too.
+                        val freshIds = fresh.map {
+                            it.id to it.name to it.parentId to it.role to it.totalEmails to it.unreadEmails
+                        }.toSet()
+                        val cachedIds = mailboxCache?.map {
+                            it.id to it.name to it.parentId to it.role to it.totalEmails to it.unreadEmails
+                        }?.toSet()
                         mailboxCache = fresh
                         if (freshIds != cachedIds) {
                             navigationView.post { rebuildDrawerMenu() }
@@ -2518,6 +2534,7 @@ class MainActivity : AppCompatActivity() {
         internal const val KEY_SWIPE_LEFT_ACTION = "swipe_left_action"
         internal const val KEY_MARK_READ_DELAY_SECONDS = "mark_read_delay_seconds"
         internal const val KEY_THREAD_CONVERSATIONS = "thread_conversations"
+        internal const val KEY_SHOW_CATEGORY_COUNTS = "show_category_counts"
         internal const val MARK_READ_DELAY_MAX_SECONDS = 300
         internal const val KEY_ACCOUNTS_JSON = "accounts_json"
         internal const val KEY_LAST_SYNC_APP_VERSION = "last_sync_app_version"

@@ -19,10 +19,12 @@ import android.text.Editable
 import android.text.Html
 import android.text.Layout
 import android.text.Spannable
+import android.text.SpannableStringBuilder
 import android.text.TextWatcher
 import android.text.format.DateUtils
 import android.text.style.AlignmentSpan
 import android.text.style.BulletSpan
+import android.text.style.ForegroundColorSpan
 import android.text.style.RelativeSizeSpan
 import android.text.style.StrikethroughSpan
 import android.text.style.StyleSpan
@@ -529,6 +531,90 @@ private fun MainActivity.openDrawerEditDialog() {
     showEditFolderDialog(mbox, meta) {}
 }
 
+/**
+ * (unread, total) for one drawer entry, or null when nothing is known yet.
+ *
+ * Mailbox-backed entries (the role categories and user folders) take the server's own
+ * counts from the last Mailbox/get; Favourite, labels and the unified inbox have no
+ * mailbox, so their loaded folder snapshot stands in. For the visible folder the live
+ * list wins on the unread count, so a read/unread tap shows immediately instead of
+ * waiting for the next Mailbox/get.
+ */
+internal fun MainActivity.drawerItemCount(navId: Int): Pair<Int, Int>? {
+    val role = if (navId == R.id.nav_inbox) "inbox" else getFolderRole(navId)
+    val mailbox = if (role != null) {
+        mailboxCache?.firstOrNull { it.role?.equals(role, ignoreCase = true) == true }
+    } else {
+        subfolderNavIds[navId]?.let { id -> mailboxCache?.firstOrNull { it.id == id } }
+    }
+
+    val local = when {
+        navId == selectedFolder -> emails
+        else -> folderCache[navId]
+    }
+    if (mailbox != null) {
+        val localUnread = if (navId == selectedFolder) local?.count { !it.seen } else null
+        val unread = localUnread ?: mailbox.unreadEmails.toInt()
+        return unread to mailbox.totalEmails.toInt()
+    }
+    if (local.isNullOrEmpty()) return null
+    return local.count { !it.seen } to local.size
+}
+
+/** Drawer entry title, bolded over the whole name when it is the selected folder. */
+internal fun MainActivity.drawerTitle(name: String, navId: Int): CharSequence {
+    if (navId != selectedFolder) return name
+    return SpannableStringBuilder(name).apply {
+        setSpan(StyleSpan(Typeface.BOLD), 0, name.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+    }
+}
+
+/**
+ * Right-aligned count for one drawer row (set as the item's action view, so it sits at the
+ * end of the button instead of trailing the name). The unread number keeps the bold and the
+ * primary theme colour; the total stays in the secondary colour — all theme tokens, so the
+ * count follows every app theme.
+ */
+internal fun MainActivity.drawerCountView(navId: Int): TextView? {
+    if (!showCategoryCounts) return null
+    val (unread, total) = drawerItemCount(navId) ?: return null
+    if (total <= 0) return null
+
+    val t = tokens
+    val count = if (unread > 0) "$unread / $total" else "$total"
+    val styled = SpannableStringBuilder(count)
+    if (unread > 0) {
+        val unreadEnd = unread.toString().length
+        styled.setSpan(
+            StyleSpan(Typeface.BOLD), 0, unreadEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+        styled.setSpan(
+            ForegroundColorSpan(t.textPrimary), 0, unreadEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+        styled.setSpan(
+            ForegroundColorSpan(t.textSecondary), unreadEnd, styled.length,
+            Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+    } else {
+        styled.setSpan(
+            ForegroundColorSpan(t.textSecondary), 0, styled.length,
+            Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+    }
+    val dp = resources.displayMetrics.density
+    return TextView(this).apply {
+        text = styled
+        setTextSize(
+            android.util.TypedValue.COMPLEX_UNIT_PX,
+            resources.getDimension(R.dimen.text_sm)
+        )
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding((10 * dp).toInt(), 0, (4 * dp).toInt(), 0)
+        isClickable = false
+        isFocusable = false
+    }
+}
+
 internal fun MainActivity.rebuildDrawerMenu() {
     val menu = navigationView.menu
     // Take the pencil off its current row before rows are rebound so it can't be left
@@ -543,31 +629,20 @@ internal fun MainActivity.rebuildDrawerMenu() {
 
     var menuIndex = 0
     if (savedAccounts.size > 1) {
-        val unifiedTitle: CharSequence = if (selectedFolder == R.id.nav_unified_inbox) {
-            android.text.SpannableString("Unified Inbox").apply {
-                setSpan(android.text.style.StyleSpan(Typeface.BOLD), 0, length, 0)
-            }
-        } else {
-            "Unified Inbox"
-        }
-        menu.add(0, R.id.nav_unified_inbox, menuIndex++, unifiedTitle)
-            .setIcon(R.drawable.ic_lucide_inbox)
-            .icon?.mutate()?.setTint(defaultIconTint)
+        val unifiedTitle: CharSequence = drawerTitle("Unified Inbox", R.id.nav_unified_inbox)
+        val unifiedItem = menu.add(0, R.id.nav_unified_inbox, menuIndex++, unifiedTitle)
+        unifiedItem.setIcon(R.drawable.ic_lucide_inbox)
+        unifiedItem.icon?.mutate()?.setTint(defaultIconTint)
+        drawerCountView(R.id.nav_unified_inbox)?.let { unifiedItem.actionView = it }
     }
 
     categoryOrder.forEachIndexed { index, id ->
         val name = categoryNames[id] ?: getDefaultCategoryTitle(id)
-        val title: CharSequence = if (id == selectedFolder) {
-            android.text.SpannableString(name).apply {
-                setSpan(android.text.style.StyleSpan(Typeface.BOLD), 0, name.length, 0)
-            }
-        } else {
-            name
-        }
-        val item = menu.add(0, id, menuIndex + index, title)
+        val item = menu.add(0, id, menuIndex + index, drawerTitle(name, id))
         item.setIcon(getCategoryIcon(id))
         item.icon?.mutate()?.setTint(defaultIconTint)
         item.isCheckable = true
+        drawerCountView(id)?.let { item.actionView = it }
     }
 
     // User labels: colored tag icons, ordered; long-press drag reorders them.
@@ -577,17 +652,12 @@ internal fun MainActivity.rebuildDrawerMenu() {
     labels.forEach { label ->
         val navId = labelNavIds.entries.find { it.value == label.keyword }?.key
             ?: View.generateViewId().also { labelNavIds[it] = label.keyword }
-        val title: CharSequence = if (navId == selectedFolder) {
-            android.text.SpannableString(label.name).apply {
-                setSpan(android.text.style.StyleSpan(Typeface.BOLD), 0, length, 0)
-            }
-        } else {
-            label.name
-        }
-        val item = menu.add(0, navId, orderIdx++, title)
+        val countTitle: CharSequence = drawerTitle(label.name, navId)
+        val item = menu.add(0, navId, orderIdx++, countTitle)
         item.setIcon(R.drawable.ic_lucide_tag)
         item.icon?.mutate()?.setTint(label.colorHex.toColorInt())
         item.isCheckable = true
+        drawerCountView(navId)?.let { item.actionView = it }
         if (navId == drawerEditPencilNavId) drawerEditPencil?.let { item.actionView = it }
     }
 
@@ -620,17 +690,11 @@ internal fun MainActivity.rebuildDrawerMenu() {
                 ?: View.generateViewId().also { subfolderNavIds[it] = mbox.id }
             val indent = "    ".repeat(depth)
             val displayName = "$indent${folderDisplayName(mbox)}"
-            val title: CharSequence = if (navId == selectedFolder) {
-                android.text.SpannableString(displayName).apply {
-                    setSpan(android.text.style.StyleSpan(Typeface.BOLD), 0, displayName.length, 0)
-                }
-            } else {
-                displayName
-            }
-            val item = menu.add(0, navId, orderIdx++, title)
+            val item = menu.add(0, navId, orderIdx++, drawerTitle(displayName, navId))
             item.setIcon(R.drawable.ic_lucide_folder)
             item.icon?.mutate()?.setTint(folderIconColor(mbox.id, defaultIconTint))
             item.isCheckable = true
+            drawerCountView(navId)?.let { item.actionView = it }
             if (navId == drawerEditPencilNavId) drawerEditPencil?.let { item.actionView = it }
         }
     }

@@ -254,6 +254,7 @@
     <string name="settings_load_favicons">Auto-load favicons</string>
     <string name="settings_favicons_subtitle">Sends sender domains to icons.duckduckgo.com</string>
     <string name="settings_thread_conversations">Group replies into conversations</string>
+    <string name="settings_show_category_counts">Show total email for each category</string>
 
     <!-- Onboarding: features screen -->
     <string name="onboarding_welcome_title">Welcome to\nJMAPJolt</string>

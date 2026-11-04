@@ -639,7 +639,14 @@ class JMapClient(private val context: Context) {
     private fun customKeywords(keywords: Map<String, Boolean>?): Set<String> =
         keywords?.keys?.filter { !it.startsWith("$") }?.toSet() ?: emptySet()
 
-    data class MailboxInfo(val id: String, val name: String, val role: String?, val parentId: String? = null)
+    data class MailboxInfo(
+        val id: String,
+        val name: String,
+        val role: String?,
+        val parentId: String? = null,
+        val totalEmails: Long = 0,
+        val unreadEmails: Long = 0
+    )
 
     data class Attachment(
         val name: String,
@@ -669,7 +676,12 @@ class JMapClient(private val context: Context) {
 
             try {
                 val response = jmapClient.call(call).get().getMain(rs.ltt.jmap.common.method.response.mailbox.GetMailboxMethodResponse::class.java)
-                response.list?.map { MailboxInfo(it.id, it.name, it.role?.name, it.parentId) } ?: emptyList()
+                response.list?.map {
+                    MailboxInfo(
+                        it.id, it.name, it.role?.name, it.parentId,
+                        it.totalEmails ?: 0, it.unreadEmails ?: 0
+                    )
+                } ?: emptyList()
             } catch (e: Exception) {
                 Log.e(TAG, "fetchMailboxes failed", e)
                 emptyList()

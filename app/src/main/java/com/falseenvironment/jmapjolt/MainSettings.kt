@@ -184,6 +184,12 @@ internal fun MainActivity.bindSettingsMenuNavigation() {
         }
     }
 
+    showCategoryCountsSwitch.setOnCheckedChangeListener { _, enabled ->
+        showCategoryCounts = enabled
+        saveGeneralPreferences()
+        rebuildDrawerMenuPublic()
+    }
+
     // Value pickers and action rows now live on their own pages; bind the rows
     // that are still on the settings root (calendar import/export moved with the page).
     settingsImportIcsRow = findViewById(R.id.settingsImportIcsRow)
@@ -681,6 +687,8 @@ internal fun MainActivity.loadGeneralPreferences() {
     loadFaviconsSwitch.isChecked = prefs.getBoolean("load_favicons", false)
     threadConversationsEnabled = prefs.getBoolean(MainActivity.KEY_THREAD_CONVERSATIONS, true)
     threadConversationsSwitch.isChecked = threadConversationsEnabled
+    showCategoryCounts = prefs.getBoolean(MainActivity.KEY_SHOW_CATEGORY_COUNTS, true)
+    showCategoryCountsSwitch.isChecked = showCategoryCounts
     markReadDelaySeconds = prefs.getInt(MainActivity.KEY_MARK_READ_DELAY_SECONDS, 0)
         .coerceIn(0, MainActivity.MARK_READ_DELAY_MAX_SECONDS)
     updateSettingsDropdownDisplays()
@@ -692,6 +700,7 @@ internal fun MainActivity.saveGeneralPreferences() {
         .putBoolean("load_images", loadImagesSwitch.isChecked)
         .putBoolean("load_favicons", loadFaviconsSwitch.isChecked)
         .putBoolean(MainActivity.KEY_THREAD_CONVERSATIONS, threadConversationsEnabled)
+        .putBoolean(MainActivity.KEY_SHOW_CATEGORY_COUNTS, showCategoryCounts)
         .putInt(MainActivity.KEY_MARK_READ_DELAY_SECONDS, markReadDelaySeconds)
         .apply()
 }

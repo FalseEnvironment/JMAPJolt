@@ -266,6 +266,39 @@
             android:tag="token:divider" />
 
         <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="56dp"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings_show_category_counts"
+                android:textSize="@dimen/text_lg" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/showCategoryCountsSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:textOff=""
+                android:textOn="" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="16dp"
+            android:tag="token:divider" />
+
+        <LinearLayout
             android:id="@+id/markReadDelayDropdown"
             android:layout_width="match_parent"
             android:layout_height="56dp"
