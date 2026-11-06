@@ -564,9 +564,9 @@ internal class EmailAdapter(private val activity: MainActivity) : RecyclerView.A
         holder.title.text = item.subject
         holder.subtitle.text = item.preview
 
-        // Sent and Drafts are always shown as read — their seen state is irrelevant.
-        val alwaysRead = activity.selectedFolder == R.id.nav_sent ||
-                activity.selectedFolder == R.id.nav_drafts
+        // Drafts are always shown as read — their seen state is irrelevant. Sent mail
+        // keeps its real seen state so unread copies still get the bold subject + dot.
+        val alwaysRead = activity.selectedFolder == R.id.nav_drafts
         // Unread: only the subject turns bold. Sender and preview keep their normal
         // weight so the row does not read as one heavy block.
         holder.senderText.setTypeface(null, Typeface.NORMAL)
