@@ -8,9 +8,11 @@ import android.graphics.PorterDuff
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Spinner
@@ -135,50 +137,32 @@ object CalendarEventEditor {
             endTimeBtn.visibility = if (allDay) View.GONE else View.VISIBLE
         }
 
-        // Reject any change that puts the end at/before the start; revert the offending field.
-        fun applyOrReject(target: Calendar, set: () -> Unit, undo: () -> Unit) {
-            set()
-            if (endCal.timeInMillis <= cal.timeInMillis) {
-                undo()
-                snackbar(root, palette, "End must be after start")
-            }
-            refresh()
-        }
-
+        // Pickers update the working state freely; the end/start order is validated only
+        // when the user saves, so a transient wrong value does not block editing.
         startDateBtn.setOnClickListener {
             DatePickerDialog(context, { _, y, m, d ->
-                val prevY = cal.get(Calendar.YEAR); val prevM = cal.get(Calendar.MONTH)
-                val prevD = cal.get(Calendar.DAY_OF_MONTH)
-                applyOrReject(cal,
-                    set = { cal.set(Calendar.YEAR, y); cal.set(Calendar.MONTH, m); cal.set(Calendar.DAY_OF_MONTH, d) },
-                    undo = { cal.set(Calendar.YEAR, prevY); cal.set(Calendar.MONTH, prevM); cal.set(Calendar.DAY_OF_MONTH, prevD) })
+                cal.set(Calendar.YEAR, y); cal.set(Calendar.MONTH, m); cal.set(Calendar.DAY_OF_MONTH, d)
+                refresh()
             }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
         }
         startTimeBtn.setOnClickListener {
             TimePickerDialog(context, { _, h, min ->
-                val prevH = cal.get(Calendar.HOUR_OF_DAY); val prevMin = cal.get(Calendar.MINUTE)
-                applyOrReject(cal,
-                    set = { cal.set(Calendar.HOUR_OF_DAY, h); cal.set(Calendar.MINUTE, min)
-                        cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0) },
-                    undo = { cal.set(Calendar.HOUR_OF_DAY, prevH); cal.set(Calendar.MINUTE, prevMin) })
+                cal.set(Calendar.HOUR_OF_DAY, h); cal.set(Calendar.MINUTE, min)
+                cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
+                refresh()
             }, cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE), use24h).show()
         }
         endDateBtn.setOnClickListener {
             DatePickerDialog(context, { _, y, m, d ->
-                val prevY = endCal.get(Calendar.YEAR); val prevM = endCal.get(Calendar.MONTH)
-                val prevD = endCal.get(Calendar.DAY_OF_MONTH)
-                applyOrReject(endCal,
-                    set = { endCal.set(Calendar.YEAR, y); endCal.set(Calendar.MONTH, m); endCal.set(Calendar.DAY_OF_MONTH, d) },
-                    undo = { endCal.set(Calendar.YEAR, prevY); endCal.set(Calendar.MONTH, prevM); endCal.set(Calendar.DAY_OF_MONTH, prevD) })
+                endCal.set(Calendar.YEAR, y); endCal.set(Calendar.MONTH, m); endCal.set(Calendar.DAY_OF_MONTH, d)
+                refresh()
             }, endCal.get(Calendar.YEAR), endCal.get(Calendar.MONTH), endCal.get(Calendar.DAY_OF_MONTH)).show()
         }
         endTimeBtn.setOnClickListener {
             TimePickerDialog(context, { _, h, min ->
-                val prevH = endCal.get(Calendar.HOUR_OF_DAY); val prevMin = endCal.get(Calendar.MINUTE)
-                applyOrReject(endCal,
-                    set = { endCal.set(Calendar.HOUR_OF_DAY, h); endCal.set(Calendar.MINUTE, min)
-                        endCal.set(Calendar.SECOND, 0); endCal.set(Calendar.MILLISECOND, 0) },
-                    undo = { endCal.set(Calendar.HOUR_OF_DAY, prevH); endCal.set(Calendar.MINUTE, prevMin) })
+                endCal.set(Calendar.HOUR_OF_DAY, h); endCal.set(Calendar.MINUTE, min)
+                endCal.set(Calendar.SECOND, 0); endCal.set(Calendar.MILLISECOND, 0)
+                refresh()
             }, endCal.get(Calendar.HOUR_OF_DAY), endCal.get(Calendar.MINUTE), use24h).show()
         }
 
@@ -286,7 +270,51 @@ object CalendarEventEditor {
             }
         }
 
-        val dialog = AlertDialog.Builder(context).setView(scroll).create()
+        val dialogContent = FrameLayout(context).apply { addView(scroll) }
+        val dialog = AlertDialog.Builder(context).setView(dialogContent).create()
+
+        // Floating in-app pill, matching the app-wide themed snackbar (rounded surface,
+        // themed text, accent-free body) instead of a fixed pink Material snackbar.
+        var activePill: View? = null
+        fun dismissPill(pill: View) {
+            if (pill.parent == null) return
+            pill.animate().alpha(0f).translationY(24 * density)
+                .setDuration(pill.scaledDuration(160))
+                .withEndAction { (pill.parent as? ViewGroup)?.removeView(pill) }
+                .start()
+        }
+        fun showErrorPill(message: String) {
+            activePill?.let { (it.parent as? ViewGroup)?.removeView(it) }
+            val pill = TextView(context).apply {
+                text = message
+                setTextColor(palette.text)
+                textSize = 14f
+                maxLines = 2
+                gravity = Gravity.CENTER
+                elevation = 6 * density
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                    cornerRadius = 999 * density
+                    setColor(palette.snackbar)
+                }
+                setPadding(dp(20), dp(14), dp(20), dp(14))
+            }
+            activePill = pill
+            dialogContent.addView(pill, FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+                bottomMargin = dp(64)
+                marginStart = dp(20); marginEnd = dp(20)
+            })
+            pill.announceForAccessibility(message)
+            pill.alpha = 0f
+            pill.translationY = 24 * density
+            pill.animate().alpha(1f).translationY(0f)
+                .setDuration(pill.scaledDuration(180))
+                .setInterpolator(android.view.animation.DecelerateInterpolator(2f)).start()
+            pill.postDelayed({ dismissPill(pill) }, 2200L)
+        }
 
         fun textButton(text: String, color: Int, bold: Boolean, onClick: () -> Unit) =
             TextView(context).apply {
@@ -306,7 +334,18 @@ object CalendarEventEditor {
                     it.set(Calendar.SECOND, 0); it.set(Calendar.MILLISECOND, 0)
                 }
             }
-            // End is guaranteed > start by the pickers; clamp defensively.
+            // Validate only on save: an invalid range keeps the dialog open with the
+            // entered data intact, and the error appears as a themed in-app pill.
+            val invalidRange = if (allDay) {
+                // A same-day all-day event is valid (it lasts one day).
+                endCal.timeInMillis < cal.timeInMillis
+            } else {
+                endCal.timeInMillis <= cal.timeInMillis
+            }
+            if (invalidRange) {
+                showErrorPill("End must be after start")
+                return
+            }
             val durationMin = (((endCal.timeInMillis - cal.timeInMillis) / 60_000L).toInt())
                 .coerceAtLeast(if (allDay) 1440 else 1)
             val freq = repeatOptions[repeatSpinner.selectedItemPosition].second
@@ -345,15 +384,5 @@ object CalendarEventEditor {
             lp.width = (context.resources.displayMetrics.widthPixels * 0.92f).toInt()
             dialog.window?.attributes = lp
         }
-    }
-
-    /** Bottom in-app snackbar matching the app's themed style (surface fill, themed text). */
-    private fun snackbar(anchor: View, palette: CalendarTheme.Palette, text: String) {
-        val snack = com.google.android.material.snackbar.Snackbar.make(
-            anchor, text, com.google.android.material.snackbar.Snackbar.LENGTH_SHORT)
-        snack.view.setBackgroundColor(Color.parseColor("#F6C7C7"))
-        snack.setTextColor(Color.parseColor("#7A1F1F"))
-        snack.setActionTextColor(Color.parseColor("#7A1F1F"))
-        snack.show()
     }
 }

@@ -20,6 +20,8 @@ object CalendarTheme {
         val isDark: Boolean,
         // Search field, popup menus and unselected chips: one step above [background].
         val card: Int,
+        // Floating in-app notification pill ("snackbar") fill.
+        val snackbar: Int,
         val divider: Int,
         // Accent tint behind a selected chip, tab or row.
         val accentSoft: Int,
@@ -44,6 +46,7 @@ object CalendarTheme {
             onAccent = onAccentFor(accent),
             isDark = tokens.isDark,
             card = tokens.surfaceCard,
+            snackbar = tokens.surfaceSnackbar,
             divider = tokens.divider,
             accentSoft = tokens.accentSoft(accent),
             accentText = tokens.accentOnGround(accent),
